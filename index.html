@@ -189,7 +189,7 @@
             background: white;
             padding: 16px;
             border-radius: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             box-shadow: 0 3px 12px rgba(0,0,0,0.05);
         }
 
@@ -220,6 +220,45 @@
             margin-top: 10px;
             font-size: 13px;
             color: #6b7280;
+        }
+
+        /* FILTERS */
+
+        .filter-container {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        }
+
+        .filter-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .filter-button {
+            background: #f3f4f6;
+            color: #374151;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .filter-button:hover {
+            background: #e5e7eb;
+        }
+
+        .filter-button.active {
+            background: #111827;
+            color: white;
         }
 
         .memory-list {
@@ -389,6 +428,7 @@
         }
 
         @media (max-width: 700px) {
+
             .stats {
                 grid-template-columns: repeat(2, 1fr);
             }
@@ -408,6 +448,11 @@
             .memory-top {
                 flex-direction: column;
             }
+
+            .filter-buttons {
+                gap: 6px;
+            }
+
         }
     </style>
 </head>
@@ -415,34 +460,58 @@
 <body>
 
     <div class="header">
-        <div class="brand">🧠 Dusra Brain</div>
+
+        <div class="brand">
+            🧠 Dusra Brain
+        </div>
 
         <div class="header-buttons">
-            <button class="memory-button" id="memoryButton">
+
+            <button
+                class="memory-button"
+                id="memoryButton"
+            >
                 🧠 My Memory
             </button>
+
         </div>
+
     </div>
+
 
     <div class="container">
 
         <!-- CHAT -->
+
         <div id="chatView">
 
             <div class="welcome">
-                <h1>Dusra Brain</h1>
-                <p>Your personal AI brain and memory assistant.</p>
+
+                <h1>
+                    Dusra Brain
+                </h1>
+
+                <p>
+                    Your personal AI brain and memory assistant.
+                </p>
+
             </div>
+
 
             <div class="chat-box">
 
                 <div id="messages">
+
                     <div class="message assistant">
+
                         <div class="bubble">
                             Hello! I’m Dusra Brain, your personal AI brain and memory assistant. How can I help you today?
                         </div>
+
                     </div>
+
                 </div>
+
 
                 <div class="input-area">
 
@@ -465,13 +534,22 @@
 
 
         <!-- MEMORY DASHBOARD -->
-        <div id="memoryDashboard" class="memory-dashboard">
+
+        <div
+            id="memoryDashboard"
+            class="memory-dashboard"
+        >
 
             <div class="dashboard-header">
 
-                <h2>🧠 My Memory</h2>
+                <h2>
+                    🧠 My Memory
+                </h2>
 
-                <button class="back-button" id="backButton">
+                <button
+                    class="back-button"
+                    id="backButton"
+                >
                     ← Back to Chat
                 </button>
 
@@ -479,55 +557,77 @@
 
 
             <!-- STATS -->
+
             <div class="stats">
 
                 <div class="stat-card">
-                    <div class="stat-number" id="totalMemories">
+
+                    <div
+                        class="stat-number"
+                        id="totalMemories"
+                    >
                         0
                     </div>
 
                     <div class="stat-label">
                         Total Memories
                     </div>
+
                 </div>
 
 
                 <div class="stat-card">
-                    <div class="stat-number" id="projectMemories">
+
+                    <div
+                        class="stat-number"
+                        id="projectMemories"
+                    >
                         0
                     </div>
 
                     <div class="stat-label">
                         Projects
                     </div>
+
                 </div>
 
 
                 <div class="stat-card">
-                    <div class="stat-number" id="businessMemories">
+
+                    <div
+                        class="stat-number"
+                        id="businessMemories"
+                    >
                         0
                     </div>
 
                     <div class="stat-label">
                         Business
                     </div>
+
                 </div>
 
 
                 <div class="stat-card">
-                    <div class="stat-number" id="highImportance">
+
+                    <div
+                        class="stat-number"
+                        id="highImportance"
+                    >
                         0
                     </div>
 
                     <div class="stat-label">
                         High Importance
                     </div>
+
                 </div>
 
             </div>
 
 
             <!-- SEARCH -->
+
             <div class="search-container">
 
                 <div class="search-row">
@@ -548,15 +648,118 @@
 
                 </div>
 
-                <div class="search-info" id="searchInfo">
+
+                <div
+                    class="search-info"
+                    id="searchInfo"
+                >
                     Showing all memories
                 </div>
 
             </div>
 
 
+            <!-- FILTERS -->
+
+            <div class="filter-container">
+
+                <div class="filter-title">
+                    Filter memories
+                </div>
+
+
+                <div class="filter-buttons">
+
+                    <button
+                        class="filter-button active"
+                        data-filter="all"
+                    >
+                        All
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="personal"
+                    >
+                        Personal
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="project"
+                    >
+                        Projects
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="business"
+                    >
+                        Business
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="goal"
+                    >
+                        Goals
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="preference"
+                    >
+                        Preferences
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="work"
+                    >
+                        Work
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="decision"
+                    >
+                        Decisions
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="instruction"
+                    >
+                        Instructions
+                    </button>
+
+
+                    <button
+                        class="filter-button"
+                        data-filter="high"
+                    >
+                        ⭐ High Importance
+                    </button>
+
+                </div>
+
+            </div>
+
+
             <!-- MEMORY LIST -->
-            <div id="memoryList" class="memory-list">
+
+            <div
+                id="memoryList"
+                class="memory-list"
+            >
 
                 <div class="loading">
                     Loading memories...
@@ -570,11 +773,18 @@
 
 
     <!-- EDIT MODAL -->
-    <div class="modal-overlay" id="editModal">
+
+    <div
+        class="modal-overlay"
+        id="editModal"
+    >
 
         <div class="modal">
 
-            <h3>✏️ Edit Memory</h3>
+            <h3>
+                ✏️ Edit Memory
+            </h3>
+
 
             <div class="form-group">
 
@@ -582,7 +792,9 @@
                     Memory
                 </label>
 
-                <textarea id="editMemory"></textarea>
+                <textarea
+                    id="editMemory"
+                ></textarea>
 
             </div>
 
@@ -691,6 +903,7 @@
                     Cancel
                 </button>
 
+
                 <button
                     class="save-button"
                     id="saveEdit"
@@ -708,12 +921,15 @@
 <script>
 
     let loadedMemories = [];
+
     let editingMemoryId = null;
 
+    let activeFilter = "all";
 
-    // -----------------------------
+
+    // ==========================================
     // CHAT
-    // -----------------------------
+    // ==========================================
 
     const messageInput =
         document.getElementById("messageInput");
@@ -750,6 +966,7 @@
 
         messages.scrollTop =
             messages.scrollHeight;
+
     }
 
 
@@ -764,32 +981,42 @@
         }
 
 
-        addMessage("user", message);
+        addMessage(
+            "user",
+            message
+        );
 
-        messageInput.value = "";
 
-        sendButton.disabled = true;
+        messageInput.value =
+            "";
 
-        sendButton.textContent = "Thinking...";
+
+        sendButton.disabled =
+            true;
+
+        sendButton.textContent =
+            "Thinking...";
 
 
         try {
 
             const response =
-                await fetch("/api", {
+                await fetch(
+                    "/api",
+                    {
+                        method: "POST",
 
-                    method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
 
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        message: message,
-                        user_id: "default_user"
-                    })
-
-                });
+                        body: JSON.stringify({
+                            message: message,
+                            user_id: "default_user"
+                        })
+                    }
+                );
 
 
             const data =
@@ -799,7 +1026,8 @@
             if (!response.ok) {
 
                 throw new Error(
-                    data.error || "Request failed"
+                    data.error ||
+                    "Request failed"
                 );
 
             }
@@ -807,7 +1035,8 @@
 
             addMessage(
                 "assistant",
-                data.response || "I couldn't generate a response."
+                data.response ||
+                "I couldn't generate a response."
             );
 
 
@@ -815,15 +1044,18 @@
 
             addMessage(
                 "assistant",
-                "Sorry, something went wrong: " + error.message
+                "Sorry, something went wrong: " +
+                error.message
             );
 
         }
 
 
-        sendButton.disabled = false;
+        sendButton.disabled =
+            false;
 
-        sendButton.textContent = "Send";
+        sendButton.textContent =
+            "Send";
 
         messageInput.focus();
 
@@ -852,15 +1084,17 @@
     );
 
 
-    // -----------------------------
+    // ==========================================
     // VIEW SWITCHING
-    // -----------------------------
+    // ==========================================
 
     const chatView =
         document.getElementById("chatView");
 
     const memoryDashboard =
-        document.getElementById("memoryDashboard");
+        document.getElementById(
+            "memoryDashboard"
+        );
 
 
     document
@@ -897,14 +1131,16 @@
         );
 
 
-    // -----------------------------
+    // ==========================================
     // LOAD MEMORIES
-    // -----------------------------
+    // ==========================================
 
     async function loadMemories() {
 
         const memoryList =
-            document.getElementById("memoryList");
+            document.getElementById(
+                "memoryList"
+            );
 
 
         memoryList.innerHTML =
@@ -914,7 +1150,9 @@
         try {
 
             const response =
-                await fetch("/api?memories=true");
+                await fetch(
+                    "/api?memories=true"
+                );
 
 
             const data =
@@ -924,7 +1162,8 @@
             if (!response.ok) {
 
                 throw new Error(
-                    data.error || "Unable to load memories"
+                    data.error ||
+                    "Unable to load memories"
                 );
 
             }
@@ -951,9 +1190,9 @@
     }
 
 
-    // -----------------------------
-    // UPDATE STATS
-    // -----------------------------
+    // ==========================================
+    // STATS
+    // ==========================================
 
     function updateStats() {
 
@@ -964,7 +1203,10 @@
         const projects =
             loadedMemories.filter(
                 function(memory) {
-                    return memory.category === "project";
+
+                    return memory.category ===
+                        "project";
+
                 }
             ).length;
 
@@ -972,7 +1214,10 @@
         const businesses =
             loadedMemories.filter(
                 function(memory) {
-                    return memory.category === "business";
+
+                    return memory.category ===
+                        "business";
+
                 }
             ).length;
 
@@ -980,43 +1225,55 @@
         const highImportance =
             loadedMemories.filter(
                 function(memory) {
-                    return Number(memory.importance || 0) >= 8;
+
+                    return Number(
+                        memory.importance || 0
+                    ) >= 8;
+
                 }
             ).length;
 
 
         document.getElementById(
             "totalMemories"
-        ).textContent = total;
+        ).textContent =
+            total;
 
 
         document.getElementById(
             "projectMemories"
-        ).textContent = projects;
+        ).textContent =
+            projects;
 
 
         document.getElementById(
             "businessMemories"
-        ).textContent = businesses;
+        ).textContent =
+            businesses;
 
 
         document.getElementById(
             "highImportance"
-        ).textContent = highImportance;
+        ).textContent =
+            highImportance;
 
     }
 
 
-    // -----------------------------
+    // ==========================================
     // SEARCH
-    // -----------------------------
+    // ==========================================
 
     const memorySearch =
-        document.getElementById("memorySearch");
+        document.getElementById(
+            "memorySearch"
+        );
 
 
     const clearSearch =
-        document.getElementById("clearSearch");
+        document.getElementById(
+            "clearSearch"
+        );
 
 
     memorySearch.addEventListener(
@@ -1033,7 +1290,8 @@
         "click",
         function() {
 
-            memorySearch.value = "";
+            memorySearch.value =
+                "";
 
             renderMemories();
 
@@ -1043,6 +1301,56 @@
     );
 
 
+    // ==========================================
+    // FILTER BUTTONS
+    // ==========================================
+
+    const filterButtons =
+        document.querySelectorAll(
+            ".filter-button"
+        );
+
+
+    filterButtons.forEach(
+        function(button) {
+
+            button.addEventListener(
+                "click",
+                function() {
+
+                    filterButtons.forEach(
+                        function(item) {
+
+                            item.classList.remove(
+                                "active"
+                            );
+
+                        }
+                    );
+
+
+                    button.classList.add(
+                        "active"
+                    );
+
+
+                    activeFilter =
+                        button.dataset.filter;
+
+
+                    renderMemories();
+
+                }
+            );
+
+        }
+    );
+
+
+    // ==========================================
+    // FILTER + SEARCH
+    // ==========================================
+
     function getFilteredMemories() {
 
         const query =
@@ -1051,17 +1359,62 @@
                 .toLowerCase();
 
 
-        if (!query) {
-
-            return loadedMemories;
-
-        }
-
-
         return loadedMemories.filter(
             function(memory) {
 
-                const text =
+                // CATEGORY FILTER
+
+                let matchesFilter =
+                    true;
+
+
+                if (
+                    activeFilter !==
+                    "all"
+                ) {
+
+                    if (
+                        activeFilter ===
+                        "high"
+                    ) {
+
+                        matchesFilter =
+                            Number(
+                                memory.importance ||
+                                0
+                            ) >= 8;
+
+                    } else {
+
+                        matchesFilter =
+                            (
+                                memory.category ||
+                                "general"
+                            ).toLowerCase() ===
+                            activeFilter;
+
+                    }
+
+                }
+
+
+                if (!matchesFilter) {
+
+                    return false;
+
+                }
+
+
+                // SEARCH FILTER
+
+                if (!query) {
+
+                    return true;
+
+                }
+
+
+                const searchableText =
                     [
                         memory.memory || "",
                         memory.subject || "",
@@ -1071,7 +1424,9 @@
                     .toLowerCase();
 
 
-                return text.includes(query);
+                return searchableText.includes(
+                    query
+                );
 
             }
         );
@@ -1079,14 +1434,16 @@
     }
 
 
-    // -----------------------------
+    // ==========================================
     // RENDER MEMORIES
-    // -----------------------------
+    // ==========================================
 
     function renderMemories() {
 
         const memoryList =
-            document.getElementById("memoryList");
+            document.getElementById(
+                "memoryList"
+            );
 
 
         const filteredMemories =
@@ -1095,6 +1452,21 @@
 
         const query =
             memorySearch.value.trim();
+
+
+        let filterName =
+            activeFilter;
+
+
+        if (
+            filterName ===
+            "all"
+        ) {
+
+            filterName =
+                "all categories";
+
+        }
 
 
         if (query) {
@@ -1106,27 +1478,36 @@
                 filteredMemories.length +
                 " of " +
                 loadedMemories.length +
-                " memories";
+                " memories • " +
+                filterName;
 
         } else {
 
             document.getElementById(
                 "searchInfo"
             ).textContent =
-                "Showing all " +
-                loadedMemories.length +
-                " memories";
+                "Showing " +
+                filteredMemories.length +
+                " memories • " +
+                filterName;
 
         }
 
 
-        memoryList.innerHTML = "";
+        memoryList.innerHTML =
+            "";
 
 
-        if (filteredMemories.length === 0) {
+        if (
+            filteredMemories.length ===
+            0
+        ) {
 
             const empty =
-                document.createElement("div");
+                document.createElement(
+                    "div"
+                );
+
 
             empty.className =
                 "empty-state";
@@ -1142,12 +1523,14 @@
             } else {
 
                 empty.textContent =
-                    "No memories yet.";
+                    "No memories found in this filter.";
 
             }
 
 
-            memoryList.appendChild(empty);
+            memoryList.appendChild(
+                empty
+            );
 
             return;
 
@@ -1158,47 +1541,73 @@
             function(memory) {
 
                 const card =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 card.className =
                     "memory-card";
 
 
                 const top =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 top.className =
                     "memory-top";
 
 
                 const text =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 text.className =
                     "memory-text";
 
+
                 text.textContent =
-                    memory.memory || "";
+                    memory.memory ||
+                    "";
 
 
                 const importance =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 importance.className =
                     "importance";
 
+
                 importance.textContent =
-                    (memory.importance || 0) +
+                    (
+                        memory.importance ||
+                        0
+                    ) +
                     "/10";
 
 
-                top.appendChild(text);
+                top.appendChild(
+                    text
+                );
 
-                top.appendChild(importance);
+
+                top.appendChild(
+                    importance
+                );
 
 
                 const meta =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 meta.className =
                     "memory-meta";
@@ -1207,16 +1616,23 @@
                 if (memory.subject) {
 
                     const subjectTag =
-                        document.createElement("span");
+                        document.createElement(
+                            "span"
+                        );
+
 
                     subjectTag.className =
                         "tag";
+
 
                     subjectTag.textContent =
                         "📌 " +
                         memory.subject;
 
-                    meta.appendChild(subjectTag);
+
+                    meta.appendChild(
+                        subjectTag
+                    );
 
                 }
 
@@ -1224,24 +1640,35 @@
                 if (memory.category) {
 
                     const categoryTag =
-                        document.createElement("span");
+                        document.createElement(
+                            "span"
+                        );
+
 
                     categoryTag.className =
                         "tag";
 
+
                     categoryTag.textContent =
                         memory.category;
 
-                    meta.appendChild(categoryTag);
+
+                    meta.appendChild(
+                        categoryTag
+                    );
 
                 }
 
 
                 const date =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 date.className =
                     "memory-date";
+
 
                 if (memory.created_at) {
 
@@ -1255,18 +1682,26 @@
 
 
                 const actions =
-                    document.createElement("div");
+                    document.createElement(
+                        "div"
+                    );
+
 
                 actions.className =
                     "memory-actions";
 
 
                 // EDIT
+
                 const editButton =
-                    document.createElement("button");
+                    document.createElement(
+                        "button"
+                    );
+
 
                 editButton.className =
                     "edit-button";
+
 
                 editButton.textContent =
                     "✏️ Edit";
@@ -1285,11 +1720,16 @@
 
 
                 // DELETE
+
                 const deleteButton =
-                    document.createElement("button");
+                    document.createElement(
+                        "button"
+                    );
+
 
                 deleteButton.className =
                     "delete-button";
+
 
                 deleteButton.textContent =
                     "🗑️ Delete";
@@ -1307,21 +1747,39 @@
                 );
 
 
-                actions.appendChild(editButton);
-
-                actions.appendChild(deleteButton);
-
-
-                card.appendChild(top);
-
-                card.appendChild(meta);
-
-                card.appendChild(date);
-
-                card.appendChild(actions);
+                actions.appendChild(
+                    editButton
+                );
 
 
-                memoryList.appendChild(card);
+                actions.appendChild(
+                    deleteButton
+                );
+
+
+                card.appendChild(
+                    top
+                );
+
+
+                card.appendChild(
+                    meta
+                );
+
+
+                card.appendChild(
+                    date
+                );
+
+
+                card.appendChild(
+                    actions
+                );
+
+
+                memoryList.appendChild(
+                    card
+                );
 
             }
         );
@@ -1329,11 +1787,13 @@
     }
 
 
-    // -----------------------------
+    // ==========================================
     // DELETE MEMORY
-    // -----------------------------
+    // ==========================================
 
-    async function deleteMemory(memoryId) {
+    async function deleteMemory(
+        memoryId
+    ) {
 
         const confirmed =
             confirm(
@@ -1342,7 +1802,9 @@
 
 
         if (!confirmed) {
+
             return;
+
         }
 
 
@@ -1351,7 +1813,9 @@
             const response =
                 await fetch(
                     "/api?memory_id=" +
-                    encodeURIComponent(memoryId),
+                    encodeURIComponent(
+                        memoryId
+                    ),
                     {
                         method: "DELETE"
                     }
@@ -1365,7 +1829,8 @@
             if (!response.ok) {
 
                 throw new Error(
-                    data.error || "Delete failed"
+                    data.error ||
+                    "Delete failed"
                 );
 
             }
@@ -1374,7 +1839,10 @@
             loadedMemories =
                 loadedMemories.filter(
                     function(memory) {
-                        return memory.id !== memoryId;
+
+                        return memory.id !==
+                            memoryId;
+
                     }
                 );
 
@@ -1396,23 +1864,30 @@
     }
 
 
-    // -----------------------------
+    // ==========================================
     // EDIT MEMORY
-    // -----------------------------
+    // ==========================================
 
-    function openEditMemory(memoryId) {
+    function openEditMemory(
+        memoryId
+    ) {
 
         const memory =
             loadedMemories.find(
                 function(item) {
-                    return item.id === memoryId;
+
+                    return item.id ===
+                        memoryId;
+
                 }
             );
 
 
         if (!memory) {
 
-            alert("Memory not found.");
+            alert(
+                "Memory not found."
+            );
 
             return;
 
@@ -1426,24 +1901,28 @@
         document.getElementById(
             "editMemory"
         ).value =
-            memory.memory || "";
+            memory.memory ||
+            "";
 
 
         document.getElementById(
             "editSubject"
         ).value =
-            memory.subject || "general";
+            memory.subject ||
+            "general";
 
 
         document.getElementById(
             "editCategory"
         ).value =
-            memory.category || "general";
+            memory.category ||
+            "general";
 
 
         const importance =
             Number(
-                memory.importance || 5
+                memory.importance ||
+                5
             );
 
 
@@ -1467,12 +1946,14 @@
     }
 
 
-    // -----------------------------
+    // ==========================================
     // IMPORTANCE SLIDER
-    // -----------------------------
+    // ==========================================
 
     document
-        .getElementById("editImportance")
+        .getElementById(
+            "editImportance"
+        )
         .addEventListener(
             "input",
             function(event) {
@@ -1486,18 +1967,22 @@
         );
 
 
-    // -----------------------------
+    // ==========================================
     // SAVE EDIT
-    // -----------------------------
+    // ==========================================
 
     document
-        .getElementById("saveEdit")
+        .getElementById(
+            "saveEdit"
+        )
         .addEventListener(
             "click",
             async function() {
 
                 if (!editingMemoryId) {
+
                     return;
+
                 }
 
 
@@ -1547,6 +2032,7 @@
                 saveButton.disabled =
                     true;
 
+
                 saveButton.textContent =
                     "Saving...";
 
@@ -1584,7 +2070,6 @@
                                         importance
 
                                 })
-
                             }
                         );
 
@@ -1606,8 +2091,10 @@
                     const index =
                         loadedMemories.findIndex(
                             function(item) {
+
                                 return item.id ===
                                     editingMemoryId;
+
                             }
                         );
 
@@ -1640,6 +2127,7 @@
                 saveButton.disabled =
                     false;
 
+
                 saveButton.textContent =
                     "Save Changes";
 
@@ -1647,9 +2135,9 @@
         );
 
 
-    // -----------------------------
+    // ==========================================
     // CLOSE EDIT MODAL
-    // -----------------------------
+    // ==========================================
 
     function closeEditModal() {
 
@@ -1666,7 +2154,9 @@
 
 
     document
-        .getElementById("cancelEdit")
+        .getElementById(
+            "cancelEdit"
+        )
         .addEventListener(
             "click",
             closeEditModal
@@ -1674,14 +2164,18 @@
 
 
     document
-        .getElementById("editModal")
+        .getElementById(
+            "editModal"
+        )
         .addEventListener(
             "click",
             function(event) {
 
                 if (
                     event.target ===
-                    document.getElementById("editModal")
+                    document.getElementById(
+                        "editModal"
+                    )
                 ) {
 
                     closeEditModal();
@@ -1700,7 +2194,8 @@
                 event.key === "Escape" &&
                 document.getElementById(
                     "editModal"
-                ).style.display === "flex"
+                ).style.display ===
+                    "flex"
             ) {
 
                 closeEditModal();
@@ -1711,18 +2206,35 @@
     );
 
 
-    // -----------------------------
+    // ==========================================
     // HTML SAFETY
-    // -----------------------------
+    // ==========================================
 
-    function escapeHtml(value) {
+    function escapeHtml(
+        value
+    ) {
 
         return String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+            .replace(
+                /&/g,
+                "&amp;"
+            )
+            .replace(
+                /</g,
+                "&lt;"
+            )
+            .replace(
+                />/g,
+                "&gt;"
+            )
+            .replace(
+                /"/g,
+                "&quot;"
+            )
+            .replace(
+                /'/g,
+                "&#039;"
+            );
 
     }
 
