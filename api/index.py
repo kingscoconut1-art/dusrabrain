@@ -156,7 +156,10 @@ class handler(BaseHTTPRequestHandler):
         database_url = self.get_database_url()
 
         if not database_url:
-            return False
+            return {
+                "saved": False,
+                "error": "Database URL not found."
+            }
 
         try:
 
@@ -197,10 +200,17 @@ class handler(BaseHTTPRequestHandler):
 
                 connection.commit()
 
-            return True
+            return {
+                "saved": True,
+                "error": None
+            }
 
-        except Exception:
-            return False
+        except Exception as e:
+
+            return {
+                "saved": False,
+                "error": str(e)
+            }
 
     def clean_json_response(self, text):
 
@@ -685,18 +695,22 @@ User message:
             )
 
             memory_saved = False
+            memory_save_error = None
 
             if memory_analysis[
                 "should_remember"
             ]:
 
-                memory_saved = self.save_memory(
+                save_result = self.save_memory(
                     user_id,
                     memory_analysis["memory"],
                     memory_analysis["category"],
                     memory_analysis["importance"],
                     memory_analysis["subject"]
                 )
+
+                memory_saved = save_result["saved"]
+                memory_save_error = save_result["error"]
 
             self.send_json(
                 200,
@@ -716,6 +730,7 @@ User message:
                     "memory_error": (
                         memory_analysis.get("error")
                     ),
+                    "memory_save_error": memory_save_error,
                     "memories_used": len(memories)
                 }
             )
