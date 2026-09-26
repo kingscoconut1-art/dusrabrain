@@ -70,6 +70,7 @@
             border-radius: 14px;
             line-height: 1.6;
             white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
         .user {
@@ -137,7 +138,14 @@
             font-style: italic;
         }
 
+        .error {
+            color: #b91c1c;
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
         @media (max-width: 700px) {
+
             .welcome h1 {
                 font-size: 32px;
             }
@@ -148,6 +156,14 @@
 
             .assistant {
                 margin-right: 20px;
+            }
+
+            .input-box {
+                gap: 6px;
+            }
+
+            button {
+                width: 75px;
             }
         }
     </style>
@@ -161,15 +177,18 @@
 </header>
 
 <main id="chat">
+
     <div class="welcome" id="welcome">
         <h1>Dusra Brain</h1>
         <p>Your personal AI brain, powered by memory.</p>
     </div>
 
     <div class="messages" id="messages"></div>
+
 </main>
 
 <div class="input-area">
+
     <div class="input-box">
 
         <textarea
@@ -178,27 +197,41 @@
             rows="1"
         ></textarea>
 
-        <button id="send">Send</button>
+        <button id="send">
+            Send
+        </button>
 
     </div>
+
 </div>
 
 <script>
 
-const messageInput = document.getElementById("message");
-const sendButton = document.getElementById("send");
-const messages = document.getElementById("messages");
-const welcome = document.getElementById("welcome");
+const messageInput =
+    document.getElementById("message");
+
+const sendButton =
+    document.getElementById("send");
+
+const messages =
+    document.getElementById("messages");
+
+const welcome =
+    document.getElementById("welcome");
+
 
 function addMessage(text, type) {
 
     welcome.style.display = "none";
 
-    const div = document.createElement("div");
+    const div =
+        document.createElement("div");
 
-    div.className = "message " + type;
+    div.className =
+        "message " + type;
 
-    div.textContent = text;
+    div.textContent =
+        text;
 
     messages.appendChild(div);
 
@@ -210,62 +243,108 @@ function addMessage(text, type) {
     return div;
 }
 
+
 async function sendMessage() {
 
-    const message = messageInput.value.trim();
+    const message =
+        messageInput.value.trim();
 
     if (!message) {
         return;
     }
 
-    addMessage(message, "user");
+    addMessage(
+        message,
+        "user"
+    );
 
     messageInput.value = "";
 
     sendButton.disabled = true;
 
-    const thinking = addMessage(
-        "Dusra Brain is thinking...",
-        "assistant thinking"
-    );
+    const thinking =
+        addMessage(
+            "Dusra Brain is thinking...",
+            "assistant thinking"
+        );
 
     try {
 
-        const response = await fetch(
-            "/api",
-            {
-                method: "POST",
+        const response =
+            await fetch(
+                "/api",
+                {
+                    method: "POST",
 
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
 
-                body: JSON.stringify({
-                    message: message
-                })
-            }
-        );
+                    body: JSON.stringify({
+                        message: message
+                    })
+                }
+            );
 
-        const data = await response.json();
 
-        if (!response.ok) {
+        let data;
+
+        try {
+
+            data =
+                await response.json();
+
+        } catch (jsonError) {
+
             throw new Error(
-                data.error || "Something went wrong."
+                "Server returned an invalid response."
             );
         }
 
+
+        if (!response.ok) {
+
+            let errorMessage =
+                data.error ||
+                "Something went wrong.";
+
+            if (
+                data.gemini_error &&
+                data.gemini_error.error &&
+                data.gemini_error.error.message
+            ) {
+
+                errorMessage =
+                    data.gemini_error.error.message;
+
+            }
+
+            throw new Error(
+                errorMessage
+            );
+        }
+
+
         thinking.remove();
 
+
         addMessage(
-            data.response || "No response received.",
+            data.response ||
+            "No response received.",
             "assistant"
         );
 
+
     } catch (error) {
 
+        thinking.classList.add(
+            "error"
+        );
+
         thinking.textContent =
-            "Sorry, something went wrong: " +
+            "Sorry, something went wrong:\n\n" +
             error.message;
+
 
     } finally {
 
@@ -275,10 +354,12 @@ async function sendMessage() {
     }
 }
 
+
 sendButton.addEventListener(
     "click",
     sendMessage
 );
+
 
 messageInput.addEventListener(
     "keydown",
@@ -293,6 +374,23 @@ messageInput.addEventListener(
 
             sendMessage();
         }
+
+    }
+);
+
+
+messageInput.addEventListener(
+    "input",
+    function() {
+
+        this.style.height = "auto";
+
+        this.style.height =
+            Math.min(
+                this.scrollHeight,
+                160
+            ) + "px";
+
     }
 );
 
