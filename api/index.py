@@ -1,7 +1,7 @@
 import json
 import os
-import urllib.request
 import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler
 
 
@@ -14,6 +14,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+
         self.wfile.write(body)
 
     def do_GET(self):
@@ -30,6 +31,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            # Read request
             length = int(
                 self.headers.get("Content-Length", 0)
             )
@@ -45,6 +47,7 @@ class handler(BaseHTTPRequestHandler):
                 ""
             ).strip()
 
+            # Validate message
             if not message:
                 self.send_json(
                     400,
@@ -54,6 +57,7 @@ class handler(BaseHTTPRequestHandler):
                 )
                 return
 
+            # Get Gemini API key
             api_key = os.environ.get(
                 "GEMINI_API_KEY"
             )
@@ -62,37 +66,45 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     500,
                     {
-                        "error": "GEMINI_API_KEY is not configured."
+                        "error": (
+                            "GEMINI_API_KEY is not configured."
+                        )
                     }
                 )
                 return
 
+            # Gemini API endpoint
             url = (
                 "https://generativelanguage.googleapis.com/"
-                "v1beta/models/gemini-3.5-flash:generateContent"
+                "v1beta/models/gemini-3.5-flash:"
+                "generateContent"
             )
 
+            # Gemini request
             payload = {
+                "systemInstruction": {
+                    "parts": [
+                        {
+                            "text": (
+                                "You are Dusra Brain, "
+                                "a personal AI brain and "
+                                "memory assistant. "
+                                "Be helpful, practical, "
+                                "clear and concise."
+                            )
+                        }
+                    ]
+                },
                 "contents": [
                     {
+                        "role": "user",
                         "parts": [
                             {
                                 "text": message
                             }
                         ]
                     }
-                ],
-                "systemInstruction": {
-                    "parts": [
-                        {
-                            "text": (
-                                "You are Dusra Brain, a personal AI "
-                                "brain and memory assistant. "
-                                "Be helpful, concise and practical."
-                            )
-                        }
-                    ]
-                }
+                ]
             }
 
             request = urllib.request.Request(
@@ -107,14 +119,18 @@ class handler(BaseHTTPRequestHandler):
                 method="POST"
             )
 
+            # Call Gemini
             try:
+
                 with urllib.request.urlopen(
                     request,
                     timeout=30
                 ) as response:
 
                     result = json.loads(
-                        response.read().decode("utf-8")
+                        response.read().decode(
+                            "utf-8"
+                        )
                     )
 
             except urllib.error.HTTPError as e:
@@ -133,15 +149,36 @@ class handler(BaseHTTPRequestHandler):
                         "raw": error_body
                     }
 
+                # Extract Google's actual error message
+                error_message = (
+                    "Gemini API error"
+                )
+
+                try:
+
+                    error_message = (
+                        error_data
+                        .get("error", {})
+                        .get(
+                            "message",
+                            error_message
+                        )
+                    )
+
+                except Exception:
+                    pass
+
                 self.send_json(
                     e.code,
                     {
-                        "error": "Gemini API error",
+                        "error": error_message,
                         "gemini_error": error_data
                     }
                 )
+
                 return
 
+            # Extract response text
             text = ""
 
             candidates = result.get(
@@ -164,11 +201,25 @@ class handler(BaseHTTPRequestHandler):
                 for part in parts:
 
                     if "text" in part:
+
                         text += part["text"]
 
+            # Handle empty response
             if not text:
-                text = "No response received from Gemini."
 
+                self.send_json(
+                    500,
+                    {
+                        "error": (
+                            "Gemini returned an empty response."
+                        ),
+                        "gemini_response": result
+                    }
+                )
+
+                return
+
+            # Successful response
             self.send_json(
                 200,
                 {
