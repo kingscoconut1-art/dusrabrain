@@ -70,7 +70,6 @@ class handler(BaseHTTPRequestHandler):
             url = (
                 "https://generativelanguage.googleapis.com/"
                 "v1beta/models/gemini-2.5-flash:generateContent"
-                "?key=" + api_key
             )
 
             payload = {
@@ -82,18 +81,7 @@ class handler(BaseHTTPRequestHandler):
                             }
                         ]
                     }
-                ],
-                "systemInstruction": {
-                    "parts": [
-                        {
-                            "text": (
-                                "You are Dusra Brain, a personal AI "
-                                "brain and memory assistant. "
-                                "Be helpful, concise and practical."
-                            )
-                        }
-                    ]
-                }
+                ]
             }
 
             request = urllib.request.Request(
@@ -102,7 +90,8 @@ class handler(BaseHTTPRequestHandler):
                     payload
                 ).encode("utf-8"),
                 headers={
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": api_key
                 },
                 method="POST"
             )
@@ -151,10 +140,12 @@ class handler(BaseHTTPRequestHandler):
 
             if candidates:
 
-                parts = candidates[0].get(
+                content = candidates[0].get(
                     "content",
                     {}
-                ).get(
+                )
+
+                parts = content.get(
                     "parts",
                     []
                 )
@@ -162,7 +153,6 @@ class handler(BaseHTTPRequestHandler):
                 for part in parts:
 
                     if "text" in part:
-
                         text += part["text"]
 
             if not text:
