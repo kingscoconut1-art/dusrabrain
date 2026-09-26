@@ -17,7 +17,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_json(
-            200,
+            200, 
             {
                 "name": "Dusra Brain",
                 "status": "online",
