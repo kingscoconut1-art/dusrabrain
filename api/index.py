@@ -37,7 +37,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            # Read request
+
             length = int(
                 self.headers.get(
                     "Content-Length",
@@ -56,7 +56,6 @@ class handler(BaseHTTPRequestHandler):
                 ""
             ).strip()
 
-            # Validate message
             if not message:
                 self.send_json(
                     400,
@@ -66,7 +65,6 @@ class handler(BaseHTTPRequestHandler):
                 )
                 return
 
-            # Get Groq API key
             api_key = os.environ.get(
                 "GROQ_API_KEY"
             )
@@ -82,13 +80,11 @@ class handler(BaseHTTPRequestHandler):
                 )
                 return
 
-            # Groq API endpoint
             url = (
                 "https://api.groq.com/openai/v1/"
                 "chat/completions"
             )
 
-            # Groq request
             payload = {
                 "model": "openai/gpt-oss-20b",
                 "messages": [
@@ -119,12 +115,19 @@ class handler(BaseHTTPRequestHandler):
                     "Content-Type": "application/json",
                     "Authorization": (
                         "Bearer " + api_key
+                    ),
+                    "User-Agent": (
+                        "Mozilla/5.0 "
+                        "(Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 "
+                        "Safari/537.36"
                     )
                 },
                 method="POST"
             )
 
-            # Call Groq
             try:
 
                 with urllib.request.urlopen(
@@ -171,7 +174,6 @@ class handler(BaseHTTPRequestHandler):
 
                 return
 
-            # Get response
             choices = result.get(
                 "choices",
                 []
@@ -215,7 +217,6 @@ class handler(BaseHTTPRequestHandler):
 
                 return
 
-            # Successful response
             self.send_json(
                 200,
                 {
