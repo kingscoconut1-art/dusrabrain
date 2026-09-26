@@ -37,7 +37,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-
+            # Read request
             length = int(
                 self.headers.get(
                     "Content-Length",
@@ -56,6 +56,7 @@ class handler(BaseHTTPRequestHandler):
                 ""
             ).strip()
 
+            # Validate message
             if not message:
                 self.send_json(
                     400,
@@ -65,6 +66,7 @@ class handler(BaseHTTPRequestHandler):
                 )
                 return
 
+            # Get Groq API key
             api_key = os.environ.get(
                 "GROQ_API_KEY"
             )
@@ -73,18 +75,22 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     500,
                     {
-                        "error": "GROQ_API_KEY is not configured."
+                        "error": (
+                            "GROQ_API_KEY is not configured."
+                        )
                     }
                 )
                 return
 
+            # Groq API endpoint
             url = (
                 "https://api.groq.com/openai/v1/"
                 "chat/completions"
             )
 
+            # Groq request
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": "openai/gpt-oss-20b",
                 "messages": [
                     {
                         "role": "system",
@@ -118,6 +124,7 @@ class handler(BaseHTTPRequestHandler):
                 method="POST"
             )
 
+            # Call Groq
             try:
 
                 with urllib.request.urlopen(
@@ -164,6 +171,7 @@ class handler(BaseHTTPRequestHandler):
 
                 return
 
+            # Get response
             choices = result.get(
                 "choices",
                 []
@@ -174,7 +182,9 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     500,
                     {
-                        "error": "Groq returned no choices.",
+                        "error": (
+                            "Groq returned no choices."
+                        ),
                         "details": result
                     }
                 )
@@ -196,13 +206,16 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     500,
                     {
-                        "error": "Groq returned an empty response.",
+                        "error": (
+                            "Groq returned an empty response."
+                        ),
                         "details": result
                     }
                 )
 
                 return
 
+            # Successful response
             self.send_json(
                 200,
                 {
