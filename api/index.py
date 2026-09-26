@@ -3,6 +3,7 @@ import os
 import re
 import urllib.request
 import urllib.error
+from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler
 
 import psycopg
@@ -30,7 +31,7 @@ def send_json(handler, data, status=200):
     )
     handler.send_header(
         "Access-Control-Allow-Methods",
-        "GET, POST, OPTIONS"
+        "GET, POST, DELETE, OPTIONS"
     )
     handler.end_headers()
 
@@ -872,6 +873,128 @@ class handler(BaseHTTPRequestHandler):
                 "status": "ok"
             }
         )
+
+    # ========================================================
+    # DELETE MEMORY
+    # ========================================================
+
+    def do_DELETE(self):
+
+        try:
+
+            db_url = get_database_url()
+
+            if not db_url:
+
+                send_json(
+                    self,
+                    {
+                        "error": (
+                            "Database not detected"
+                        )
+                    },
+                    500
+                )
+
+                return
+
+            parsed_url = urlparse(
+                self.path
+            )
+
+            query = parse_qs(
+                parsed_url.query
+            )
+
+            memory_id = query.get(
+                "memory_id",
+                [None]
+            )[0]
+
+            if not memory_id:
+
+                send_json(
+                    self,
+                    {
+                        "error": (
+                            "memory_id is required"
+                        )
+                    },
+                    400
+                )
+
+                return
+
+            try:
+
+                memory_id = int(
+                    memory_id
+                )
+
+            except ValueError:
+
+                send_json(
+                    self,
+                    {
+                        "error": (
+                            "Invalid memory_id"
+                        )
+                    },
+                    400
+                )
+
+                return
+
+            with psycopg.connect(
+                db_url
+            ) as conn:
+
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        """
+                        DELETE FROM memories
+                        WHERE id = %s
+                        RETURNING id
+                        """,
+                        (memory_id,)
+                    )
+
+                    deleted = cur.fetchone()
+
+            if not deleted:
+
+                send_json(
+                    self,
+                    {
+                        "deleted": False,
+                        "error": (
+                            "Memory not found"
+                        )
+                    },
+                    404
+                )
+
+                return
+
+            send_json(
+                self,
+                {
+                    "deleted": True,
+                    "memory_id": deleted[0]
+                }
+            )
+
+        except Exception as e:
+
+            send_json(
+                self,
+                {
+                    "deleted": False,
+                    "error": str(e)
+                },
+                500
+            )
 
     # ========================================================
     # GET
