@@ -1,7 +1,7 @@
 import json
 import os
-import urllib.error
 import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler
 
 
@@ -22,8 +22,8 @@ class handler(BaseHTTPRequestHandler):
             {
                 "name": "Dusra Brain",
                 "status": "online",
-                "anthropic_key_detected": bool(
-                    os.environ.get("ANTHROPIC_API_KEY")
+                "gemini_key_detected": bool(
+                    os.environ.get("GEMINI_API_KEY")
                 )
             }
         )
@@ -55,43 +55,54 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             api_key = os.environ.get(
-                "ANTHROPIC_API_KEY"
+                "GEMINI_API_KEY"
             )
 
             if not api_key:
                 self.send_json(
                     500,
                     {
-                        "error": "ANTHROPIC_API_KEY is not configured."
+                        "error": "GEMINI_API_KEY is not configured."
                     }
                 )
                 return
 
+            url = (
+                "https://generativelanguage.googleapis.com/"
+                "v1beta/models/gemini-2.5-flash:generateContent"
+                "?key=" + api_key
+            )
+
             payload = {
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 1000,
-                "system": (
-                    "You are Dusra Brain, a personal AI brain "
-                    "and memory assistant. "
-                    "Be helpful, concise and practical."
-                ),
-                "messages": [
+                "contents": [
                     {
-                        "role": "user",
-                        "content": message
+                        "parts": [
+                            {
+                                "text": message
+                            }
+                        ]
                     }
-                ]
+                ],
+                "systemInstruction": {
+                    "parts": [
+                        {
+                            "text": (
+                                "You are Dusra Brain, a personal AI "
+                                "brain and memory assistant. "
+                                "Be helpful, concise and practical."
+                            )
+                        }
+                    ]
+                }
             }
 
             request = urllib.request.Request(
-                "https://api.anthropic.com/v1/messages",
+                url,
                 data=json.dumps(
                     payload
                 ).encode("utf-8"),
                 headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01"
+                    "Content-Type": "application/json"
                 },
                 method="POST"
             )
@@ -125,26 +136,37 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     e.code,
                     {
-                        "error": "Anthropic API error",
-                        "anthropic_error": error_data
+                        "error": "Gemini API error",
+                        "gemini_error": error_data
                     }
                 )
                 return
 
             text = ""
 
-            for block in result.get(
-                "content",
+            candidates = result.get(
+                "candidates",
                 []
-            ):
-                if block.get("type") == "text":
-                    text += block.get(
-                        "text",
-                        ""
-                    )
+            )
+
+            if candidates:
+
+                parts = candidates[0].get(
+                    "content",
+                    {}
+                ).get(
+                    "parts",
+                    []
+                )
+
+                for part in parts:
+
+                    if "text" in part:
+
+                        text += part["text"]
 
             if not text:
-                text = "No response received from Anthropic."
+                text = "No response received from Gemini."
 
             self.send_json(
                 200,
