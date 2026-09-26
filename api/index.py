@@ -63,9 +63,7 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     500,
                     {
-                        "error": (
-                            "GROQ_API_KEY is not configured."
-                        )
+                        "error": "GROQ_API_KEY is not configured."
                     }
                 )
                 return
@@ -105,7 +103,7 @@ class handler(BaseHTTPRequestHandler):
                     "Content-Type": "application/json",
                     "Authorization": (
                         "Bearer " + api_key
-                    )
+                    }
                 },
                 method="POST"
             )
@@ -161,7 +159,8 @@ class handler(BaseHTTPRequestHandler):
                     e.code,
                     {
                         "error": error_message,
-                        "groq_error": error_data
+                        "groq_error": error_data,
+                        "debug_raw": error_body
                     }
                 )
 
