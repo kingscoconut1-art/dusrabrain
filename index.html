@@ -33,7 +33,8 @@
 
         .header-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         button {
@@ -44,7 +45,7 @@
             font-size: 14px;
         }
 
-        .memory-button {
+        .header-button {
             background: white;
             color: #111827;
         }
@@ -140,14 +141,19 @@
             cursor: not-allowed;
         }
 
-        .memory-dashboard {
+        .view {
             display: none;
+        }
+
+        .view.active {
+            display: block;
         }
 
         .dashboard-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 15px;
             margin-bottom: 20px;
         }
 
@@ -159,6 +165,8 @@
             background: #e5e7eb;
             color: #111827;
         }
+
+        /* MEMORY */
 
         .stats {
             display: grid;
@@ -207,10 +215,6 @@
             outline: none;
         }
 
-        #memorySearch:focus {
-            border-color: #111827;
-        }
-
         .clear-search {
             background: #e5e7eb;
             color: #111827;
@@ -221,8 +225,6 @@
             font-size: 13px;
             color: #6b7280;
         }
-
-        /* FILTERS */
 
         .filter-container {
             background: white;
@@ -250,10 +252,6 @@
             padding: 8px 12px;
             border-radius: 20px;
             font-size: 13px;
-        }
-
-        .filter-button:hover {
-            background: #e5e7eb;
         }
 
         .filter-button.active {
@@ -331,6 +329,83 @@
             color: #991b1b;
         }
 
+        /* CHAT HISTORY */
+
+        .history-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .history-card {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        }
+
+        .history-message {
+            display: flex;
+            margin-bottom: 12px;
+        }
+
+        .history-message:last-child {
+            margin-bottom: 0;
+        }
+
+        .history-role {
+            width: 90px;
+            flex-shrink: 0;
+            font-size: 12px;
+            font-weight: 700;
+            padding-top: 3px;
+        }
+
+        .history-role.user {
+            color: #111827;
+        }
+
+        .history-role.assistant {
+            color: #4f46e5;
+        }
+
+        .history-text {
+            flex: 1;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .history-time {
+            margin-top: 6px;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+
+        .history-divider {
+            border: none;
+            border-top: 1px solid #e5e7eb;
+            margin: 14px 0;
+        }
+
+        .history-search {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        }
+
+        #historySearch {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 9px;
+            font-size: 15px;
+            outline: none;
+        }
+
+        /* EMPTY / LOADING */
+
         .empty-state {
             background: white;
             padding: 40px;
@@ -344,6 +419,8 @@
             padding: 30px;
             color: #6b7280;
         }
+
+        /* MODAL */
 
         .modal-overlay {
             display: none;
@@ -429,6 +506,15 @@
 
         @media (max-width: 700px) {
 
+            .header {
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .header-buttons {
+                justify-content: flex-end;
+            }
+
             .stats {
                 grid-template-columns: repeat(2, 1fr);
             }
@@ -449,15 +535,21 @@
                 flex-direction: column;
             }
 
-            .filter-buttons {
-                gap: 6px;
+            .history-message {
+                display: block;
             }
 
+            .history-role {
+                width: auto;
+                margin-bottom: 5px;
+            }
         }
     </style>
 </head>
 
 <body>
+
+    <!-- HEADER -->
 
     <div class="header">
 
@@ -468,10 +560,17 @@
         <div class="header-buttons">
 
             <button
-                class="memory-button"
+                class="header-button"
                 id="memoryButton"
             >
                 🧠 My Memory
+            </button>
+
+            <button
+                class="header-button"
+                id="historyButton"
+            >
+                💬 Chat History
             </button>
 
         </div>
@@ -481,9 +580,15 @@
 
     <div class="container">
 
-        <!-- CHAT -->
 
-        <div id="chatView">
+        <!-- ================================================= -->
+        <!-- CHAT VIEW -->
+        <!-- ================================================= -->
+
+        <div
+            id="chatView"
+            class="view active"
+        >
 
             <div class="welcome">
 
@@ -533,11 +638,13 @@
         </div>
 
 
+        <!-- ================================================= -->
         <!-- MEMORY DASHBOARD -->
+        <!-- ================================================= -->
 
         <div
             id="memoryDashboard"
-            class="memory-dashboard"
+            class="view"
         >
 
             <div class="dashboard-header">
@@ -548,15 +655,13 @@
 
                 <button
                     class="back-button"
-                    id="backButton"
+                    id="memoryBackButton"
                 >
                     ← Back to Chat
                 </button>
 
             </div>
 
-
-            <!-- STATS -->
 
             <div class="stats">
 
@@ -677,14 +782,12 @@
                         All
                     </button>
 
-
                     <button
                         class="filter-button"
                         data-filter="personal"
                     >
                         Personal
                     </button>
-
 
                     <button
                         class="filter-button"
@@ -693,14 +796,12 @@
                         Projects
                     </button>
 
-
                     <button
                         class="filter-button"
                         data-filter="business"
                     >
                         Business
                     </button>
-
 
                     <button
                         class="filter-button"
@@ -709,14 +810,12 @@
                         Goals
                     </button>
 
-
                     <button
                         class="filter-button"
                         data-filter="preference"
                     >
                         Preferences
                     </button>
-
 
                     <button
                         class="filter-button"
@@ -725,7 +824,6 @@
                         Work
                     </button>
 
-
                     <button
                         class="filter-button"
                         data-filter="decision"
@@ -733,14 +831,12 @@
                         Decisions
                     </button>
 
-
                     <button
                         class="filter-button"
                         data-filter="instruction"
                     >
                         Instructions
                     </button>
-
 
                     <button
                         class="filter-button"
@@ -753,8 +849,6 @@
 
             </div>
 
-
-            <!-- MEMORY LIST -->
 
             <div
                 id="memoryList"
@@ -769,10 +863,72 @@
 
         </div>
 
+
+        <!-- ================================================= -->
+        <!-- CHAT HISTORY -->
+        <!-- ================================================= -->
+
+        <div
+            id="historyView"
+            class="view"
+        >
+
+            <div class="dashboard-header">
+
+                <h2>
+                    💬 Chat History
+                </h2>
+
+                <button
+                    class="back-button"
+                    id="historyBackButton"
+                >
+                    ← Back to Chat
+                </button>
+
+            </div>
+
+
+            <div class="history-search">
+
+                <input
+                    type="text"
+                    id="historySearch"
+                    placeholder="🔎 Search conversation history..."
+                    autocomplete="off"
+                >
+
+            </div>
+
+
+            <div
+                id="historyInfo"
+                class="search-info"
+                style="margin-bottom: 15px;"
+            >
+                Loading conversations...
+            </div>
+
+
+            <div
+                id="historyList"
+                class="history-list"
+            >
+
+                <div class="loading">
+                    Loading conversation history...
+                </div>
+
+            </div>
+
+        </div>
+
     </div>
 
 
-    <!-- EDIT MODAL -->
+    <!-- ================================================= -->
+    <!-- EDIT MEMORY MODAL -->
+    <!-- ================================================= -->
 
     <div
         class="modal-overlay"
@@ -920,16 +1076,36 @@
 
 <script>
 
+    // ========================================================
+    // GLOBAL STATE
+    // ========================================================
+
     let loadedMemories = [];
+
+    let loadedConversations = [];
 
     let editingMemoryId = null;
 
     let activeFilter = "all";
 
 
-    // ==========================================
+    // ========================================================
+    // ELEMENTS
+    // ========================================================
+
+    const chatView =
+        document.getElementById("chatView");
+
+    const memoryDashboard =
+        document.getElementById("memoryDashboard");
+
+    const historyView =
+        document.getElementById("historyView");
+
+
+    // ========================================================
     // CHAT
-    // ==========================================
+    // ========================================================
 
     const messageInput =
         document.getElementById("messageInput");
@@ -941,7 +1117,10 @@
         document.getElementById("messages");
 
 
-    function addMessage(role, text) {
+    function addMessage(
+        role,
+        text
+    ) {
 
         const message =
             document.createElement("div");
@@ -960,9 +1139,15 @@
             text;
 
 
-        message.appendChild(bubble);
+        message.appendChild(
+            bubble
+        );
 
-        messages.appendChild(message);
+
+        messages.appendChild(
+            message
+        );
+
 
         messages.scrollTop =
             messages.scrollHeight;
@@ -1012,9 +1197,15 @@
                         },
 
                         body: JSON.stringify({
-                            message: message,
-                            user_id: "default_user"
+
+                            message:
+                                message,
+
+                            user_id:
+                                "default_user"
+
                         })
+
                     }
                 );
 
@@ -1054,8 +1245,10 @@
         sendButton.disabled =
             false;
 
+
         sendButton.textContent =
             "Send";
+
 
         messageInput.focus();
 
@@ -1072,7 +1265,10 @@
         "keydown",
         function(event) {
 
-            if (event.key === "Enter") {
+            if (
+                event.key ===
+                "Enter"
+            ) {
 
                 event.preventDefault();
 
@@ -1084,18 +1280,37 @@
     );
 
 
-    // ==========================================
-    // VIEW SWITCHING
-    // ==========================================
+    // ========================================================
+    // VIEW MANAGEMENT
+    // ========================================================
 
-    const chatView =
-        document.getElementById("chatView");
+    function showView(
+        view
+    ) {
 
-    const memoryDashboard =
-        document.getElementById(
-            "memoryDashboard"
+        chatView.classList.remove(
+            "active"
         );
 
+        memoryDashboard.classList.remove(
+            "active"
+        );
+
+        historyView.classList.remove(
+            "active"
+        );
+
+
+        view.classList.add(
+            "active"
+        );
+
+    }
+
+
+    // ========================================================
+    // OPEN MEMORY
+    // ========================================================
 
     document
         .getElementById("memoryButton")
@@ -1103,11 +1318,9 @@
             "click",
             function() {
 
-                chatView.style.display =
-                    "none";
-
-                memoryDashboard.style.display =
-                    "block";
+                showView(
+                    memoryDashboard
+                );
 
                 loadMemories();
 
@@ -1116,24 +1329,56 @@
 
 
     document
-        .getElementById("backButton")
+        .getElementById("memoryBackButton")
         .addEventListener(
             "click",
             function() {
 
-                memoryDashboard.style.display =
-                    "none";
-
-                chatView.style.display =
-                    "block";
+                showView(
+                    chatView
+                );
 
             }
         );
 
 
-    // ==========================================
+    // ========================================================
+    // OPEN HISTORY
+    // ========================================================
+
+    document
+        .getElementById("historyButton")
+        .addEventListener(
+            "click",
+            function() {
+
+                showView(
+                    historyView
+                );
+
+                loadConversations();
+
+            }
+        );
+
+
+    document
+        .getElementById("historyBackButton")
+        .addEventListener(
+            "click",
+            function() {
+
+                showView(
+                    chatView
+                );
+
+            }
+        );
+
+
+    // ========================================================
     // LOAD MEMORIES
-    // ==========================================
+    // ========================================================
 
     async function loadMemories() {
 
@@ -1170,7 +1415,8 @@
 
 
             loadedMemories =
-                data.memories || [];
+                data.memories ||
+                [];
 
 
             updateStats();
@@ -1182,7 +1428,9 @@
 
             memoryList.innerHTML =
                 '<div class="empty-state">Unable to load memories. ' +
-                escapeHtml(error.message) +
+                escapeHtml(
+                    error.message
+                ) +
                 '</div>';
 
         }
@@ -1190,9 +1438,9 @@
     }
 
 
-    // ==========================================
-    // STATS
-    // ==========================================
+    // ========================================================
+    // MEMORY STATS
+    // ========================================================
 
     function updateStats() {
 
@@ -1227,7 +1475,8 @@
                 function(memory) {
 
                     return Number(
-                        memory.importance || 0
+                        memory.importance ||
+                        0
                     ) >= 8;
 
                 }
@@ -1260,19 +1509,13 @@
     }
 
 
-    // ==========================================
-    // SEARCH
-    // ==========================================
+    // ========================================================
+    // MEMORY SEARCH
+    // ========================================================
 
     const memorySearch =
         document.getElementById(
             "memorySearch"
-        );
-
-
-    const clearSearch =
-        document.getElementById(
-            "clearSearch"
         );
 
 
@@ -1286,24 +1529,26 @@
     );
 
 
-    clearSearch.addEventListener(
-        "click",
-        function() {
+    document
+        .getElementById("clearSearch")
+        .addEventListener(
+            "click",
+            function() {
 
-            memorySearch.value =
-                "";
+                memorySearch.value =
+                    "";
 
-            renderMemories();
+                renderMemories();
 
-            memorySearch.focus();
+                memorySearch.focus();
 
-        }
-    );
+            }
+        );
 
 
-    // ==========================================
-    // FILTER BUTTONS
-    // ==========================================
+    // ========================================================
+    // MEMORY FILTERS
+    // ========================================================
 
     const filterButtons =
         document.querySelectorAll(
@@ -1347,10 +1592,6 @@
     );
 
 
-    // ==========================================
-    // FILTER + SEARCH
-    // ==========================================
-
     function getFilteredMemories() {
 
         const query =
@@ -1361,8 +1602,6 @@
 
         return loadedMemories.filter(
             function(memory) {
-
-                // CATEGORY FILTER
 
                 let matchesFilter =
                     true;
@@ -1390,7 +1629,8 @@
                             (
                                 memory.category ||
                                 "general"
-                            ).toLowerCase() ===
+                            )
+                            .toLowerCase() ===
                             activeFilter;
 
                     }
@@ -1405,8 +1645,6 @@
                 }
 
 
-                // SEARCH FILTER
-
                 if (!query) {
 
                     return true;
@@ -1416,9 +1654,15 @@
 
                 const searchableText =
                     [
-                        memory.memory || "",
-                        memory.subject || "",
-                        memory.category || ""
+                        memory.memory ||
+                            "",
+
+                        memory.subject ||
+                            "",
+
+                        memory.category ||
+                            ""
+
                     ]
                     .join(" ")
                     .toLowerCase();
@@ -1434,9 +1678,9 @@
     }
 
 
-    // ==========================================
+    // ========================================================
     // RENDER MEMORIES
-    // ==========================================
+    // ========================================================
 
     function renderMemories() {
 
@@ -1469,29 +1713,15 @@
         }
 
 
-        if (query) {
-
-            document.getElementById(
-                "searchInfo"
-            ).textContent =
-                "Showing " +
-                filteredMemories.length +
-                " of " +
-                loadedMemories.length +
-                " memories • " +
-                filterName;
-
-        } else {
-
-            document.getElementById(
-                "searchInfo"
-            ).textContent =
-                "Showing " +
-                filteredMemories.length +
-                " memories • " +
-                filterName;
-
-        }
+        document.getElementById(
+            "searchInfo"
+        ).textContent =
+            "Showing " +
+            filteredMemories.length +
+            " of " +
+            loadedMemories.length +
+            " memories • " +
+            filterName;
 
 
         memoryList.innerHTML =
@@ -1691,8 +1921,6 @@
                     "memory-actions";
 
 
-                // EDIT
-
                 const editButton =
                     document.createElement(
                         "button"
@@ -1718,8 +1946,6 @@
                     }
                 );
 
-
-                // DELETE
 
                 const deleteButton =
                     document.createElement(
@@ -1787,9 +2013,9 @@
     }
 
 
-    // ==========================================
+    // ========================================================
     // DELETE MEMORY
-    // ==========================================
+    // ========================================================
 
     async function deleteMemory(
         memoryId
@@ -1817,7 +2043,8 @@
                         memoryId
                     ),
                     {
-                        method: "DELETE"
+                        method:
+                            "DELETE"
                     }
                 );
 
@@ -1864,9 +2091,9 @@
     }
 
 
-    // ==========================================
+    // ========================================================
     // EDIT MEMORY
-    // ==========================================
+    // ========================================================
 
     function openEditMemory(
         memoryId
@@ -1946,10 +2173,6 @@
     }
 
 
-    // ==========================================
-    // IMPORTANCE SLIDER
-    // ==========================================
-
     document
         .getElementById(
             "editImportance"
@@ -1967,9 +2190,9 @@
         );
 
 
-    // ==========================================
+    // ========================================================
     // SAVE EDIT
-    // ==========================================
+    // ========================================================
 
     document
         .getElementById(
@@ -2043,33 +2266,36 @@
                         await fetch(
                             "/api",
                             {
-                                method: "PUT",
+                                method:
+                                    "PUT",
 
                                 headers: {
                                     "Content-Type":
                                         "application/json"
                                 },
 
-                                body: JSON.stringify({
+                                body:
+                                    JSON.stringify({
 
-                                    id:
-                                        editingMemoryId,
+                                        id:
+                                            editingMemoryId,
 
-                                    memory:
-                                        memory,
+                                        memory:
+                                            memory,
 
-                                    subject:
-                                        subject ||
-                                        "general",
+                                        subject:
+                                            subject ||
+                                            "general",
 
-                                    category:
-                                        category ||
-                                        "general",
+                                        category:
+                                            category ||
+                                            "general",
 
-                                    importance:
-                                        importance
+                                        importance:
+                                            importance
 
-                                })
+                                    })
+
                             }
                         );
 
@@ -2135,9 +2361,9 @@
         );
 
 
-    // ==========================================
+    // ========================================================
     // CLOSE EDIT MODAL
-    // ==========================================
+    // ========================================================
 
     function closeEditModal() {
 
@@ -2186,29 +2412,323 @@
         );
 
 
-    document.addEventListener(
-        "keydown",
-        function(event) {
+    // ========================================================
+    // CHAT HISTORY
+    // ========================================================
 
-            if (
-                event.key === "Escape" &&
-                document.getElementById(
-                    "editModal"
-                ).style.display ===
-                    "flex"
-            ) {
+    async function loadConversations() {
 
-                closeEditModal();
+        const historyList =
+            document.getElementById(
+                "historyList"
+            );
+
+
+        const historyInfo =
+            document.getElementById(
+                "historyInfo"
+            );
+
+
+        historyList.innerHTML =
+            '<div class="loading">Loading conversation history...</div>';
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api?conversations=true"
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Unable to load conversations"
+                );
 
             }
+
+
+            loadedConversations =
+                data.conversations ||
+                [];
+
+
+            historyInfo.textContent =
+                loadedConversations.length +
+                " messages in your conversation history";
+
+
+            renderHistory();
+
+
+        } catch (error) {
+
+            historyInfo.textContent =
+                "Unable to load conversation history";
+
+
+            historyList.innerHTML =
+                '<div class="empty-state">' +
+                escapeHtml(
+                    error.message
+                ) +
+                '</div>';
+
+        }
+
+    }
+
+
+    // ========================================================
+    // HISTORY SEARCH
+    // ========================================================
+
+    const historySearch =
+        document.getElementById(
+            "historySearch"
+        );
+
+
+    historySearch.addEventListener(
+        "input",
+        function() {
+
+            renderHistory();
 
         }
     );
 
 
-    // ==========================================
-    // HTML SAFETY
-    // ==========================================
+    function renderHistory() {
+
+        const historyList =
+            document.getElementById(
+                "historyList"
+            );
+
+
+        const query =
+            historySearch.value
+                .trim()
+                .toLowerCase();
+
+
+        const filtered =
+            loadedConversations.filter(
+                function(item) {
+
+                    if (!query) {
+
+                        return true;
+
+                    }
+
+
+                    return (
+                        String(
+                            item.message ||
+                            ""
+                        )
+                        .toLowerCase()
+                        .includes(
+                            query
+                        )
+                    );
+
+                }
+            );
+
+
+        historyList.innerHTML =
+            "";
+
+
+        document.getElementById(
+            "historyInfo"
+        ).textContent =
+            "Showing " +
+            filtered.length +
+            " of " +
+            loadedConversations.length +
+            " messages";
+
+
+        if (
+            filtered.length ===
+            0
+        ) {
+
+            const empty =
+                document.createElement(
+                    "div"
+                );
+
+
+            empty.className =
+                "empty-state";
+
+
+            empty.textContent =
+                query
+                    ? 'No conversation messages found for "' +
+                      query +
+                      '"'
+                    : "No conversation history yet.";
+
+
+            historyList.appendChild(
+                empty
+            );
+
+            return;
+
+        }
+
+
+        const card =
+            document.createElement(
+                "div"
+            );
+
+
+        card.className =
+            "history-card";
+
+
+        filtered.forEach(
+            function(item, index) {
+
+                const message =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                message.className =
+                    "history-message";
+
+
+                const role =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                role.className =
+                    "history-role " +
+                    (
+                        item.role ===
+                        "user"
+                            ? "user"
+                            : "assistant"
+                    );
+
+
+                role.textContent =
+                    item.role ===
+                    "user"
+                        ? "YOU"
+                        : "DUSRA BRAIN";
+
+
+                const content =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                content.className =
+                    "history-text";
+
+
+                content.textContent =
+                    item.message ||
+                    "";
+
+
+                if (item.created_at) {
+
+                    const time =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    time.className =
+                        "history-time";
+
+
+                    time.textContent =
+                        new Date(
+                            item.created_at
+                        ).toLocaleString();
+
+
+                    content.appendChild(
+                        time
+                    );
+
+                }
+
+
+                message.appendChild(
+                    role
+                );
+
+
+                message.appendChild(
+                    content
+                );
+
+
+                card.appendChild(
+                    message
+                );
+
+
+                if (
+                    index <
+                    filtered.length - 1
+                ) {
+
+                    const divider =
+                        document.createElement(
+                            "hr"
+                        );
+
+
+                    divider.className =
+                        "history-divider";
+
+
+                    card.appendChild(
+                        divider
+                    );
+
+                }
+
+            }
+        );
+
+
+        historyList.appendChild(
+            card
+        );
+
+    }
+
+
+    // ========================================================
+    // ESCAPE HTML
+    // ========================================================
 
     function escapeHtml(
         value
@@ -2237,6 +2757,40 @@
             );
 
     }
+
+
+    // ========================================================
+    // ESCAPE KEY
+    // ========================================================
+
+    document.addEventListener(
+        "keydown",
+        function(event) {
+
+            if (
+                event.key ===
+                "Escape"
+            ) {
+
+                const modal =
+                    document.getElementById(
+                        "editModal"
+                    );
+
+
+                if (
+                    modal.style.display ===
+                    "flex"
+                ) {
+
+                    closeEditModal();
+
+                }
+
+            }
+
+        }
+    );
 
 </script>
 
