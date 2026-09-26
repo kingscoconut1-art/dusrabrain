@@ -14,17 +14,14 @@ class handler(BaseHTTPRequestHandler):
         body = json.dumps(data).encode("utf-8")
 
         self.send_response(status)
-
         self.send_header(
             "Content-Type",
             "application/json; charset=utf-8"
         )
-
         self.send_header(
             "Content-Length",
             str(len(body))
         )
-
         self.end_headers()
 
         self.wfile.write(body)
@@ -54,14 +51,10 @@ class handler(BaseHTTPRequestHandler):
 
         request = urllib.request.Request(
             url,
-            data=json.dumps(
-                payload
-            ).encode("utf-8"),
+            data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": (
-                    "Bearer " + api_key
-                ),
+                "Authorization": "Bearer " + api_key,
                 "User-Agent": (
                     "Mozilla/5.0 "
                     "(Windows NT 10.0; Win64; x64) "
@@ -84,14 +77,9 @@ class handler(BaseHTTPRequestHandler):
                 .decode("utf-8")
             )
 
-            result = json.loads(
-                response_body
-            )
+            result = json.loads(response_body)
 
-        choices = result.get(
-            "choices",
-            []
-        )
+        choices = result.get("choices", [])
 
         if not choices:
             raise Exception(
@@ -129,13 +117,14 @@ class handler(BaseHTTPRequestHandler):
                         SELECT
                             memory,
                             category,
-                            importance
+                            importance,
+                            subject
                         FROM memories
                         WHERE user_id = %s
                         ORDER BY
                             importance DESC,
                             created_at DESC
-                        LIMIT 20
+                        LIMIT 30
                         """,
                         (user_id,)
                     )
@@ -146,7 +135,8 @@ class handler(BaseHTTPRequestHandler):
                         {
                             "memory": row[0],
                             "category": row[1],
-                            "importance": row[2]
+                            "importance": row[2],
+                            "subject": row[3]
                         }
                         for row in rows
                     ]
@@ -159,7 +149,8 @@ class handler(BaseHTTPRequestHandler):
         user_id,
         memory,
         category,
-        importance
+        importance,
+        subject
     ):
 
         database_url = self.get_database_url()
@@ -183,10 +174,12 @@ class handler(BaseHTTPRequestHandler):
                             user_id,
                             memory,
                             category,
-                            importance
+                            importance,
+                            subject
                         )
                         VALUES
                         (
+                            %s,
                             %s,
                             %s,
                             %s,
@@ -197,7 +190,8 @@ class handler(BaseHTTPRequestHandler):
                             user_id,
                             memory,
                             category,
-                            importance
+                            importance,
+                            subject
                         )
                     )
 
@@ -245,11 +239,11 @@ class handler(BaseHTTPRequestHandler):
         analysis_prompt = """
 You are the memory extraction system for Dusra Brain.
 
-Your job is to decide whether the user's message
-contains LONG-TERM information about the user
-that should be remembered.
+Decide whether the user's message contains
+LONG-TERM information about the user that
+should be remembered.
 
-Remember information such as:
+Remember:
 
 - Personal preferences
 - Important personal facts
@@ -261,7 +255,7 @@ Remember information such as:
 - Work information
 - Decisions
 - User instructions
-- Important facts the user explicitly wants remembered
+- Important facts explicitly stated by the user
 
 Do NOT remember:
 
@@ -271,12 +265,24 @@ Do NOT remember:
 - Temporary requests
 - One-time calculations
 - General knowledge questions
-- Questions about information that is not about the user
+- Information unrelated to the user
 
-The memory must describe ONLY what the user actually
-said or clearly stated.
+The memory must contain ONLY facts supported
+by the user's message.
 
-Do not invent additional details.
+Never invent additional personal information.
+
+Also identify the main SUBJECT of the memory.
+
+Examples of subjects:
+
+Carbon Mandi
+Dusra Brain
+Evolve India
+AIG India Textiles
+Personal
+Work
+Family
 
 Return ONLY valid JSON.
 
@@ -286,6 +292,7 @@ If the message should be remembered:
   "should_remember": true,
   "memory": "A clean factual statement describing exactly what the user said.",
   "category": "project",
+  "subject": "Carbon Mandi",
   "importance": 8
 }
 
@@ -295,6 +302,7 @@ If it should NOT be remembered:
   "should_remember": false,
   "memory": "",
   "category": "general",
+  "subject": "general",
   "importance": 1
 }
 
@@ -335,16 +343,12 @@ User message:
                         "content": analysis_prompt
                     }
                 ],
-                max_tokens=300
+                max_tokens=350
             )
 
-            result = self.clean_json_response(
-                result
-            )
+            result = self.clean_json_response(result)
 
-            parsed = json.loads(
-                result
-            )
+            parsed = json.loads(result)
 
             should_remember = bool(
                 parsed.get(
@@ -367,19 +371,21 @@ User message:
                 )
             ).strip().lower()
 
+            subject = str(
+                parsed.get(
+                    "subject",
+                    "general"
+                )
+            ).strip()
+
             importance = parsed.get(
                 "importance",
                 5
             )
 
             try:
-
-                importance = int(
-                    importance
-                )
-
+                importance = int(importance)
             except Exception:
-
                 importance = 5
 
             importance = max(
@@ -404,8 +410,10 @@ User message:
             }
 
             if category not in allowed_categories:
-
                 category = "general"
+
+            if not subject:
+                subject = "general"
 
             if not should_remember:
 
@@ -413,6 +421,7 @@ User message:
                     "should_remember": False,
                     "memory": "",
                     "category": "general",
+                    "subject": "general",
                     "importance": 1,
                     "error": None
                 }
@@ -423,6 +432,7 @@ User message:
                     "should_remember": False,
                     "memory": "",
                     "category": "general",
+                    "subject": "general",
                     "importance": 1,
                     "error": (
                         "Memory extraction returned "
@@ -434,6 +444,7 @@ User message:
                 "should_remember": True,
                 "memory": memory,
                 "category": category,
+                "subject": subject,
                 "importance": importance,
                 "error": None
             }
@@ -444,6 +455,7 @@ User message:
                 "should_remember": False,
                 "memory": "",
                 "category": "general",
+                "subject": "general",
                 "importance": 1,
                 "error": str(e)
             }
@@ -477,9 +489,7 @@ User message:
                 )
             )
 
-            body = self.rfile.read(
-                length
-            )
+            body = self.rfile.read(length)
 
             data = json.loads(
                 body or b"{}"
@@ -525,9 +535,7 @@ User message:
 
                 return
 
-            memories = self.get_memories(
-                user_id
-            )
+            memories = self.get_memories(user_id)
 
             memory_text = ""
 
@@ -535,27 +543,22 @@ User message:
 
                 memory_lines = []
 
-                for item in reversed(
-                    memories
-                ):
+                for item in reversed(memories):
 
                     memory_lines.append(
-                        "- "
-                        + item["memory"]
-                        + " ["
+                        "- Subject: "
+                        + item["subject"]
+                        + " | Category: "
                         + item["category"]
-                        + ", importance "
-                        + str(
-                            item["importance"]
-                        )
-                        + "]"
+                        + " | Importance: "
+                        + str(item["importance"])
+                        + " | Memory: "
+                        + item["memory"]
                     )
 
                 memory_text = (
                     "\n\nUSER'S LONG-TERM MEMORIES:\n"
-                    + "\n".join(
-                        memory_lines
-                    )
+                    + "\n".join(memory_lines)
                 )
 
             system_prompt = (
@@ -604,7 +607,7 @@ User message:
                 "information. "
 
                 "Never mention the internal memory system "
-                "unless the user asks about it."
+                "unless the user asks."
 
                 + memory_text
             )
@@ -689,15 +692,10 @@ User message:
 
                 memory_saved = self.save_memory(
                     user_id,
-                    memory_analysis[
-                        "memory"
-                    ],
-                    memory_analysis[
-                        "category"
-                    ],
-                    memory_analysis[
-                        "importance"
-                    ]
+                    memory_analysis["memory"],
+                    memory_analysis["category"],
+                    memory_analysis["importance"],
+                    memory_analysis["subject"]
                 )
 
             self.send_json(
@@ -706,24 +704,19 @@ User message:
                     "name": "Dusra Brain",
                     "response": text,
                     "memory_saved": memory_saved,
+                    "memory_subject": (
+                        memory_analysis["subject"]
+                    ),
                     "memory_category": (
-                        memory_analysis[
-                            "category"
-                        ]
+                        memory_analysis["category"]
                     ),
                     "memory_importance": (
-                        memory_analysis[
-                            "importance"
-                        ]
+                        memory_analysis["importance"]
                     ),
                     "memory_error": (
-                        memory_analysis.get(
-                            "error"
-                        )
+                        memory_analysis.get("error")
                     ),
-                    "memories_used": len(
-                        memories
-                    )
+                    "memories_used": len(memories)
                 }
             )
 
