@@ -176,13 +176,234 @@ class handler(BaseHTTPRequestHandler):
         except Exception:
             return []
 
+    def get_subject_memories(
+        self,
+        user_id,
+        subject
+    ):
+
+        database_url = self.get_database_url()
+
+        if not database_url:
+            return []
+
+        try:
+
+            with psycopg.connect(
+                database_url,
+                connect_timeout=5
+            ) as connection:
+
+                with connection.cursor() as cursor:
+
+                    cursor.execute(
+                        """
+                        SELECT
+                            id,
+                            memory,
+                            category,
+                            importance,
+                            subject
+                        FROM memories
+                        WHERE user_id = %s
+                        AND LOWER(subject) = LOWER(%s)
+                        ORDER BY
+                            importance DESC,
+                            created_at DESC
+                        LIMIT 20
+                        """,
+                        (
+                            user_id,
+                            subject
+                        )
+                    )
+
+                    rows = cursor.fetchall()
+
+                    return [
+                        {
+                            "id": row[0],
+                            "memory": row[1],
+                            "category": row[2],
+                            "importance": row[3],
+                            "subject": row[4]
+                        }
+                        for row in rows
+                    ]
+
+        except Exception:
+            return []
+
+    def find_semantic_duplicate(
+        self,
+        api_key,
+        new_memory,
+        existing_memories
+    ):
+
+        if not existing_memories:
+            return {
+                "is_duplicate": False,
+                "memory_id": None,
+                "error": None
+            }
+
+        memory_lines = []
+
+        for item in existing_memories:
+
+            memory_lines.append(
+                "ID: "
+                + str(item["id"])
+                + "\nMemory: "
+                + item["memory"]
+            )
+
+        comparison_prompt = """
+You are the semantic memory comparison engine
+for Dusra Brain.
+
+Compare the NEW MEMORY with the EXISTING MEMORIES.
+
+Your job is to determine whether the new memory
+expresses the SAME underlying user fact as one
+of the existing memories.
+
+Important:
+
+- Compare meaning, not exact wording.
+- Different wording can still represent the same fact.
+- Do not mark memories as duplicates just because
+  they are about the same project or subject.
+- If the new memory contains genuinely new information,
+  it is NOT a duplicate.
+- Return the ID of the existing memory only when
+  the underlying fact is substantially the same.
+- If no existing memory represents the same fact,
+  return NEW.
+
+Examples:
+
+Existing:
+"The user is building Evolve India as a major
+long-term business project."
+
+New:
+"Evolve India is one of the user's major
+long-term business ventures."
+
+Result:
+DUPLICATE
+
+Existing:
+"The user is building Evolve India as a major
+long-term business project."
+
+New:
+"The user plans to launch Evolve India in India
+within the next three months."
+
+Result:
+NEW
+
+Return ONLY valid JSON.
+
+Duplicate:
+{
+  "is_duplicate": true,
+  "memory_id": 123
+}
+
+New:
+{
+  "is_duplicate": false,
+  "memory_id": null
+}
+
+NEW MEMORY:
+""" + new_memory + """
+
+EXISTING MEMORIES:
+
+""" + "\n\n".join(memory_lines)
+
+        try:
+
+            result = self.groq_request(
+                api_key,
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a semantic memory "
+                            "comparison engine. "
+                            "Return JSON only."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": comparison_prompt
+                    }
+                ],
+                max_tokens=200
+            )
+
+            result = self.clean_json_response(
+                result
+            )
+
+            parsed = json.loads(result)
+
+            is_duplicate = bool(
+                parsed.get(
+                    "is_duplicate",
+                    False
+                )
+            )
+
+            memory_id = parsed.get(
+                "memory_id"
+            )
+
+            if memory_id is not None:
+                try:
+                    memory_id = int(memory_id)
+                except Exception:
+                    memory_id = None
+
+            if is_duplicate and memory_id is None:
+
+                return {
+                    "is_duplicate": False,
+                    "memory_id": None,
+                    "error": (
+                        "Semantic comparison marked "
+                        "duplicate but returned no ID."
+                    )
+                }
+
+            return {
+                "is_duplicate": is_duplicate,
+                "memory_id": memory_id,
+                "error": None
+            }
+
+        except Exception as e:
+
+            return {
+                "is_duplicate": False,
+                "memory_id": None,
+                "error": str(e)
+            }
+
     def save_memory(
         self,
         user_id,
         memory,
         category,
         importance,
-        subject
+        subject,
+        api_key
     ):
 
         database_url = self.get_database_url()
@@ -208,12 +429,76 @@ class handler(BaseHTTPRequestHandler):
                 )
             )
 
+            existing_memories = (
+                self.get_subject_memories(
+                    user_id,
+                    subject
+                )
+            )
+
+            semantic_result = (
+                self.find_semantic_duplicate(
+                    api_key,
+                    memory,
+                    existing_memories
+                )
+            )
+
+            if semantic_result["error"]:
+
+                return {
+                    "saved": False,
+                    "updated": False,
+                    "error": (
+                        "Semantic comparison failed: "
+                        + semantic_result["error"]
+                    )
+                }
+
             with psycopg.connect(
                 database_url,
                 connect_timeout=5
             ) as connection:
 
                 with connection.cursor() as cursor:
+
+                    if semantic_result[
+                        "is_duplicate"
+                    ]:
+
+                        cursor.execute(
+                            """
+                            UPDATE memories
+                            SET
+                                memory = %s,
+                                category = %s,
+                                importance = %s,
+                                subject = %s,
+                                memory_key = %s
+                            WHERE id = %s
+                            AND user_id = %s
+                            """,
+                            (
+                                memory,
+                                category,
+                                importance,
+                                subject,
+                                memory_key,
+                                semantic_result[
+                                    "memory_id"
+                                ],
+                                user_id
+                            )
+                        )
+
+                        connection.commit()
+
+                        return {
+                            "saved": True,
+                            "updated": True,
+                            "semantic_duplicate": True,
+                            "error": None
+                        }
 
                     cursor.execute(
                         """
@@ -257,6 +542,7 @@ class handler(BaseHTTPRequestHandler):
                         return {
                             "saved": True,
                             "updated": True,
+                            "semantic_duplicate": False,
                             "error": None
                         }
 
@@ -296,6 +582,7 @@ class handler(BaseHTTPRequestHandler):
             return {
                 "saved": True,
                 "updated": False,
+                "semantic_duplicate": False,
                 "error": None
             }
 
@@ -304,6 +591,7 @@ class handler(BaseHTTPRequestHandler):
             return {
                 "saved": False,
                 "updated": False,
+                "semantic_duplicate": False,
                 "error": str(e)
             }
 
@@ -451,7 +739,9 @@ User message:
                 max_tokens=350
             )
 
-            result = self.clean_json_response(result)
+            result = self.clean_json_response(
+                result
+            )
 
             parsed = json.loads(result)
 
@@ -794,6 +1084,7 @@ User message:
 
             memory_saved = False
             memory_updated = False
+            memory_semantic_duplicate = False
             memory_save_error = None
 
             if memory_analysis[
@@ -805,12 +1096,28 @@ User message:
                     memory_analysis["memory"],
                     memory_analysis["category"],
                     memory_analysis["importance"],
-                    memory_analysis["subject"]
+                    memory_analysis["subject"],
+                    api_key
                 )
 
-                memory_saved = save_result["saved"]
-                memory_updated = save_result["updated"]
-                memory_save_error = save_result["error"]
+                memory_saved = save_result[
+                    "saved"
+                ]
+
+                memory_updated = save_result[
+                    "updated"
+                ]
+
+                memory_semantic_duplicate = (
+                    save_result.get(
+                        "semantic_duplicate",
+                        False
+                    )
+                )
+
+                memory_save_error = (
+                    save_result["error"]
+                )
 
             self.send_json(
                 200,
@@ -819,6 +1126,9 @@ User message:
                     "response": text,
                     "memory_saved": memory_saved,
                     "memory_updated": memory_updated,
+                    "memory_semantic_duplicate": (
+                        memory_semantic_duplicate
+                    ),
                     "memory_subject": (
                         memory_analysis["subject"]
                     ),
@@ -831,7 +1141,9 @@ User message:
                     "memory_error": (
                         memory_analysis.get("error")
                     ),
-                    "memory_save_error": memory_save_error,
+                    "memory_save_error": (
+                        memory_save_error
+                    ),
                     "memories_used": len(memories)
                 }
             )
