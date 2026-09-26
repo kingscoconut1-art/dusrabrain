@@ -21,17 +21,28 @@ class handler(BaseHTTPRequestHandler):
             {
                 "name": "Dusra Brain",
                 "status": "online",
-                "message": "Your personal AI brain is ready."
+                "anthropic_key_detected": bool(
+                    os.environ.get("ANTHROPIC_API_KEY")
+                )
             }
         )
 
     def do_POST(self):
         try:
-            length = int(self.headers.get("Content-Length", 0))
+            length = int(
+                self.headers.get("Content-Length", 0)
+            )
+
             body = self.rfile.read(length)
 
-            data = json.loads(body or b"{}")
-            message = data.get("message", "").strip()
+            data = json.loads(
+                body or b"{}"
+            )
+
+            message = data.get(
+                "message",
+                ""
+            ).strip()
 
             if not message:
                 self.send_json(
@@ -42,7 +53,9 @@ class handler(BaseHTTPRequestHandler):
                 )
                 return
 
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
+            api_key = os.environ.get(
+                "ANTHROPIC_API_KEY"
+            )
 
             if not api_key:
                 self.send_json(
@@ -57,8 +70,9 @@ class handler(BaseHTTPRequestHandler):
                 "model": "claude-sonnet-4-6",
                 "max_tokens": 1000,
                 "system": (
-                    "You are Dusra Brain, a personal AI brain and "
-                    "memory assistant. Be helpful, concise and practical."
+                    "You are Dusra Brain, a personal AI brain "
+                    "and memory assistant. "
+                    "Be helpful, concise and practical."
                 ),
                 "messages": [
                     {
@@ -70,7 +84,9 @@ class handler(BaseHTTPRequestHandler):
 
             request = urllib.request.Request(
                 "https://api.anthropic.com/v1/messages",
-                data=json.dumps(payload).encode("utf-8"),
+                data=json.dumps(
+                    payload
+                ).encode("utf-8"),
                 headers={
                     "Content-Type": "application/json",
                     "x-api-key": api_key,
@@ -90,9 +106,15 @@ class handler(BaseHTTPRequestHandler):
 
             text = ""
 
-            for block in result.get("content", []):
+            for block in result.get(
+                "content",
+                []
+            ):
                 if block.get("type") == "text":
-                    text += block.get("text", "")
+                    text += block.get(
+                        "text",
+                        ""
+                    )
 
             self.send_json(
                 200,
@@ -103,6 +125,7 @@ class handler(BaseHTTPRequestHandler):
             )
 
         except Exception as e:
+
             self.send_json(
                 500,
                 {
