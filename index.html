@@ -36,7 +36,9 @@
 
         header {
             height: 64px;
+
             background: #ffffff;
+
             border-bottom: 1px solid #e5e5e5;
 
             display: flex;
@@ -47,7 +49,8 @@
 
             position: sticky;
             top: 0;
-            z-index: 10;
+
+            z-index: 20;
         }
 
         .logo {
@@ -58,14 +61,19 @@
 
         .memory-button {
             border: 1px solid #d1d5db;
+
             background: #ffffff;
+
             color: #111827;
 
             padding: 9px 14px;
+
             border-radius: 10px;
 
             cursor: pointer;
+
             font-size: 14px;
+
             font-weight: 600;
         }
 
@@ -73,27 +81,34 @@
             background: #f3f4f6;
         }
 
+
         /* =========================
-           MAIN CHAT
+           CHAT
         ========================= */
 
         .chat-container {
             max-width: 900px;
+
             margin: 0 auto;
 
-            min-height: calc(100vh - 64px);
+            min-height:
+                calc(100vh - 64px);
 
             display: flex;
+
             flex-direction: column;
         }
 
         .messages {
             flex: 1;
-            padding: 30px 20px 130px;
+
+            padding:
+                30px 20px 130px;
         }
 
         .message {
             margin-bottom: 22px;
+
             line-height: 1.6;
         }
 
@@ -111,42 +126,63 @@
             border-radius: 14px;
 
             white-space: pre-wrap;
+
             word-wrap: break-word;
         }
 
-        .message.user .message-bubble {
+        .message.user
+        .message-bubble {
             background: #111827;
+
             color: #ffffff;
         }
 
-        .message.assistant .message-bubble {
+        .message.assistant
+        .message-bubble {
             background: #ffffff;
+
             border: 1px solid #e5e7eb;
+
             color: #202123;
         }
 
+
         /* =========================
-           INPUT AREA
+           INPUT
         ========================= */
 
         .input-area {
             position: fixed;
+
             bottom: 0;
+
             left: 0;
+
             right: 0;
 
-            background: rgba(247, 247, 248, 0.96);
+            background:
+                rgba(
+                    247,
+                    247,
+                    248,
+                    0.96
+                );
 
-            border-top: 1px solid #e5e5e5;
+            border-top:
+                1px solid #e5e5e5;
 
             padding: 14px 20px;
+
+            z-index: 15;
         }
 
         .input-wrapper {
             max-width: 900px;
+
             margin: 0 auto;
 
             display: flex;
+
             gap: 10px;
         }
 
@@ -156,14 +192,18 @@
             resize: none;
 
             min-height: 50px;
+
             max-height: 160px;
 
-            border: 1px solid #d1d5db;
+            border:
+                1px solid #d1d5db;
+
             border-radius: 12px;
 
             padding: 14px;
 
             font-family: inherit;
+
             font-size: 15px;
 
             outline: none;
@@ -179,12 +219,15 @@
             width: 90px;
 
             border: none;
+
             border-radius: 12px;
 
             background: #111827;
+
             color: #ffffff;
 
             font-size: 14px;
+
             font-weight: 600;
 
             cursor: pointer;
@@ -196,11 +239,13 @@
 
         .send-button:disabled {
             opacity: 0.5;
+
             cursor: not-allowed;
         }
 
+
         /* =========================
-           MEMORY DASHBOARD
+           DASHBOARD
         ========================= */
 
         #memoryDashboard {
@@ -215,7 +260,9 @@
 
         .dashboard-header {
             display: flex;
+
             align-items: center;
+
             justify-content: space-between;
 
             margin-bottom: 25px;
@@ -225,11 +272,14 @@
             margin: 0;
 
             font-size: 28px;
+
             font-weight: 700;
         }
 
         .back-button {
-            border: 1px solid #d1d5db;
+            border:
+                1px solid #d1d5db;
+
             background: #ffffff;
 
             padding: 9px 14px;
@@ -239,6 +289,7 @@
             cursor: pointer;
 
             font-size: 14px;
+
             font-weight: 600;
         }
 
@@ -246,8 +297,9 @@
             background: #f3f4f6;
         }
 
+
         /* =========================
-           MEMORY STATS
+           STATS
         ========================= */
 
         .memory-stats {
@@ -264,7 +316,8 @@
         .stat-card {
             background: #ffffff;
 
-            border: 1px solid #e5e7eb;
+            border:
+                1px solid #e5e7eb;
 
             border-radius: 14px;
 
@@ -285,6 +338,7 @@
             font-weight: 700;
         }
 
+
         /* =========================
            MEMORY LIST
         ========================= */
@@ -301,13 +355,12 @@
         .memory-card {
             background: #ffffff;
 
-            border: 1px solid #e5e7eb;
+            border:
+                1px solid #e5e7eb;
 
             border-radius: 15px;
 
             padding: 20px;
-
-            position: relative;
         }
 
         .memory-card:hover {
@@ -356,25 +409,26 @@
 
         .importance {
             font-weight: 700;
+
             color: #111827;
         }
 
+
         /* =========================
-           DELETE BUTTON
+           MEMORY ACTIONS
         ========================= */
 
+        .memory-actions {
+            display: flex;
+
+            gap: 8px;
+
+            margin-top: 15px;
+        }
+
+        .edit-memory,
         .delete-memory {
-            width: auto;
-
-            margin-top: 14px;
-
             padding: 7px 12px;
-
-            background: #ffffff;
-
-            color: #b91c1c;
-
-            border: 1px solid #fecaca;
 
             border-radius: 9px;
 
@@ -385,12 +439,35 @@
             cursor: pointer;
         }
 
+        .edit-memory {
+            background: #ffffff;
+
+            color: #111827;
+
+            border:
+                1px solid #d1d5db;
+        }
+
+        .edit-memory:hover {
+            background: #f3f4f6;
+        }
+
+        .delete-memory {
+            background: #ffffff;
+
+            color: #b91c1c;
+
+            border:
+                1px solid #fecaca;
+        }
+
         .delete-memory:hover {
             background: #fef2f2;
         }
 
+
         /* =========================
-           EMPTY STATE
+           EMPTY
         ========================= */
 
         .empty-memory {
@@ -398,7 +475,8 @@
 
             background: #ffffff;
 
-            border: 1px solid #e5e7eb;
+            border:
+                1px solid #e5e7eb;
 
             border-radius: 15px;
 
@@ -409,10 +487,6 @@
             color: #6b7280;
         }
 
-        /* =========================
-           LOADING
-        ========================= */
-
         .loading {
             color: #6b7280;
 
@@ -420,6 +494,192 @@
 
             text-align: center;
         }
+
+
+        /* =========================
+           EDIT MODAL
+        ========================= */
+
+        #editModal {
+            display: none;
+
+            position: fixed;
+
+            inset: 0;
+
+            background:
+                rgba(
+                    0,
+                    0,
+                    0,
+                    0.45
+                );
+
+            z-index: 100;
+
+            align-items: center;
+
+            justify-content: center;
+
+            padding: 20px;
+        }
+
+        .edit-modal-box {
+            width: 100%;
+
+            max-width: 600px;
+
+            max-height: 90vh;
+
+            overflow-y: auto;
+
+            background: #ffffff;
+
+            border-radius: 18px;
+
+            padding: 25px;
+
+            box-shadow:
+                0 20px 60px
+                rgba(
+                    0,
+                    0,
+                    0,
+                    0.2
+                );
+        }
+
+        .edit-modal-title {
+            margin: 0 0 20px;
+
+            font-size: 22px;
+
+            font-weight: 700;
+        }
+
+        .form-group {
+            margin-bottom: 17px;
+        }
+
+        .form-group label {
+            display: block;
+
+            font-size: 13px;
+
+            font-weight: 600;
+
+            color: #374151;
+
+            margin-bottom: 7px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+
+            border:
+                1px solid #d1d5db;
+
+            border-radius: 10px;
+
+            padding: 11px 12px;
+
+            font-family: inherit;
+
+            font-size: 14px;
+
+            outline: none;
+
+            background: #ffffff;
+        }
+
+        .form-group textarea {
+            min-height: 110px;
+
+            resize: vertical;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            border-color: #6b7280;
+        }
+
+        .importance-row {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+        }
+
+        .importance-row input {
+            flex: 1;
+        }
+
+        #importanceValue {
+            width: 35px;
+
+            font-weight: 700;
+
+            text-align: center;
+        }
+
+        .modal-actions {
+            display: flex;
+
+            justify-content: flex-end;
+
+            gap: 10px;
+
+            margin-top: 25px;
+        }
+
+        .cancel-button,
+        .save-button {
+            padding: 10px 16px;
+
+            border-radius: 10px;
+
+            cursor: pointer;
+
+            font-size: 14px;
+
+            font-weight: 600;
+        }
+
+        .cancel-button {
+            background: #ffffff;
+
+            color: #374151;
+
+            border:
+                1px solid #d1d5db;
+        }
+
+        .cancel-button:hover {
+            background: #f3f4f6;
+        }
+
+        .save-button {
+            background: #111827;
+
+            color: #ffffff;
+
+            border: none;
+        }
+
+        .save-button:hover {
+            background: #000000;
+        }
+
+        .save-button:disabled {
+            opacity: 0.5;
+
+            cursor: not-allowed;
+        }
+
 
         /* =========================
            MOBILE
@@ -437,6 +697,7 @@
 
             .memory-button {
                 padding: 8px 10px;
+
                 font-size: 13px;
             }
 
@@ -464,16 +725,23 @@
             .send-button {
                 width: 70px;
             }
+
+            .edit-modal-box {
+                padding: 20px;
+            }
+
         }
 
     </style>
 </head>
 
+
 <body>
 
-    <!-- =========================
+
+    <!-- ======================================================
          HEADER
-    ========================= -->
+    ======================================================= -->
 
     <header>
 
@@ -491,9 +759,9 @@
     </header>
 
 
-    <!-- =========================
+    <!-- ======================================================
          CHAT
-    ========================= -->
+    ======================================================= -->
 
     <main
         id="chatContainer"
@@ -525,9 +793,9 @@
     </main>
 
 
-    <!-- =========================
+    <!-- ======================================================
          INPUT
-    ========================= -->
+    ======================================================= -->
 
     <div
         id="inputArea"
@@ -554,9 +822,9 @@
     </div>
 
 
-    <!-- =========================
+    <!-- ======================================================
          MEMORY DASHBOARD
-    ========================= -->
+    ======================================================= -->
 
     <section
         id="memoryDashboard"
@@ -578,7 +846,7 @@
         </div>
 
 
-        <!-- MEMORY STATS -->
+        <!-- STATS -->
 
         <div class="memory-stats">
 
@@ -664,11 +932,176 @@
     </section>
 
 
+    <!-- ======================================================
+         EDIT MEMORY MODAL
+    ======================================================= -->
+
+    <div
+        id="editModal"
+    >
+
+        <div
+            class="edit-modal-box"
+        >
+
+            <h2
+                class="edit-modal-title"
+            >
+                ✏️ Edit Memory
+            </h2>
+
+
+            <!-- MEMORY -->
+
+            <div class="form-group">
+
+                <label for="editMemory">
+                    Memory
+                </label>
+
+                <textarea
+                    id="editMemory"
+                    placeholder="Memory"
+                ></textarea>
+
+            </div>
+
+
+            <!-- SUBJECT -->
+
+            <div class="form-group">
+
+                <label for="editSubject">
+                    Subject
+                </label>
+
+                <input
+                    id="editSubject"
+                    type="text"
+                    placeholder="Subject"
+                >
+
+            </div>
+
+
+            <!-- CATEGORY -->
+
+            <div class="form-group">
+
+                <label for="editCategory">
+                    Category
+                </label>
+
+                <select
+                    id="editCategory"
+                >
+
+                    <option value="personal">
+                        Personal
+                    </option>
+
+                    <option value="preference">
+                        Preference
+                    </option>
+
+                    <option value="project">
+                        Project
+                    </option>
+
+                    <option value="business">
+                        Business
+                    </option>
+
+                    <option value="goal">
+                        Goal
+                    </option>
+
+                    <option value="relationship">
+                        Relationship
+                    </option>
+
+                    <option value="work">
+                        Work
+                    </option>
+
+                    <option value="decision">
+                        Decision
+                    </option>
+
+                    <option value="instruction">
+                        Instruction
+                    </option>
+
+                    <option value="general">
+                        General
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <!-- IMPORTANCE -->
+
+            <div class="form-group">
+
+                <label for="editImportance">
+                    Importance
+                </label>
+
+                <div
+                    class="importance-row"
+                >
+
+                    <input
+                        id="editImportance"
+                        type="range"
+                        min="1"
+                        max="10"
+                        value="5"
+                    >
+
+                    <span
+                        id="importanceValue"
+                    >
+                        5
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- ACTIONS -->
+
+            <div class="modal-actions">
+
+                <button
+                    id="cancelEditButton"
+                    class="cancel-button"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    id="saveEditButton"
+                    class="save-button"
+                >
+                    Save Changes
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
     <script>
 
-        /* =========================
+        /* ====================================================
            ELEMENTS
-        ========================= */
+        ==================================================== */
 
         const messages =
             document.getElementById(
@@ -715,10 +1148,53 @@
                 "memoryList"
             );
 
+        const editModal =
+            document.getElementById(
+                "editModal"
+            );
 
-        /* =========================
-           ADD MESSAGE
-        ========================= */
+        const editMemory =
+            document.getElementById(
+                "editMemory"
+            );
+
+        const editSubject =
+            document.getElementById(
+                "editSubject"
+            );
+
+        const editCategory =
+            document.getElementById(
+                "editCategory"
+            );
+
+        const editImportance =
+            document.getElementById(
+                "editImportance"
+            );
+
+        const importanceValue =
+            document.getElementById(
+                "importanceValue"
+            );
+
+        const cancelEditButton =
+            document.getElementById(
+                "cancelEditButton"
+            );
+
+        const saveEditButton =
+            document.getElementById(
+                "saveEditButton"
+            );
+
+
+        let editingMemoryId = null;
+
+
+        /* ====================================================
+           ADD CHAT MESSAGE
+        ==================================================== */
 
         function addMessage(
             text,
@@ -759,12 +1235,13 @@
                 0,
                 document.body.scrollHeight
             );
+
         }
 
 
-        /* =========================
+        /* ====================================================
            SEND MESSAGE
-        ========================= */
+        ==================================================== */
 
         async function sendMessage() {
 
@@ -852,9 +1329,7 @@
 
 
                 if (loadingElement) {
-
                     loadingElement.remove();
-
                 }
 
 
@@ -885,9 +1360,7 @@
 
 
                 if (loadingElement) {
-
                     loadingElement.remove();
-
                 }
 
 
@@ -903,15 +1376,14 @@
             sendButton.disabled =
                 false;
 
-
             messageInput.focus();
 
         }
 
 
-        /* =========================
+        /* ====================================================
            SEND BUTTON
-        ========================= */
+        ==================================================== */
 
         sendButton.addEventListener(
             "click",
@@ -919,9 +1391,9 @@
         );
 
 
-        /* =========================
+        /* ====================================================
            ENTER TO SEND
-        ========================= */
+        ==================================================== */
 
         messageInput.addEventListener(
             "keydown",
@@ -942,9 +1414,9 @@
         );
 
 
-        /* =========================
+        /* ====================================================
            ESCAPE HTML
-        ========================= */
+        ==================================================== */
 
         function escapeHtml(
             value
@@ -965,9 +1437,9 @@
         }
 
 
-        /* =========================
+        /* ====================================================
            LOAD MEMORIES
-        ========================= */
+        ==================================================== */
 
         async function loadMemories() {
 
@@ -1005,9 +1477,7 @@
                     data.memories || [];
 
 
-                /* =========================
-                   STATISTICS
-                ========================= */
+                /* STATS */
 
                 const total =
                     memories.length;
@@ -1069,15 +1539,15 @@
                     important;
 
 
-                /* =========================
-                   EMPTY STATE
-                ========================= */
+                /* EMPTY */
 
                 if (memories.length === 0) {
 
                     memoryList.innerHTML =
                         `
-                            <div class="empty-memory">
+                            <div
+                                class="empty-memory"
+                            >
 
                                 🧠
 
@@ -1100,9 +1570,7 @@
                 }
 
 
-                /* =========================
-                   MEMORY CARDS
-                ========================= */
+                /* MEMORY CARDS */
 
                 memoryList.innerHTML =
                     memories
@@ -1188,14 +1656,36 @@
                                         </div>
 
 
-                                        <button
-                                            class="delete-memory"
-                                            onclick="deleteMemory(${Number(
-                                                memory.id
-                                            )})"
+                                        <div
+                                            class="memory-actions"
                                         >
-                                            🗑️ Delete
-                                        </button>
+
+                                            <button
+                                                class="edit-memory"
+                                                onclick="openEditMemory(${Number(
+                                                    memory.id
+                                                )}, ${JSON.stringify(
+                                                    memory.memory || ""
+                                                )}, ${JSON.stringify(
+                                                    memory.subject || "general"
+                                                )}, ${JSON.stringify(
+                                                    memory.category || "general"
+                                                )}, ${importance})"
+                                            >
+                                                ✏️ Edit
+                                            </button>
+
+
+                                            <button
+                                                class="delete-memory"
+                                                onclick="deleteMemory(${Number(
+                                                    memory.id
+                                                )})"
+                                            >
+                                                🗑️ Delete
+                                            </button>
+
+                                        </div>
 
                                     </div>
 
@@ -1209,7 +1699,9 @@
 
                 memoryList.innerHTML =
                     `
-                        <div class="empty-memory">
+                        <div
+                            class="empty-memory"
+                        >
 
                             Unable to load memories.
 
@@ -1227,9 +1719,269 @@
         }
 
 
-        /* =========================
+        /* ====================================================
+           OPEN EDIT MEMORY
+        ==================================================== */
+
+        function openEditMemory(
+            memoryId,
+            memory,
+            subject,
+            category,
+            importance
+        ) {
+
+            editingMemoryId =
+                memoryId;
+
+
+            editMemory.value =
+                memory || "";
+
+
+            editSubject.value =
+                subject || "general";
+
+
+            editCategory.value =
+                category || "general";
+
+
+            editImportance.value =
+                importance || 5;
+
+
+            importanceValue.textContent =
+                importance || 5;
+
+
+            editModal.style.display =
+                "flex";
+
+
+            setTimeout(
+                function() {
+
+                    editMemory.focus();
+
+                },
+                100
+            );
+
+        }
+
+
+        /* ====================================================
+           IMPORTANCE SLIDER
+        ==================================================== */
+
+        editImportance.addEventListener(
+            "input",
+            function() {
+
+                importanceValue.textContent =
+                    editImportance.value;
+
+            }
+        );
+
+
+        /* ====================================================
+           CLOSE EDIT MODAL
+        ==================================================== */
+
+        function closeEditModal() {
+
+            editModal.style.display =
+                "none";
+
+            editingMemoryId =
+                null;
+
+        }
+
+
+        cancelEditButton.addEventListener(
+            "click",
+            closeEditModal
+        );
+
+
+        /* ====================================================
+           CLICK OUTSIDE MODAL
+        ==================================================== */
+
+        editModal.addEventListener(
+            "click",
+            function(event) {
+
+                if (
+                    event.target ===
+                    editModal
+                ) {
+
+                    closeEditModal();
+
+                }
+
+            }
+        );
+
+
+        /* ====================================================
+           ESCAPE CLOSES MODAL
+        ==================================================== */
+
+        document.addEventListener(
+            "keydown",
+            function(event) {
+
+                if (
+                    event.key === "Escape" &&
+                    editModal.style.display ===
+                        "flex"
+                ) {
+
+                    closeEditModal();
+
+                }
+
+            }
+        );
+
+
+        /* ====================================================
+           SAVE EDITED MEMORY
+        ==================================================== */
+
+        saveEditButton.addEventListener(
+            "click",
+            async function() {
+
+                if (!editingMemoryId) {
+
+                    return;
+
+                }
+
+
+                const memory =
+                    editMemory.value.trim();
+
+
+                const subject =
+                    editSubject.value.trim();
+
+
+                const category =
+                    editCategory.value;
+
+
+                const importance =
+                    Number(
+                        editImportance.value
+                    );
+
+
+                if (!memory) {
+
+                    alert(
+                        "Memory text cannot be empty."
+                    );
+
+                    return;
+
+                }
+
+
+                saveEditButton.disabled =
+                    true;
+
+                saveEditButton.textContent =
+                    "Saving...";
+
+
+                try {
+
+                    const response =
+                        await fetch(
+                            "/api",
+                            {
+                                method: "PUT",
+
+                                headers: {
+                                    "Content-Type":
+                                        "application/json"
+                                },
+
+                                body: JSON.stringify({
+                                    id:
+                                        editingMemoryId,
+
+                                    memory:
+                                        memory,
+
+                                    subject:
+                                        subject ||
+                                        "general",
+
+                                    category:
+                                        category ||
+                                        "general",
+
+                                    importance:
+                                        importance
+                                })
+                            }
+                        );
+
+
+                    const data =
+                        await response.json();
+
+
+                    if (
+                        !response.ok ||
+                        !data.updated
+                    ) {
+
+                        throw new Error(
+                            data.error ||
+                            "Unable to update memory."
+                        );
+
+                    }
+
+
+                    closeEditModal();
+
+
+                    await loadMemories();
+
+
+                } catch (error) {
+
+                    alert(
+                        "Could not update memory:\n\n" +
+                        error.message
+                    );
+
+                }
+
+
+                saveEditButton.disabled =
+                    false;
+
+                saveEditButton.textContent =
+                    "Save Changes";
+
+            }
+        );
+
+
+        /* ====================================================
            DELETE MEMORY
-        ========================= */
+        ==================================================== */
 
         async function deleteMemory(
             memoryId
@@ -1242,9 +1994,7 @@
 
 
             if (!confirmed) {
-
                 return;
-
             }
 
 
@@ -1294,9 +2044,9 @@
         }
 
 
-        /* =========================
+        /* ====================================================
            OPEN MEMORY DASHBOARD
-        ========================= */
+        ==================================================== */
 
         memoryButton.addEventListener(
             "click",
@@ -1318,9 +2068,9 @@
         );
 
 
-        /* =========================
+        /* ====================================================
            BACK TO CHAT
-        ========================= */
+        ==================================================== */
 
         backButton.addEventListener(
             "click",
@@ -1339,7 +2089,6 @@
 
             }
         );
-
 
     </script>
 
