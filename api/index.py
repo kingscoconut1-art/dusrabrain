@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
@@ -13,14 +14,17 @@ class handler(BaseHTTPRequestHandler):
         body = json.dumps(data).encode("utf-8")
 
         self.send_response(status)
+
         self.send_header(
             "Content-Type",
             "application/json; charset=utf-8"
         )
+
         self.send_header(
             "Content-Length",
             str(len(body))
         )
+
         self.end_headers()
 
         self.wfile.write(body)
@@ -31,6 +35,74 @@ class handler(BaseHTTPRequestHandler):
             or os.environ.get("DATABASE_URL")
         )
 
+    def groq_request(self, api_key, messages, max_tokens=1000):
+        url = (
+            "https://api.groq.com/openai/v1/"
+            "chat/completions"
+        )
+
+        payload = {
+            "model": "openai/gpt-oss-20b",
+            "messages": messages,
+            "max_tokens": max_tokens
+        }
+
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(
+                payload
+            ).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": (
+                    "Bearer " + api_key
+                ),
+                "User-Agent": (
+                    "Mozilla/5.0 "
+                    "(Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 "
+                    "Safari/537.36"
+                )
+            },
+            method="POST"
+        )
+
+        with urllib.request.urlopen(
+            request,
+            timeout=30
+        ) as response:
+
+            response_body = (
+                response.read()
+                .decode("utf-8")
+            )
+
+            result = json.loads(
+                response_body
+            )
+
+        choices = result.get(
+            "choices",
+            []
+        )
+
+        if not choices:
+            raise Exception(
+                "Groq returned no choices."
+            )
+
+        response_message = choices[0].get(
+            "message",
+            {}
+        )
+
+        return response_message.get(
+            "content",
+            ""
+        ).strip()
+
     def get_memories(self, user_id):
         database_url = self.get_database_url()
 
@@ -38,6 +110,7 @@ class handler(BaseHTTPRequestHandler):
             return []
 
         try:
+
             with psycopg.connect(
                 database_url,
                 connect_timeout=5
@@ -47,11 +120,11 @@ class handler(BaseHTTPRequestHandler):
 
                     cursor.execute(
                         """
-                        SELECT memory
+                        SELECT memory, category, importance
                         FROM memories
                         WHERE user_id = %s
-                        ORDER BY created_at DESC
-                        LIMIT 10
+                        ORDER BY importance DESC, created_at DESC
+                        LIMIT 20
                         """,
                         (user_id,)
                     )
@@ -59,20 +132,31 @@ class handler(BaseHTTPRequestHandler):
                     rows = cursor.fetchall()
 
                     return [
-                        row[0]
+                        {
+                            "memory": row[0],
+                            "category": row[1],
+                            "importance": row[2]
+                        }
                         for row in rows
                     ]
 
         except Exception:
             return []
 
-    def save_memory(self, user_id, memory):
+    def save_memory(
+        self,
+        user_id,
+        memory,
+        category,
+        importance
+    ):
         database_url = self.get_database_url()
 
         if not database_url:
             return False
 
         try:
+
             with psycopg.connect(
                 database_url,
                 connect_timeout=5
@@ -83,12 +167,19 @@ class handler(BaseHTTPRequestHandler):
                     cursor.execute(
                         """
                         INSERT INTO memories
-                        (user_id, memory)
-                        VALUES (%s, %s)
+                        (
+                            user_id,
+                            memory,
+                            category,
+                            importance
+                        )
+                        VALUES (%s, %s, %s, %s)
                         """,
                         (
                             user_id,
-                            memory
+                            memory,
+                            category,
+                            importance
                         )
                     )
 
@@ -99,6 +190,224 @@ class handler(BaseHTTPRequestHandler):
         except Exception:
             return False
 
+    def clean_json_response(self, text):
+        if not text:
+            return ""
+
+        text = text.strip()
+
+        text = re.sub(
+            r"^```json\s*",
+            "",
+            text,
+            flags=re.IGNORECASE
+        )
+
+        text = re.sub(
+            r"^```\s*",
+            "",
+            text
+        )
+
+        text = re.sub(
+            r"\s*```$",
+            "",
+            text
+        )
+
+        return text.strip()
+
+    def analyze_memory(
+        self,
+        api_key,
+        message
+    ):
+        analysis_prompt = """
+You are the memory extraction system for Dusra Brain.
+
+Your job is to decide whether the user's message contains
+LONG-TERM information that should be remembered.
+
+Remember information such as:
+
+- Personal preferences
+- Important personal facts
+- Projects
+- Businesses
+- Goals
+- Long-term plans
+- Important people and relationships
+- Work information
+- Decisions
+- User instructions
+- Important facts the user explicitly wants remembered
+
+Do NOT remember:
+
+- Normal questions
+- Greetings
+- Casual conversation
+- Temporary requests
+- One-time calculations
+- General knowledge questions
+- Questions about information that is not about the user
+- Assistant instructions that are not personal to the user
+
+Return ONLY valid JSON.
+
+If the message should be remembered:
+
+{
+  "should_remember": true,
+  "memory": "A clean factual statement describing what should be remembered.",
+  "category": "personal",
+  "importance": 8
+}
+
+If it should NOT be remembered:
+
+{
+  "should_remember": false,
+  "memory": "",
+  "category": "general",
+  "importance": 1
+}
+
+Allowed categories:
+
+personal
+preference
+project
+business
+goal
+relationship
+work
+decision
+instruction
+general
+
+Importance must be an integer from 1 to 10.
+
+User message:
+""" + message
+
+        try:
+
+            result = self.groq_request(
+                api_key,
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are the memory extraction "
+                            "engine for Dusra Brain. "
+                            "Return JSON only."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": analysis_prompt
+                    }
+                ],
+                max_tokens=300
+            )
+
+            result = self.clean_json_response(
+                result
+            )
+
+            parsed = json.loads(
+                result
+            )
+
+            should_remember = bool(
+                parsed.get(
+                    "should_remember",
+                    False
+                )
+            )
+
+            memory = str(
+                parsed.get(
+                    "memory",
+                    ""
+                )
+            ).strip()
+
+            category = str(
+                parsed.get(
+                    "category",
+                    "general"
+                )
+            ).strip().lower()
+
+            importance = parsed.get(
+                "importance",
+                5
+            )
+
+            try:
+                importance = int(
+                    importance
+                )
+            except Exception:
+                importance = 5
+
+            importance = max(
+                1,
+                min(
+                    10,
+                    importance
+                )
+            )
+
+            allowed_categories = {
+                "personal",
+                "preference",
+                "project",
+                "business",
+                "goal",
+                "relationship",
+                "work",
+                "decision",
+                "instruction",
+                "general"
+            }
+
+            if category not in allowed_categories:
+                category = "general"
+
+            if not should_remember:
+                return {
+                    "should_remember": False,
+                    "memory": "",
+                    "category": "general",
+                    "importance": 1
+                }
+
+            if not memory:
+                return {
+                    "should_remember": False,
+                    "memory": "",
+                    "category": "general",
+                    "importance": 1
+                }
+
+            return {
+                "should_remember": True,
+                "memory": memory,
+                "category": category,
+                "importance": importance
+            }
+
+        except Exception:
+            return {
+                "should_remember": False,
+                "memory": "",
+                "category": "general",
+                "importance": 1
+            }
+
     def do_GET(self):
 
         self.send_json(
@@ -107,7 +416,9 @@ class handler(BaseHTTPRequestHandler):
                 "name": "Dusra Brain",
                 "status": "online",
                 "groq_key_detected": bool(
-                    os.environ.get("GROQ_API_KEY")
+                    os.environ.get(
+                        "GROQ_API_KEY"
+                    )
                 ),
                 "database_detected": bool(
                     self.get_database_url()
@@ -126,7 +437,9 @@ class handler(BaseHTTPRequestHandler):
                 )
             )
 
-            body = self.rfile.read(length)
+            body = self.rfile.read(
+                length
+            )
 
             data = json.loads(
                 body or b"{}"
@@ -147,7 +460,9 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     400,
                     {
-                        "error": "Message is required."
+                        "error": (
+                            "Message is required."
+                        )
                     }
                 )
 
@@ -178,109 +493,83 @@ class handler(BaseHTTPRequestHandler):
 
             if memories:
 
-                memory_text = (
-                    "\n\nRelevant memories "
-                    "from previous conversations:\n"
-                    + "\n".join(
-                        "- " + memory
-                        for memory in reversed(memories)
-                    )
-                )
+                memory_lines = []
 
-            url = (
-                "https://api.groq.com/openai/v1/"
-                "chat/completions"
-            )
+                for item in reversed(
+                    memories
+                ):
+
+                    memory_lines.append(
+                        "- "
+                        + item["memory"]
+                        + " ["
+                        + item["category"]
+                        + ", importance "
+                        + str(
+                            item["importance"]
+                        )
+                        + "]"
+                    )
+
+                memory_text = (
+                    "\n\nUSER'S LONG-TERM "
+                    "MEMORIES:\n"
+                    + "\n".join(
+                        memory_lines
+                    )
+                    + "\n\nUse these memories "
+                    "when they are relevant. "
+                    "Do not mention the memory "
+                    "system unless the user asks."
+                )
 
             system_prompt = (
                 "You are Dusra Brain, "
                 "a personal AI brain and "
                 "memory assistant. "
+                "You help the user think, "
+                "remember, plan and execute. "
                 "Be helpful, practical, "
                 "clear and concise. "
-                "Use the user's previous "
-                "memories when relevant."
+                "Use the user's long-term "
+                "memories when relevant. "
+                "Never invent memories."
                 + memory_text
-            )
-
-            payload = {
-
-                "model": "openai/gpt-oss-20b",
-
-                "messages": [
-
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-
-                    {
-                        "role": "user",
-                        "content": message
-                    }
-
-                ],
-
-                "max_tokens": 1000
-            }
-
-            request = urllib.request.Request(
-
-                url,
-
-                data=json.dumps(
-                    payload
-                ).encode("utf-8"),
-
-                headers={
-
-                    "Content-Type":
-                        "application/json",
-
-                    "Authorization":
-                        "Bearer " + api_key,
-
-                    "User-Agent":
-                        (
-                            "Mozilla/5.0 "
-                            "(Windows NT 10.0; Win64; x64) "
-                            "AppleWebKit/537.36 "
-                            "(KHTML, like Gecko) "
-                            "Chrome/131.0.0.0 "
-                            "Safari/537.36"
-                        )
-                },
-
-                method="POST"
             )
 
             try:
 
-                with urllib.request.urlopen(
-                    request,
-                    timeout=30
-                ) as response:
-
-                    response_body = (
-                        response.read()
-                        .decode("utf-8")
-                    )
-
-                    result = json.loads(
-                        response_body
-                    )
+                text = self.groq_request(
+                    api_key,
+                    [
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": message
+                        }
+                    ],
+                    max_tokens=1000
+                )
 
             except urllib.error.HTTPError as e:
 
-                error_body = e.read().decode(
-                    "utf-8",
-                    errors="replace"
+                error_body = (
+                    e.read()
+                    .decode(
+                        "utf-8",
+                        errors="replace"
+                    )
                 )
 
                 self.send_json(
                     500,
                     {
-                        "error": "Groq request failed",
+                        "error": (
+                            "Groq request failed"
+                        ),
                         "status_code": e.code,
                         "details": error_body
                     }
@@ -293,41 +582,14 @@ class handler(BaseHTTPRequestHandler):
                 self.send_json(
                     500,
                     {
-                        "error": "Groq connection failed",
+                        "error": (
+                            "Groq connection failed"
+                        ),
                         "details": str(e)
                     }
                 )
 
                 return
-
-            choices = result.get(
-                "choices",
-                []
-            )
-
-            if not choices:
-
-                self.send_json(
-                    500,
-                    {
-                        "error": (
-                            "Groq returned no choices."
-                        ),
-                        "details": result
-                    }
-                )
-
-                return
-
-            response_message = choices[0].get(
-                "message",
-                {}
-            )
-
-            text = response_message.get(
-                "content",
-                ""
-            )
 
             if not text:
 
@@ -336,17 +598,35 @@ class handler(BaseHTTPRequestHandler):
                     {
                         "error": (
                             "Groq returned an empty response."
-                        ),
-                        "details": result
+                        )
                     }
                 )
 
                 return
 
-            memory_saved = self.save_memory(
-                user_id,
+            memory_analysis = self.analyze_memory(
+                api_key,
                 message
             )
+
+            memory_saved = False
+
+            if memory_analysis[
+                "should_remember"
+            ]:
+
+                memory_saved = self.save_memory(
+                    user_id,
+                    memory_analysis[
+                        "memory"
+                    ],
+                    memory_analysis[
+                        "category"
+                    ],
+                    memory_analysis[
+                        "importance"
+                    ]
+                )
 
             self.send_json(
                 200,
@@ -354,7 +634,19 @@ class handler(BaseHTTPRequestHandler):
                     "name": "Dusra Brain",
                     "response": text,
                     "memory_saved": memory_saved,
-                    "memories_used": len(memories)
+                    "memory_category": (
+                        memory_analysis[
+                            "category"
+                        ]
+                    ),
+                    "memory_importance": (
+                        memory_analysis[
+                            "importance"
+                        ]
+                    ),
+                    "memories_used": len(
+                        memories
+                    )
                 }
             )
 
