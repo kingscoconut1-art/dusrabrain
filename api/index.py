@@ -9,10 +9,6 @@ from http.server import BaseHTTPRequestHandler
 import psycopg
 
 
-# ============================================================
-# RESPONSE HELPERS
-# ============================================================
-
 def send_json(handler, data, status=200):
     body = json.dumps(data, ensure_ascii=False).encode("utf-8")
 
@@ -23,13 +19,8 @@ def send_json(handler, data, status=200):
     handler.send_header("Access-Control-Allow-Headers", "Content-Type")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
-
     handler.wfile.write(body)
 
-
-# ============================================================
-# DATABASE
-# ============================================================
 
 def get_database_url():
     names = [
@@ -43,7 +34,6 @@ def get_database_url():
 
     for name in names:
         value = os.environ.get(name)
-
         if value:
             return value
 
@@ -59,10 +49,6 @@ def get_connection():
     return psycopg.connect(database_url)
 
 
-# ============================================================
-# GROQ
-# ============================================================
-
 def groq_request(messages, temperature=0.2, max_tokens=1200):
     api_key = os.environ.get("GROQ_API_KEY")
 
@@ -75,7 +61,7 @@ def groq_request(messages, temperature=0.2, max_tokens=1200):
         "model": "openai/gpt-oss-120b",
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens
+        "max_tokens": max_tokens,
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -83,38 +69,19 @@ def groq_request(messages, temperature=0.2, max_tokens=1200):
     request = urllib.request.Request(
         url,
         data=data,
-        method="POST"
+        method="POST",
     )
 
-    request.add_header(
-        "Content-Type",
-        "application/json"
-    )
-
-    request.add_header(
-        "Authorization",
-        "Bearer " + api_key
-    )
-
-    request.add_header(
-        "User-Agent",
-        "Mozilla/5.0"
-    )
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Authorization", "Bearer " + api_key)
+    request.add_header("User-Agent", "Mozilla/5.0")
 
     try:
-
-        with urllib.request.urlopen(
-            request,
-            timeout=60
-        ) as response:
-
-            response_data =
-                response.read().decode("utf-8")
-
+        with urllib.request.urlopen(request, timeout=60) as response:
+            response_data = response.read().decode("utf-8")
             return json.loads(response_data)
 
     except urllib.error.HTTPError as error:
-
         error_body = ""
 
         try:
@@ -130,58 +97,38 @@ def groq_request(messages, temperature=0.2, max_tokens=1200):
         )
 
     except Exception as error:
-
-        raise Exception(
-            "Groq request failed: "
-            + str(error)
-        )
+        raise Exception("Groq request failed: " + str(error))
 
 
 # ============================================================
-# CONVERSATION MEMORY
+# CONVERSATIONS
 # ============================================================
 
-def save_conversation(
-    user_id,
-    role,
-    message
-):
+def save_conversation(user_id, role, message):
     connection = get_connection()
 
     try:
-
         with connection.cursor() as cursor:
-
             cursor.execute(
                 """
                 INSERT INTO conversations
                 (user_id, role, message)
                 VALUES (%s, %s, %s)
                 """,
-                (
-                    user_id,
-                    role,
-                    message
-                )
+                (user_id, role, message),
             )
 
         connection.commit()
 
     finally:
-
         connection.close()
 
 
-def get_conversation_history(
-    user_id,
-    limit=20
-):
+def get_conversation_history(user_id, limit=20):
     connection = get_connection()
 
     try:
-
         with connection.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT role, message, created_at
@@ -190,42 +137,30 @@ def get_conversation_history(
                 ORDER BY created_at DESC, id DESC
                 LIMIT %s
                 """,
-                (
-                    user_id,
-                    limit
-                )
+                (user_id, limit),
             )
 
             rows = cursor.fetchall()
-
             rows.reverse()
 
             return [
                 {
                     "role": row[0],
                     "message": row[1],
-                    "created_at": row[2].isoformat()
-                    if row[2]
-                    else None
+                    "created_at": row[2].isoformat() if row[2] else None,
                 }
                 for row in rows
             ]
 
     finally:
-
         connection.close()
 
 
-def get_all_conversations(
-    user_id,
-    limit=200
-):
+def get_all_conversations(user_id, limit=500):
     connection = get_connection()
 
     try:
-
         with connection.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT id, role, message, created_at
@@ -234,10 +169,7 @@ def get_all_conversations(
                 ORDER BY created_at ASC, id ASC
                 LIMIT %s
                 """,
-                (
-                    user_id,
-                    limit
-                )
+                (user_id, limit),
             )
 
             rows = cursor.fetchall()
@@ -247,33 +179,24 @@ def get_all_conversations(
                     "id": row[0],
                     "role": row[1],
                     "message": row[2],
-                    "created_at": row[3].isoformat()
-                    if row[3]
-                    else None
+                    "created_at": row[3].isoformat() if row[3] else None,
                 }
                 for row in rows
             ]
 
     finally:
-
         connection.close()
 
 
 # ============================================================
-# MEMORY RETRIEVAL
+# MEMORIES
 # ============================================================
 
-def get_memories(
-    user_id,
-    message="",
-    limit=50
-):
+def get_memories(user_id, message="", limit=50):
     connection = get_connection()
 
     try:
-
         with connection.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT
@@ -289,50 +212,33 @@ def get_memories(
                 ORDER BY importance DESC, created_at DESC
                 LIMIT %s
                 """,
-                (
-                    user_id,
-                    limit
-                )
+                (user_id, limit),
             )
 
             rows = cursor.fetchall()
 
-            memories = []
-
-            for row in rows:
-
-                memories.append(
-                    {
-                        "id": row[0],
-                        "memory": row[1],
-                        "category": row[2],
-                        "importance": row[3],
-                        "subject": row[4],
-                        "memory_key": row[5],
-                        "created_at":
-                            row[6].isoformat()
-                            if row[6]
-                            else None
-                    }
-                )
-
-            return memories
+            return [
+                {
+                    "id": row[0],
+                    "memory": row[1],
+                    "category": row[2],
+                    "importance": row[3],
+                    "subject": row[4],
+                    "memory_key": row[5],
+                    "created_at": row[6].isoformat() if row[6] else None,
+                }
+                for row in rows
+            ]
 
     finally:
-
         connection.close()
 
 
-def get_subject_memories(
-    user_id,
-    subject
-):
+def get_subject_memories(user_id, subject):
     connection = get_connection()
 
     try:
-
         with connection.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT
@@ -349,10 +255,7 @@ def get_subject_memories(
                 ORDER BY importance DESC, created_at DESC
                 LIMIT 50
                 """,
-                (
-                    user_id,
-                    subject
-                )
+                (user_id, subject),
             )
 
             rows = cursor.fetchall()
@@ -365,28 +268,16 @@ def get_subject_memories(
                     "importance": row[3],
                     "subject": row[4],
                     "memory_key": row[5],
-                    "created_at":
-                        row[6].isoformat()
-                        if row[6]
-                        else None
+                    "created_at": row[6].isoformat() if row[6] else None,
                 }
                 for row in rows
             ]
 
     finally:
-
         connection.close()
 
 
-# ============================================================
-# MEMORY KEY
-# ============================================================
-
-def make_memory_key(
-    subject,
-    category,
-    memory
-):
+def make_memory_key(subject, category, memory):
     value = (
         str(subject or "general")
         + "|"
@@ -396,38 +287,23 @@ def make_memory_key(
     )
 
     value = value.lower().strip()
-
-    value = re.sub(
-        r"\s+",
-        " ",
-        value
-    )
+    value = re.sub(r"\s+", " ", value)
 
     return value
 
 
-# ============================================================
-# JSON CLEANING
-# ============================================================
-
 def clean_json_response(text):
-
     text = text.strip()
 
     if text.startswith("```"):
-
         text = re.sub(
             r"^```(?:json)?",
             "",
             text,
-            flags=re.IGNORECASE
+            flags=re.IGNORECASE,
         )
 
-        text = re.sub(
-            r"```$",
-            "",
-            text
-        )
+        text = re.sub(r"```$", "", text)
 
     text = text.strip()
 
@@ -435,34 +311,20 @@ def clean_json_response(text):
     end = text.rfind("}")
 
     if start >= 0 and end >= 0:
-
         text = text[start:end + 1]
 
     return text
 
 
-# ============================================================
-# SEMANTIC DUPLICATE CHECK
-# ============================================================
-
-def find_semantic_duplicate(
-    user_id,
-    subject,
-    new_memory
-):
-    existing = get_subject_memories(
-        user_id,
-        subject
-    )
+def find_semantic_duplicate(user_id, subject, new_memory):
+    existing = get_subject_memories(user_id, subject)
 
     if not existing:
         return None
 
     existing_text = "\n".join(
         [
-            str(item["id"])
-            + ": "
-            + str(item["memory"])
+            str(item["id"]) + ": " + str(item["memory"])
             for item in existing
         ]
     )
@@ -493,34 +355,28 @@ Do not explain.
 """
 
     try:
-
         result = groq_request(
             [
                 {
                     "role": "system",
-                    "content":
-                        "You detect semantic duplicate memories."
+                    "content": "You detect semantic duplicate memories.",
                 },
                 {
                     "role": "user",
-                    "content": prompt
-                }
+                    "content": prompt,
+                },
             ],
             temperature=0,
-            max_tokens=200
+            max_tokens=200,
         )
 
         text = result["choices"][0]["message"]["content"]
 
-        parsed = json.loads(
-            clean_json_response(text)
-        )
+        parsed = json.loads(clean_json_response(text))
 
-        duplicate_id =
-            parsed.get("duplicate_id")
+        duplicate_id = parsed.get("duplicate_id")
 
         if duplicate_id:
-
             try:
                 return int(duplicate_id)
             except Exception:
@@ -529,34 +385,27 @@ Do not explain.
         return None
 
     except Exception:
-
         return None
 
-
-# ============================================================
-# SAVE MEMORY
-# ============================================================
 
 def save_memory(
     user_id,
     memory,
     category,
     importance,
-    subject
+    subject,
 ):
     memory_key = make_memory_key(
         subject,
         category,
-        memory
+        memory,
     )
 
     connection = get_connection()
 
     try:
-
         with connection.cursor() as cursor:
 
-            # Exact duplicate
             cursor.execute(
                 """
                 SELECT id
@@ -565,20 +414,13 @@ def save_memory(
                 AND memory_key = %s
                 LIMIT 1
                 """,
-                (
-                    user_id,
-                    memory_key
-                )
+                (user_id, memory_key),
             )
 
-            existing =
-                cursor.fetchone()
-
+            existing = cursor.fetchone()
 
             if existing:
-
-                memory_id =
-                    existing[0]
+                memory_id = existing[0]
 
                 cursor.execute(
                     """
@@ -596,28 +438,22 @@ def save_memory(
                         importance,
                         subject,
                         memory_key,
-                        memory_id
-                    )
+                        memory_id,
+                    ),
                 )
 
                 connection.commit()
-
                 return memory_id
 
-
-        # Semantic duplicate
-        duplicate_id =
-            find_semantic_duplicate(
-                user_id,
-                subject,
-                memory
-            )
-
+        duplicate_id = find_semantic_duplicate(
+            user_id,
+            subject,
+            memory,
+        )
 
         if duplicate_id:
 
             with connection.cursor() as cursor:
-
                 cursor.execute(
                     """
                     UPDATE memories
@@ -634,17 +470,14 @@ def save_memory(
                         importance,
                         subject,
                         memory_key,
-                        duplicate_id
-                    )
+                        duplicate_id,
+                    ),
                 )
 
             connection.commit()
-
             return duplicate_id
 
-
         with connection.cursor() as cursor:
-
             cursor.execute(
                 """
                 INSERT INTO memories
@@ -656,8 +489,7 @@ def save_memory(
                     subject,
                     memory_key
                 )
-                VALUES
-                (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -666,29 +498,21 @@ def save_memory(
                     category,
                     importance,
                     subject,
-                    memory_key
-                )
+                    memory_key,
+                ),
             )
 
-            memory_id =
-                cursor.fetchone()[0]
+            memory_id = cursor.fetchone()[0]
 
         connection.commit()
 
         return memory_id
 
     finally:
-
         connection.close()
 
 
-# ============================================================
-# MEMORY ANALYSIS
-# ============================================================
-
-def analyze_memory(
-    user_message
-):
+def analyze_memory(user_message):
     prompt = f"""
 Analyze the following user message.
 
@@ -726,37 +550,27 @@ If it should NOT be remembered:
         [
             {
                 "role": "system",
-                "content":
-                    "You are a personal memory extraction engine."
+                "content": "You are a personal memory extraction engine.",
             },
             {
                 "role": "user",
-                "content": prompt
-            }
+                "content": prompt,
+            },
         ],
         temperature=0,
-        max_tokens=500
+        max_tokens=500,
     )
 
-    text =
-        result["choices"][0]["message"]["content"]
+    text = result["choices"][0]["message"]["content"]
 
-    return json.loads(
-        clean_json_response(text)
-    )
+    return json.loads(clean_json_response(text))
 
-
-# ============================================================
-# SUBJECT NORMALIZATION
-# ============================================================
 
 def normalize_subject(subject):
-
     if not subject:
         return "general"
 
-    subject =
-        str(subject).strip()
+    subject = str(subject).strip()
 
     if not subject:
         return "general"
@@ -765,322 +579,188 @@ def normalize_subject(subject):
 
 
 # ============================================================
-# MAIN HANDLER
+# HTTP HANDLER
 # ============================================================
 
 class handler(BaseHTTPRequestHandler):
 
-
-    # --------------------------------------------------------
-    # OPTIONS
-    # --------------------------------------------------------
-
     def do_OPTIONS(self):
-
         self.send_response(204)
-
-        self.send_header(
-            "Access-Control-Allow-Origin",
-            "*"
-        )
-
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header(
             "Access-Control-Allow-Methods",
-            "GET, POST, PUT, DELETE, OPTIONS"
+            "GET, POST, PUT, DELETE, OPTIONS",
         )
-
         self.send_header(
             "Access-Control-Allow-Headers",
-            "Content-Type"
+            "Content-Type",
         )
-
         self.end_headers()
 
 
-    # --------------------------------------------------------
-    # GET
-    # --------------------------------------------------------
-
     def do_GET(self):
-
         try:
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query)
 
-            parsed =
-                urlparse(self.path)
-
-            query =
-                parse_qs(parsed.query)
-
-
-            # ----------------------------------------------
             # MEMORY DASHBOARD
-            # ----------------------------------------------
-
             if query.get("memories") == ["true"]:
 
-                user_id =
-                    query.get(
-                        "user_id",
-                        ["default_user"]
-                    )[0]
+                user_id = query.get(
+                    "user_id",
+                    ["default_user"],
+                )[0]
 
-
-                memories =
-                    get_memories(
-                        user_id,
-                        limit=200
-                    )
-
+                memories = get_memories(
+                    user_id,
+                    limit=200,
+                )
 
                 send_json(
                     self,
                     {
                         "memories": memories,
-                        "count": len(memories)
-                    }
+                        "count": len(memories),
+                    },
                 )
 
                 return
 
 
-            # ----------------------------------------------
             # CONVERSATION HISTORY
-            # ----------------------------------------------
-
             if query.get("conversations") == ["true"]:
 
-                user_id =
-                    query.get(
-                        "user_id",
-                        ["default_user"]
-                    )[0]
+                user_id = query.get(
+                    "user_id",
+                    ["default_user"],
+                )[0]
 
-
-                conversations =
-                    get_all_conversations(
-                        user_id,
-                        limit=500
-                    )
-
+                conversations = get_all_conversations(
+                    user_id,
+                    limit=500,
+                )
 
                 send_json(
                     self,
                     {
-                        "conversations":
-                            conversations,
-
-                        "count":
-                            len(conversations)
-                    }
+                        "conversations": conversations,
+                        "count": len(conversations),
+                    },
                 )
 
                 return
 
 
-            # ----------------------------------------------
             # HEALTH CHECK
-            # ----------------------------------------------
-
-            database_detected =
-                bool(get_database_url())
-
-            groq_detected =
-                bool(
-                    os.environ.get(
-                        "GROQ_API_KEY"
-                    )
-                )
-
-
             send_json(
                 self,
                 {
-                    "name":
-                        "Dusra Brain",
-
-                    "status":
-                        "online",
-
-                    "groq_key_detected":
-                        groq_detected,
-
-                    "database_detected":
-                        database_detected
-                }
+                    "name": "Dusra Brain",
+                    "status": "online",
+                    "groq_key_detected": bool(
+                        os.environ.get("GROQ_API_KEY")
+                    ),
+                    "database_detected": bool(
+                        get_database_url()
+                    ),
+                },
             )
-
 
         except Exception as error:
 
             send_json(
                 self,
                 {
-                    "error":
-                        str(error)
+                    "error": str(error),
                 },
-                500
+                500,
             )
 
 
-    # --------------------------------------------------------
-    # POST
-    # --------------------------------------------------------
-
     def do_POST(self):
-
         try:
 
-            content_length =
-                int(
-                    self.headers.get(
-                        "Content-Length",
-                        0
-                    )
+            content_length = int(
+                self.headers.get(
+                    "Content-Length",
+                    0,
                 )
+            )
 
+            raw_body = self.rfile.read(
+                content_length
+            )
 
-            raw_body =
-                self.rfile.read(
-                    content_length
+            body = json.loads(
+                raw_body.decode("utf-8")
+            )
+
+            message = str(
+                body.get("message", "")
+            ).strip()
+
+            user_id = str(
+                body.get(
+                    "user_id",
+                    "default_user",
                 )
-
-
-            body =
-                json.loads(
-                    raw_body.decode(
-                        "utf-8"
-                    )
-                )
-
-
-            message =
-                str(
-                    body.get(
-                        "message",
-                        ""
-                    )
-                ).strip()
-
-
-            user_id =
-                str(
-                    body.get(
-                        "user_id",
-                        "default_user"
-                    )
-                )
-
+            )
 
             if not message:
 
                 send_json(
                     self,
                     {
-                        "error":
-                            "Message is required"
+                        "error": "Message is required",
                     },
-                    400
+                    400,
                 )
 
                 return
 
 
-            # ----------------------------------------------
             # SAVE USER MESSAGE
-            # ----------------------------------------------
-
             save_conversation(
                 user_id,
                 "user",
-                message
+                message,
             )
 
 
-            # ----------------------------------------------
-            # RETRIEVE MEMORY
-            # ----------------------------------------------
-
-            memories =
-                get_memories(
-                    user_id,
-                    message,
-                    limit=50
-                )
+            # GET MEMORIES
+            memories = get_memories(
+                user_id,
+                message,
+                limit=50,
+            )
 
 
-            # ----------------------------------------------
-            # RETRIEVE CONVERSATION HISTORY
-            # ----------------------------------------------
+            # GET RECENT CONVERSATION
+            conversation_history = get_conversation_history(
+                user_id,
+                limit=20,
+            )
 
-            conversation_history =
-                get_conversation_history(
-                    user_id,
-                    limit=20
-                )
-
-
-            # ----------------------------------------------
-            # MEMORY TEXT
-            # ----------------------------------------------
 
             if memories:
 
-                memory_text =
-                    "\n".join(
-                        [
-                            "- "
-                            + str(item["memory"])
-                            + " ["
-                            + str(item["subject"])
-                            + "]"
-                            for item in memories
-                        ]
-                    )
+                memory_text = "\n".join(
+                    [
+                        "- "
+                        + str(item["memory"])
+                        + " ["
+                        + str(item["subject"])
+                        + "]"
+                        for item in memories
+                    ]
+                )
 
             else:
 
-                memory_text =
+                memory_text = (
                     "No stored memories are available."
-
-
-            # ----------------------------------------------
-            # CONVERSATION TEXT
-            # ----------------------------------------------
-
-            history_messages = []
-
-
-            for item in conversation_history:
-
-                role =
-                    item["role"]
-
-                content =
-                    item["message"]
-
-
-                if role not in [
-                    "user",
-                    "assistant"
-                ]:
-
-                    continue
-
-
-                history_messages.append(
-                    {
-                        "role":
-                            role,
-
-                        "content":
-                            content
-                    }
                 )
 
-
-            # ----------------------------------------------
-            # SYSTEM PROMPT
-            # ----------------------------------------------
 
             system_prompt = f"""
 You are Dusra Brain, a personal AI brain
@@ -1100,177 +780,125 @@ IMPORTANT MEMORY RULES:
    stored memories and the current conversation.
 5. If the available information is insufficient,
    say that you don't have enough information.
-6. Do not claim that something is remembered
-   unless it is actually present in the provided
-   memory or conversation context.
+6. Do not claim something is remembered unless
+   it is actually present in the provided context.
 7. Answer naturally and directly.
 
 STORED USER MEMORIES:
 
 {memory_text}
-
-RECENT CONVERSATION:
-
-Use the conversation history supplied in the
-conversation messages below to maintain context.
 """
 
 
-            # ----------------------------------------------
-            # BUILD GROQ MESSAGES
-            # ----------------------------------------------
-
             groq_messages = [
                 {
-                    "role":
-                        "system",
-
-                    "content":
-                        system_prompt
+                    "role": "system",
+                    "content": system_prompt,
                 }
             ]
 
 
-            # Add recent conversation
-            for item in history_messages:
+            for item in conversation_history:
 
-                groq_messages.append(
-                    {
-                        "role":
-                            item["role"],
+                role = item["role"]
 
-                        "content":
-                            item["content"]
-                    }
-                )
+                content = item["message"]
+
+                if role in ["user", "assistant"]:
+
+                    groq_messages.append(
+                        {
+                            "role": role,
+                            "content": content,
+                        }
+                    )
 
 
-            # Current message
             groq_messages.append(
                 {
-                    "role":
-                        "user",
-
-                    "content":
-                        message
+                    "role": "user",
+                    "content": message,
                 }
             )
 
 
-            # ----------------------------------------------
             # AI RESPONSE
-            # ----------------------------------------------
+            result = groq_request(
+                groq_messages,
+                temperature=0.3,
+                max_tokens=1200,
+            )
 
-            result =
-                groq_request(
-                    groq_messages,
-                    temperature=0.3,
-                    max_tokens=1200
-                )
-
-
-            assistant_message =
-                result[
-                    "choices"
-                ][
-                    0
-                ][
-                    "message"
-                ][
-                    "content"
-                ].strip()
-
-
-            # ----------------------------------------------
-            # SAVE ASSISTANT MESSAGE
-            # ----------------------------------------------
-
-            save_conversation(
-                user_id,
-                "assistant",
-                assistant_message
+            assistant_message = (
+                result["choices"][0]["message"]["content"]
+                .strip()
             )
 
 
-            # ----------------------------------------------
+            # SAVE ASSISTANT MESSAGE
+            save_conversation(
+                user_id,
+                "assistant",
+                assistant_message,
+            )
+
+
             # MEMORY EXTRACTION
-            # ----------------------------------------------
-
-            memory_saved =
-                False
-
-            memory_error =
-                None
-
-            extracted_memory =
-                None
-
+            memory_saved = False
+            memory_error = None
+            extracted_memory = None
 
             try:
 
-                analysis =
-                    analyze_memory(
-                        message
-                    )
-
+                analysis = analyze_memory(
+                    message
+                )
 
                 if analysis.get(
                     "should_remember",
-                    False
+                    False,
                 ):
 
-                    extracted_memory =
-                        str(
-                            analysis.get(
-                                "memory",
-                                ""
-                            )
-                        ).strip()
-
-
-                    category =
-                        str(
-                            analysis.get(
-                                "category",
-                                "general"
-                            )
-                        ).strip().lower()
-
-
-                    importance =
-                        int(
-                            analysis.get(
-                                "importance",
-                                5
-                            )
+                    extracted_memory = str(
+                        analysis.get(
+                            "memory",
+                            "",
                         )
+                    ).strip()
 
-
-                    subject =
-                        normalize_subject(
-                            analysis.get(
-                                "subject",
-                                "general"
-                            )
+                    category = str(
+                        analysis.get(
+                            "category",
+                            "general",
                         )
+                    ).strip().lower()
 
+                    importance = int(
+                        analysis.get(
+                            "importance",
+                            5,
+                        )
+                    )
+
+                    subject = normalize_subject(
+                        analysis.get(
+                            "subject",
+                            "general",
+                        )
+                    )
 
                     if not extracted_memory:
-
                         raise Exception(
                             "Memory extraction returned empty memory"
                         )
 
-
-                    if importance < 1:
-
-                        importance = 1
-
-
-                    if importance > 10:
-
-                        importance = 10
-
+                    importance = max(
+                        1,
+                        min(
+                            10,
+                            importance,
+                        ),
+                    )
 
                     valid_categories = [
                         "personal",
@@ -1282,54 +910,35 @@ conversation messages below to maintain context.
                         "work",
                         "decision",
                         "instruction",
-                        "general"
+                        "general",
                     ]
 
-
                     if category not in valid_categories:
-
-                        category =
-                            "general"
-
+                        category = "general"
 
                     save_memory(
                         user_id,
                         extracted_memory,
                         category,
                         importance,
-                        subject
+                        subject,
                     )
 
-
-                    memory_saved =
-                        True
-
+                    memory_saved = True
 
             except Exception as error:
 
-                memory_error =
-                    str(error)
+                memory_error = str(error)
 
-
-            # ----------------------------------------------
-            # RESPONSE
-            # ----------------------------------------------
 
             send_json(
                 self,
                 {
-                    "response":
-                        assistant_message,
-
-                    "memory_saved":
-                        memory_saved,
-
-                    "memory_error":
-                        memory_error,
-
-                    "memory":
-                        extracted_memory
-                }
+                    "response": assistant_message,
+                    "memory_saved": memory_saved,
+                    "memory_error": memory_error,
+                    "memory": extracted_memory,
+                },
             )
 
 
@@ -1338,123 +947,89 @@ conversation messages below to maintain context.
             send_json(
                 self,
                 {
-                    "error":
-                        str(error)
+                    "error": str(error),
                 },
-                500
+                500,
             )
 
 
-    # --------------------------------------------------------
-    # PUT
-    # --------------------------------------------------------
-
     def do_PUT(self):
-
         try:
 
-            content_length =
-                int(
-                    self.headers.get(
-                        "Content-Length",
-                        0
-                    )
+            content_length = int(
+                self.headers.get(
+                    "Content-Length",
+                    0,
                 )
+            )
 
+            raw_body = self.rfile.read(
+                content_length
+            )
 
-            raw_body =
-                self.rfile.read(
-                    content_length
+            body = json.loads(
+                raw_body.decode("utf-8")
+            )
+
+            memory_id = int(
+                body.get("id")
+            )
+
+            memory = str(
+                body.get(
+                    "memory",
+                    "",
                 )
+            ).strip()
 
-
-            body =
-                json.loads(
-                    raw_body.decode(
-                        "utf-8"
-                    )
+            category = str(
+                body.get(
+                    "category",
+                    "general",
                 )
+            ).strip()
 
-
-            memory_id =
-                int(
-                    body.get(
-                        "id"
-                    )
+            subject = normalize_subject(
+                body.get(
+                    "subject",
+                    "general",
                 )
+            )
 
-
-            memory =
-                str(
-                    body.get(
-                        "memory",
-                        ""
-                    )
-                ).strip()
-
-
-            category =
-                str(
-                    body.get(
-                        "category",
-                        "general"
-                    )
-                ).strip()
-
-
-            subject =
-                normalize_subject(
-                    body.get(
-                        "subject",
-                        "general"
-                    )
+            importance = int(
+                body.get(
+                    "importance",
+                    5,
                 )
-
-
-            importance =
-                int(
-                    body.get(
-                        "importance",
-                        5
-                    )
-                )
-
+            )
 
             if not memory:
 
                 send_json(
                     self,
                     {
-                        "error":
-                            "Memory cannot be empty"
+                        "error": "Memory cannot be empty",
                     },
-                    400
+                    400,
                 )
 
                 return
 
+            importance = max(
+                1,
+                min(
+                    10,
+                    importance,
+                ),
+            )
 
-            if importance < 1:
+            memory_key = make_memory_key(
+                subject,
+                category,
+                memory,
+            )
 
-                importance = 1
-
-
-            if importance > 10:
-
-                importance = 10
-
-
-            memory_key =
-                make_memory_key(
-                    subject,
-                    category,
-                    memory
-                )
-
-
-            connection =
-                get_connection()
-
+            connection = get_connection()
 
             try:
 
@@ -1484,17 +1059,13 @@ conversation messages below to maintain context.
                             importance,
                             subject,
                             memory_key,
-                            memory_id
-                        )
+                            memory_id,
+                        ),
                     )
 
-
-                    row =
-                        cursor.fetchone()
-
+                    row = cursor.fetchone()
 
                 connection.commit()
-
 
             finally:
 
@@ -1506,50 +1077,35 @@ conversation messages below to maintain context.
                 send_json(
                     self,
                     {
-                        "error":
-                            "Memory not found"
+                        "error": "Memory not found",
                     },
-                    404
+                    404,
                 )
 
                 return
 
 
             updated_memory = {
-                "id":
-                    row[0],
-
-                "memory":
-                    row[1],
-
-                "category":
-                    row[2],
-
-                "importance":
-                    row[3],
-
-                "subject":
-                    row[4],
-
-                "memory_key":
-                    row[5],
-
-                "created_at":
+                "id": row[0],
+                "memory": row[1],
+                "category": row[2],
+                "importance": row[3],
+                "subject": row[4],
+                "memory_key": row[5],
+                "created_at": (
                     row[6].isoformat()
                     if row[6]
                     else None
+                ),
             }
 
 
             send_json(
                 self,
                 {
-                    "success":
-                        True,
-
-                    "memory":
-                        updated_memory
-                }
+                    "success": True,
+                    "memory": updated_memory,
+                },
             )
 
 
@@ -1558,36 +1114,26 @@ conversation messages below to maintain context.
             send_json(
                 self,
                 {
-                    "error":
-                        str(error)
+                    "error": str(error),
                 },
-                500
+                500,
             )
 
-
-    # --------------------------------------------------------
-    # DELETE
-    # --------------------------------------------------------
 
     def do_DELETE(self):
 
         try:
 
-            parsed =
-                urlparse(self.path)
+            parsed = urlparse(self.path)
 
-            query =
-                parse_qs(
-                    parsed.query
-                )
+            query = parse_qs(
+                parsed.query
+            )
 
-
-            memory_id =
-                query.get(
-                    "memory_id",
-                    [None]
-                )[0]
-
+            memory_id = query.get(
+                "memory_id",
+                [None],
+            )[0]
 
             if not memory_id:
 
@@ -1595,17 +1141,15 @@ conversation messages below to maintain context.
                     self,
                     {
                         "error":
-                            "memory_id is required"
+                            "memory_id is required",
                     },
-                    400
+                    400,
                 )
 
                 return
 
 
-            connection =
-                get_connection()
-
+            connection = get_connection()
 
             try:
 
@@ -1616,18 +1160,12 @@ conversation messages below to maintain context.
                         DELETE FROM memories
                         WHERE id = %s
                         """,
-                        (
-                            int(memory_id),
-                        )
+                        (int(memory_id),),
                     )
 
-
-                    deleted =
-                        cursor.rowcount
-
+                    deleted = cursor.rowcount
 
                 connection.commit()
-
 
             finally:
 
@@ -1640,9 +1178,9 @@ conversation messages below to maintain context.
                     self,
                     {
                         "error":
-                            "Memory not found"
+                            "Memory not found",
                     },
-                    404
+                    404,
                 )
 
                 return
@@ -1651,12 +1189,9 @@ conversation messages below to maintain context.
             send_json(
                 self,
                 {
-                    "success":
-                        True,
-
-                    "deleted_id":
-                        int(memory_id)
-                }
+                    "success": True,
+                    "deleted_id": int(memory_id),
+                },
             )
 
 
@@ -1665,8 +1200,7 @@ conversation messages below to maintain context.
             send_json(
                 self,
                 {
-                    "error":
-                        str(error)
+                    "error": str(error),
                 },
-                500
+                500,
             )
