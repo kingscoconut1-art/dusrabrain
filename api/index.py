@@ -69,7 +69,7 @@ class handler(BaseHTTPRequestHandler):
 
             url = (
                 "https://generativelanguage.googleapis.com/"
-                "v1beta/models/gemini-2.5-flash:generateContent"
+                "v1beta/models/gemini-3.5-flash:generateContent"
             )
 
             payload = {
@@ -81,7 +81,18 @@ class handler(BaseHTTPRequestHandler):
                             }
                         ]
                     }
-                ]
+                ],
+                "systemInstruction": {
+                    "parts": [
+                        {
+                            "text": (
+                                "You are Dusra Brain, a personal AI "
+                                "brain and memory assistant. "
+                                "Be helpful, concise and practical."
+                            )
+                        }
+                    ]
+                }
             }
 
             request = urllib.request.Request(
