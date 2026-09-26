@@ -190,10 +190,23 @@ class handler(BaseHTTPRequestHandler):
         if not database_url:
             return {
                 "saved": False,
+                "updated": False,
                 "error": "Database URL not found."
             }
 
         try:
+
+            memory_key = (
+                str(subject).strip().lower()
+                + "|"
+                + str(category).strip().lower()
+                + "|"
+                + re.sub(
+                    r"\s+",
+                    " ",
+                    str(memory).strip().lower()
+                )
+            )
 
             with psycopg.connect(
                 database_url,
@@ -204,16 +217,63 @@ class handler(BaseHTTPRequestHandler):
 
                     cursor.execute(
                         """
+                        SELECT id
+                        FROM memories
+                        WHERE user_id = %s
+                        AND memory_key = %s
+                        LIMIT 1
+                        """,
+                        (
+                            user_id,
+                            memory_key
+                        )
+                    )
+
+                    existing = cursor.fetchone()
+
+                    if existing:
+
+                        cursor.execute(
+                            """
+                            UPDATE memories
+                            SET
+                                memory = %s,
+                                category = %s,
+                                importance = %s,
+                                subject = %s
+                            WHERE id = %s
+                            """,
+                            (
+                                memory,
+                                category,
+                                importance,
+                                subject,
+                                existing[0]
+                            )
+                        )
+
+                        connection.commit()
+
+                        return {
+                            "saved": True,
+                            "updated": True,
+                            "error": None
+                        }
+
+                    cursor.execute(
+                        """
                         INSERT INTO memories
                         (
                             user_id,
                             memory,
                             category,
                             importance,
-                            subject
+                            subject,
+                            memory_key
                         )
                         VALUES
                         (
+                            %s,
                             %s,
                             %s,
                             %s,
@@ -226,7 +286,8 @@ class handler(BaseHTTPRequestHandler):
                             memory,
                             category,
                             importance,
-                            subject
+                            subject,
+                            memory_key
                         )
                     )
 
@@ -234,6 +295,7 @@ class handler(BaseHTTPRequestHandler):
 
             return {
                 "saved": True,
+                "updated": False,
                 "error": None
             }
 
@@ -241,6 +303,7 @@ class handler(BaseHTTPRequestHandler):
 
             return {
                 "saved": False,
+                "updated": False,
                 "error": str(e)
             }
 
@@ -730,6 +793,7 @@ User message:
             )
 
             memory_saved = False
+            memory_updated = False
             memory_save_error = None
 
             if memory_analysis[
@@ -745,6 +809,7 @@ User message:
                 )
 
                 memory_saved = save_result["saved"]
+                memory_updated = save_result["updated"]
                 memory_save_error = save_result["error"]
 
             self.send_json(
@@ -753,6 +818,7 @@ User message:
                     "name": "Dusra Brain",
                     "response": text,
                     "memory_saved": memory_saved,
+                    "memory_updated": memory_updated,
                     "memory_subject": (
                         memory_analysis["subject"]
                     ),
