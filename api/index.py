@@ -96,6 +96,126 @@ class handler(BaseHTTPRequestHandler):
             ""
         ).strip()
 
+    # ---------------------------------------------------------
+    # CONVERSATION HISTORY
+    # ---------------------------------------------------------
+
+    def save_conversation(
+        self,
+        user_id,
+        role,
+        message
+    ):
+
+        database_url = self.get_database_url()
+
+        if not database_url:
+            return {
+                "saved": False,
+                "error": "Database URL not found."
+            }
+
+        try:
+
+            with psycopg.connect(
+                database_url,
+                connect_timeout=5
+            ) as connection:
+
+                with connection.cursor() as cursor:
+
+                    cursor.execute(
+                        """
+                        INSERT INTO conversations
+                        (
+                            user_id,
+                            role,
+                            message
+                        )
+                        VALUES
+                        (
+                            %s,
+                            %s,
+                            %s
+                        )
+                        """,
+                        (
+                            user_id,
+                            role,
+                            message
+                        )
+                    )
+
+                connection.commit()
+
+            return {
+                "saved": True,
+                "error": None
+            }
+
+        except Exception as e:
+
+            return {
+                "saved": False,
+                "error": str(e)
+            }
+
+    def get_conversation_history(
+        self,
+        user_id,
+        limit=20
+    ):
+
+        database_url = self.get_database_url()
+
+        if not database_url:
+            return []
+
+        try:
+
+            with psycopg.connect(
+                database_url,
+                connect_timeout=5
+            ) as connection:
+
+                with connection.cursor() as cursor:
+
+                    cursor.execute(
+                        """
+                        SELECT
+                            role,
+                            message
+                        FROM conversations
+                        WHERE user_id = %s
+                        ORDER BY
+                            created_at DESC
+                        LIMIT %s
+                        """,
+                        (
+                            user_id,
+                            limit
+                        )
+                    )
+
+                    rows = cursor.fetchall()
+
+                    rows.reverse()
+
+                    return [
+                        {
+                            "role": row[0],
+                            "message": row[1]
+                        }
+                        for row in rows
+                    ]
+
+        except Exception:
+            return []
+
+    # ---------------------------------------------------------
+    # LONG-TERM MEMORY RETRIEVAL
+    # ---------------------------------------------------------
+
     def get_memories(
         self,
         user_id,
@@ -234,6 +354,10 @@ class handler(BaseHTTPRequestHandler):
         except Exception:
             return []
 
+    # ---------------------------------------------------------
+    # SEMANTIC DUPLICATE DETECTION
+    # ---------------------------------------------------------
+
     def find_semantic_duplicate(
         self,
         api_key,
@@ -265,24 +389,22 @@ for Dusra Brain.
 
 Compare the NEW MEMORY with the EXISTING MEMORIES.
 
-Your job is to determine whether the new memory
-expresses the SAME underlying user fact as one
-of the existing memories.
+Determine whether the new memory expresses the
+SAME underlying user fact as one of the existing
+memories.
 
 Important:
 
 - Compare meaning, not exact wording.
-- Different wording can still represent the same fact.
-- Do not mark memories as duplicates just because
-  they are about the same project or subject.
+- Different wording can represent the same fact.
+- Do not mark memories as duplicates merely because
+  they concern the same project or subject.
 - If the new memory contains genuinely new information,
   it is NOT a duplicate.
 - Return the ID of the existing memory only when
   the underlying fact is substantially the same.
-- If no existing memory represents the same fact,
-  return NEW.
 
-Examples:
+Example:
 
 Existing:
 "The user is building Evolve India as a major
@@ -300,8 +422,8 @@ Existing:
 long-term business project."
 
 New:
-"The user plans to launch Evolve India in India
-within the next three months."
+"The user plans to launch Evolve India within
+the next three months."
 
 Result:
 NEW
@@ -366,6 +488,7 @@ EXISTING MEMORIES:
             )
 
             if memory_id is not None:
+
                 try:
                     memory_id = int(memory_id)
                 except Exception:
@@ -396,6 +519,10 @@ EXISTING MEMORIES:
                 "error": str(e)
             }
 
+    # ---------------------------------------------------------
+    # MEMORY SAVE / UPDATE
+    # ---------------------------------------------------------
+
     def save_memory(
         self,
         user_id,
@@ -412,6 +539,7 @@ EXISTING MEMORIES:
             return {
                 "saved": False,
                 "updated": False,
+                "semantic_duplicate": False,
                 "error": "Database URL not found."
             }
 
@@ -449,6 +577,7 @@ EXISTING MEMORIES:
                 return {
                     "saved": False,
                     "updated": False,
+                    "semantic_duplicate": False,
                     "error": (
                         "Semantic comparison failed: "
                         + semantic_result["error"]
@@ -595,6 +724,10 @@ EXISTING MEMORIES:
                 "error": str(e)
             }
 
+    # ---------------------------------------------------------
+    # JSON CLEANING
+    # ---------------------------------------------------------
+
     def clean_json_response(self, text):
 
         if not text:
@@ -622,6 +755,10 @@ EXISTING MEMORIES:
         )
 
         return text.strip()
+
+    # ---------------------------------------------------------
+    # MEMORY EXTRACTION
+    # ---------------------------------------------------------
 
     def analyze_memory(
         self,
@@ -855,6 +992,10 @@ User message:
                 "error": str(e)
             }
 
+    # ---------------------------------------------------------
+    # GET
+    # ---------------------------------------------------------
+
     def do_GET(self):
 
         self.send_json(
@@ -872,6 +1013,10 @@ User message:
                 )
             }
         )
+
+    # ---------------------------------------------------------
+    # POST
+    # ---------------------------------------------------------
 
     def do_POST(self):
 
@@ -930,6 +1075,10 @@ User message:
 
                 return
 
+            # -------------------------------------------------
+            # LOAD LONG-TERM MEMORY
+            # -------------------------------------------------
+
             memories = self.get_memories(
                 user_id,
                 message
@@ -959,6 +1108,54 @@ User message:
                     + "\n".join(memory_lines)
                 )
 
+            # -------------------------------------------------
+            # LOAD RECENT CONVERSATION
+            # -------------------------------------------------
+
+            conversation_history = (
+                self.get_conversation_history(
+                    user_id,
+                    limit=20
+                )
+            )
+
+            # -------------------------------------------------
+            # SAVE CURRENT USER MESSAGE
+            # -------------------------------------------------
+
+            user_save_result = (
+                self.save_conversation(
+                    user_id,
+                    "user",
+                    message
+                )
+            )
+
+            conversation_text = ""
+
+            if conversation_history:
+
+                conversation_lines = []
+
+                for item in conversation_history:
+
+                    conversation_lines.append(
+                        item["role"].upper()
+                        + ": "
+                        + item["message"]
+                    )
+
+                conversation_text = (
+                    "\n\nRECENT CONVERSATION:\n"
+                    + "\n".join(
+                        conversation_lines
+                    )
+                )
+
+            # -------------------------------------------------
+            # SYSTEM PROMPT
+            # -------------------------------------------------
+
             system_prompt = (
                 "You are Dusra Brain, "
                 "a personal AI brain and memory assistant. "
@@ -978,12 +1175,13 @@ User message:
                 "personal life, projects, businesses, "
                 "preferences, goals, relationships, work, "
                 "or history, use only information supported "
-                "by the stored memories or information "
-                "explicitly provided in the current message. "
+                "by the stored memories, recent conversation, "
+                "or the current message. "
 
                 "NEVER invent, assume, or expand personal "
                 "facts that are not supported by the stored "
-                "memories or the current conversation. "
+                "memories, recent conversation, or current "
+                "message. "
 
                 "Do not turn a general description into "
                 "a personal fact. "
@@ -991,13 +1189,13 @@ User message:
                 "Do not claim that the user owns, operates, "
                 "plans, wants, or has achieved something "
                 "unless that information is actually "
-                "supported by memory or the current message. "
+                "supported. "
 
-                "If the stored memories do not contain "
-                "enough information to answer a personal "
-                "question, say that you don't have enough "
-                "stored information and ask the user if "
-                "they want to provide more information. "
+                "If the stored memories and conversation "
+                "do not contain enough information to answer "
+                "a personal question, say that you don't have "
+                "enough stored information and ask the user "
+                "if they want to provide more information. "
 
                 "For general knowledge questions, you may "
                 "answer normally, but clearly distinguish "
@@ -1008,7 +1206,12 @@ User message:
                 "unless the user asks."
 
                 + memory_text
+                + conversation_text
             )
+
+            # -------------------------------------------------
+            # ASK GROQ
+            # -------------------------------------------------
 
             try:
 
@@ -1077,6 +1280,22 @@ User message:
 
                 return
 
+            # -------------------------------------------------
+            # SAVE ASSISTANT RESPONSE
+            # -------------------------------------------------
+
+            assistant_save_result = (
+                self.save_conversation(
+                    user_id,
+                    "assistant",
+                    text
+                )
+            )
+
+            # -------------------------------------------------
+            # ANALYZE LONG-TERM MEMORY
+            # -------------------------------------------------
+
             memory_analysis = self.analyze_memory(
                 api_key,
                 message
@@ -1119,32 +1338,73 @@ User message:
                     save_result["error"]
                 )
 
+            # -------------------------------------------------
+            # RETURN RESPONSE
+            # -------------------------------------------------
+
             self.send_json(
                 200,
                 {
                     "name": "Dusra Brain",
                     "response": text,
+
                     "memory_saved": memory_saved,
-                    "memory_updated": memory_updated,
+
+                    "memory_updated": (
+                        memory_updated
+                    ),
+
                     "memory_semantic_duplicate": (
                         memory_semantic_duplicate
                     ),
+
                     "memory_subject": (
                         memory_analysis["subject"]
                     ),
+
                     "memory_category": (
                         memory_analysis["category"]
                     ),
+
                     "memory_importance": (
                         memory_analysis["importance"]
                     ),
+
                     "memory_error": (
-                        memory_analysis.get("error")
+                        memory_analysis.get(
+                            "error"
+                        )
                     ),
+
                     "memory_save_error": (
                         memory_save_error
                     ),
-                    "memories_used": len(memories)
+
+                    "conversation_user_saved": (
+                        user_save_result["saved"]
+                    ),
+
+                    "conversation_assistant_saved": (
+                        assistant_save_result["saved"]
+                    ),
+
+                    "conversation_error": (
+                        user_save_result.get(
+                            "error"
+                        )
+                        or
+                        assistant_save_result.get(
+                            "error"
+                        )
+                    ),
+
+                    "memories_used": len(
+                        memories
+                    ),
+
+                    "conversation_messages_used": len(
+                        conversation_history
+                    )
                 }
             )
 
