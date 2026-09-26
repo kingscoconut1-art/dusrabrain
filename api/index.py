@@ -10,7 +10,7 @@ import psycopg
 
 
 # ============================================================
-# RESPONSE HELPER
+# RESPONSE
 # ============================================================
 
 def send_json(handler, data, status=200):
@@ -57,8 +57,7 @@ def send_json(handler, data, status=200):
 # ============================================================
 
 def get_database_url():
-
-    possible_names = [
+    names = [
         "DATABASE_URL",
         "POSTGRES_URL",
         "POSTGRES_PRISMA_URL",
@@ -67,8 +66,7 @@ def get_database_url():
         "STORAGE_DATABASE_URL"
     ]
 
-    for name in possible_names:
-
+    for name in names:
         value = os.environ.get(name)
 
         if value:
@@ -86,18 +84,17 @@ def groq_request(
     temperature=0.2,
     max_tokens=1200
 ):
-
-    api_key = os.environ.get(
-        "GROQ_API_KEY"
-    )
+    api_key = os.environ.get("GROQ_API_KEY")
 
     if not api_key:
-
         raise RuntimeError(
             "GROQ_API_KEY is not configured."
         )
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
+    url = (
+        "https://api.groq.com/openai/v1/"
+        "chat/completions"
+    )
 
     payload = {
         "model": "openai/gpt-oss-120b",
@@ -111,16 +108,13 @@ def groq_request(
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "Authorization":
-                "Bearer " + api_key,
-            "User-Agent":
-                "Mozilla/5.0"
+            "Authorization": "Bearer " + api_key,
+            "User-Agent": "Mozilla/5.0"
         },
         method="POST"
     )
 
     try:
-
         with urllib.request.urlopen(
             request,
             timeout=60
@@ -132,12 +126,9 @@ def groq_request(
                 response_body.decode("utf-8")
             )
 
-            return (
-                data["choices"][0]["message"]["content"]
-            )
+            return data["choices"][0]["message"]["content"]
 
     except urllib.error.HTTPError as error:
-
         error_body = error.read().decode(
             "utf-8",
             errors="replace"
@@ -148,14 +139,13 @@ def groq_request(
         )
 
     except urllib.error.URLError as error:
-
         raise RuntimeError(
             f"Groq connection error: {error}"
         )
 
 
 # ============================================================
-# CONVERSATION MEMORY
+# CONVERSATIONS
 # ============================================================
 
 def save_conversation(
@@ -163,7 +153,6 @@ def save_conversation(
     role,
     message
 ):
-
     db_url = get_database_url()
 
     if not db_url:
@@ -181,7 +170,12 @@ def save_conversation(
                     role,
                     message
                 )
-                VALUES (%s, %s, %s)
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s
+                )
                 """,
                 (
                     user_id,
@@ -197,7 +191,6 @@ def get_conversation_history(
     user_id,
     limit=20
 ):
-
     db_url = get_database_url()
 
     if not db_url:
@@ -232,24 +225,24 @@ def get_conversation_history(
         {
             "role": row[0],
             "message": row[1],
-            "created_at":
+            "created_at": (
                 row[2].isoformat()
                 if row[2]
                 else None
+            )
         }
         for row in rows
     ]
 
 
 # ============================================================
-# MEMORY RETRIEVAL
+# GET MEMORIES
 # ============================================================
 
 def get_memories(
     user_id,
     message=""
 ):
-
     db_url = get_database_url()
 
     if not db_url:
@@ -287,10 +280,11 @@ def get_memories(
             "id": row[0],
             "user_id": row[1],
             "memory": row[2],
-            "created_at":
+            "created_at": (
                 row[3].isoformat()
                 if row[3]
-                else None,
+                else None
+            ),
             "category": row[4],
             "importance": row[5],
             "subject": row[6],
@@ -304,7 +298,6 @@ def get_subject_memories(
     user_id,
     subject
 ):
-
     db_url = get_database_url()
 
     if not db_url:
@@ -360,7 +353,6 @@ def make_memory_key(
     category,
     memory
 ):
-
     text = (
         f"{subject}|"
         f"{category}|"
@@ -377,7 +369,31 @@ def make_memory_key(
 
 
 # ============================================================
-# SEMANTIC DUPLICATE CHECK
+# CLEAN JSON
+# ============================================================
+
+def clean_json_response(text):
+    text = text.strip()
+
+    if text.startswith("```"):
+        text = re.sub(
+            r"^```(?:json)?",
+            "",
+            text,
+            flags=re.IGNORECASE
+        )
+
+        text = re.sub(
+            r"```$",
+            "",
+            text
+        )
+
+    return text.strip()
+
+
+# ============================================================
+# SEMANTIC DUPLICATE
 # ============================================================
 
 def find_semantic_duplicate(
@@ -385,12 +401,10 @@ def find_semantic_duplicate(
     new_memory,
     subject
 ):
-
-    existing =
-        get_subject_memories(
-            user_id,
-            subject
-        )
+    existing = get_subject_memories(
+        user_id,
+        subject
+    )
 
     if not existing:
         return None
@@ -404,35 +418,34 @@ def find_semantic_duplicate(
     ]
 
     prompt = f"""
-You are checking whether two memories mean
-the same thing.
+Check whether the new memory has substantially
+the same meaning as one of the existing memories.
 
 New memory:
 {new_memory}
 
 Existing memories:
-{json.dumps(comparison_items, ensure_ascii=False)}
+{json.dumps(
+    comparison_items,
+    ensure_ascii=False
+)}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON.
 
+If duplicate:
 {{
-  "duplicate": true,
-  "id": 123
+    "duplicate": true,
+    "id": 123
 }}
 
-or:
-
+If not duplicate:
 {{
-  "duplicate": false,
-  "id": null
+    "duplicate": false,
+    "id": null
 }}
-
-Only mark duplicate when the meaning is
-substantially the same.
 """
 
     try:
-
         result = groq_request(
             [
                 {
@@ -449,18 +462,14 @@ substantially the same.
             max_tokens=200
         )
 
-        cleaned = clean_json_response(
-            result
+        data = json.loads(
+            clean_json_response(result)
         )
 
-        data = json.loads(cleaned)
-
         if data.get("duplicate"):
-
             return data.get("id")
 
     except Exception:
-
         return None
 
     return None
@@ -477,7 +486,6 @@ def save_memory(
     importance,
     subject
 ):
-
     db_url = get_database_url()
 
     if not db_url:
@@ -489,18 +497,17 @@ def save_memory(
         memory
     )
 
-    semantic_duplicate_id = \
-        find_semantic_duplicate(
-            user_id,
-            memory,
-            subject
-        )
+    duplicate_id = find_semantic_duplicate(
+        user_id,
+        memory,
+        subject
+    )
 
     with psycopg.connect(db_url) as conn:
 
         with conn.cursor() as cur:
 
-            if semantic_duplicate_id:
+            if duplicate_id:
 
                 cur.execute(
                     """
@@ -520,7 +527,7 @@ def save_memory(
                         importance,
                         subject,
                         memory_key,
-                        semantic_duplicate_id
+                        duplicate_id
                     )
                 )
 
@@ -529,7 +536,7 @@ def save_memory(
                 conn.commit()
 
                 return (
-                    row[0] if row else semantic_duplicate_id,
+                    row[0] if row else duplicate_id,
                     "updated_duplicate"
                 )
 
@@ -624,45 +631,14 @@ def save_memory(
 
 
 # ============================================================
-# CLEAN JSON
-# ============================================================
-
-def clean_json_response(
-    text
-):
-
-    text = text.strip()
-
-    if text.startswith("```"):
-
-        text = re.sub(
-            r"^```(?:json)?",
-            "",
-            text,
-            flags=re.IGNORECASE
-        )
-
-        text = re.sub(
-            r"```$",
-            "",
-            text
-        )
-
-    return text.strip()
-
-
-# ============================================================
 # MEMORY ANALYSIS
 # ============================================================
 
-def analyze_memory(
-    message
-):
+def analyze_memory(message):
 
     prompt = f"""
 Analyze the user's message and decide whether
-it contains information worth remembering
-for a personal AI assistant.
+it contains information worth remembering.
 
 User message:
 {message}
@@ -689,20 +665,15 @@ Do NOT remember:
 - ordinary requests
 - generic statements
 
-Important subject rules:
+If a specific project, business, person,
+organization or topic is mentioned, use that
+specific name as the subject.
 
-If the message mentions a specific project,
-business, person, organization, or topic,
-use that specific name as the subject.
-
-Known projects/businesses include:
+Known subjects:
 
 - Carbon Mandi
 - Evolve India
 - Dusra Brain
-
-Do not use "general" when a specific subject
-is clearly available.
 
 Do not invent subjects.
 
@@ -711,17 +682,17 @@ Return ONLY valid JSON.
 If it should NOT be remembered:
 
 {{
-  "remember": false
+    "remember": false
 }}
 
 If it SHOULD be remembered:
 
 {{
-  "remember": true,
-  "memory": "clean factual memory",
-  "category": "personal|preference|project|business|goal|relationship|work|decision|instruction|general",
-  "importance": 1,
-  "subject": "specific subject"
+    "remember": true,
+    "memory": "clean factual memory",
+    "category": "personal|preference|project|business|goal|relationship|work|decision|instruction|general",
+    "importance": 5,
+    "subject": "specific subject"
 }}
 
 Importance:
@@ -748,12 +719,8 @@ Importance:
         max_tokens=500
     )
 
-    cleaned = clean_json_response(
-        result
-    )
-
     return json.loads(
-        cleaned
+        clean_json_response(result)
     )
 
 
@@ -765,7 +732,6 @@ def normalize_subject(
     subject,
     message
 ):
-
     known_subjects = {
         "carbon mandi": "Carbon Mandi",
         "evolve india": "Evolve India",
@@ -783,13 +749,11 @@ def normalize_subject(
     for key, value in known_subjects.items():
 
         if key in message_lower:
-
             return value
 
     for key, value in known_subjects.items():
 
         if key == subject_text.lower():
-
             return value
 
     return subject_text or "general"
@@ -800,7 +764,6 @@ def normalize_subject(
 # ============================================================
 
 class handler(BaseHTTPRequestHandler):
-
 
     # ========================================================
     # OPTIONS
@@ -845,8 +808,7 @@ class handler(BaseHTTPRequestHandler):
                     send_json(
                         self,
                         {
-                            "name":
-                                "Dusra Brain",
+                            "name": "Dusra Brain",
                             "error":
                                 "Database not configured."
                         },
@@ -887,10 +849,11 @@ class handler(BaseHTTPRequestHandler):
                         "id": row[0],
                         "user_id": row[1],
                         "memory": row[2],
-                        "created_at":
+                        "created_at": (
                             row[3].isoformat()
                             if row[3]
-                            else None,
+                            else None
+                        ),
                         "category": row[4],
                         "importance": row[5],
                         "subject": row[6],
@@ -902,37 +865,27 @@ class handler(BaseHTTPRequestHandler):
                 send_json(
                     self,
                     {
-                        "name":
-                            "Dusra Brain",
-                        "memories":
-                            memories,
-                        "count":
-                            len(memories)
+                        "name": "Dusra Brain",
+                        "memories": memories,
+                        "count": len(memories)
                     }
                 )
 
                 return
 
-
-            # Health check
-
             send_json(
                 self,
                 {
-                    "name":
-                        "Dusra Brain",
-                    "status":
-                        "online",
-                    "groq_key_detected":
-                        bool(
-                            os.environ.get(
-                                "GROQ_API_KEY"
-                            )
-                        ),
-                    "database_detected":
-                        bool(
-                            get_database_url()
+                    "name": "Dusra Brain",
+                    "status": "online",
+                    "groq_key_detected": bool(
+                        os.environ.get(
+                            "GROQ_API_KEY"
                         )
+                    ),
+                    "database_detected": bool(
+                        get_database_url()
+                    )
                 }
             )
 
@@ -941,17 +894,15 @@ class handler(BaseHTTPRequestHandler):
             send_json(
                 self,
                 {
-                    "name":
-                        "Dusra Brain",
-                    "error":
-                        str(e)
+                    "name": "Dusra Brain",
+                    "error": str(e)
                 },
                 500
             )
 
 
     # ========================================================
-    # POST
+    # POST — CHAT
     # ========================================================
 
     def do_POST(self):
@@ -974,8 +925,7 @@ class handler(BaseHTTPRequestHandler):
             )
 
             message = (
-                data.get("message")
-                or ""
+                data.get("message") or ""
             ).strip()
 
             user_id = (
@@ -996,9 +946,6 @@ class handler(BaseHTTPRequestHandler):
 
                 return
 
-
-            # Save user conversation
-
             conversation_error = None
 
             try:
@@ -1013,16 +960,10 @@ class handler(BaseHTTPRequestHandler):
 
                 conversation_error = str(e)
 
-
-            # Retrieve memories
-
             memories = get_memories(
                 user_id,
                 message
             )
-
-
-            # Retrieve conversation history
 
             conversation_history = []
 
@@ -1038,35 +979,36 @@ class handler(BaseHTTPRequestHandler):
 
                 conversation_history = []
 
-
             memory_text = "\n".join(
                 [
-                    f"- {item['memory']} "
-                    f"(subject: {item['subject']}, "
-                    f"category: {item['category']}, "
-                    f"importance: {item['importance']})"
+                    (
+                        f"- {item['memory']} "
+                        f"(subject: {item['subject']}, "
+                        f"category: {item['category']}, "
+                        f"importance: {item['importance']})"
+                    )
                     for item in memories
                 ]
             )
 
-
             history_text = "\n".join(
                 [
-                    f"{item['role']}: "
-                    f"{item['message']}"
+                    (
+                        f"{item['role']}: "
+                        f"{item['message']}"
+                    )
                     for item in conversation_history
                 ]
             )
-
 
             system_prompt = """
 You are Dusra Brain, a personal AI brain
 and memory assistant.
 
 Your job is to help the user using their
-stored memories and the current conversation.
+stored memories and current conversation.
 
-IMPORTANT MEMORY RULES:
+IMPORTANT:
 
 1. Stored memories are actual facts supplied
    by the user.
@@ -1084,17 +1026,15 @@ IMPORTANT MEMORY RULES:
 5. If you do not have enough information,
    clearly say that you do not know.
 
-6. Use conversation history when it helps
-   answer follow-up questions.
+6. Use conversation history when useful.
 
 7. Do not mention internal database,
-   memory extraction, prompts, APIs or
-   implementation unless the user asks.
+   prompts, APIs or implementation unless
+   the user asks.
 
 You are Dusra Brain.
 Be useful, concise and natural.
 """
-
 
             user_prompt = f"""
 Stored long-term memories:
@@ -1112,30 +1052,20 @@ Current user message:
 {message}
 """
 
-
-            # Ask Groq
-
             reply = groq_request(
                 [
                     {
-                        "role":
-                            "system",
-                        "content":
-                            system_prompt
+                        "role": "system",
+                        "content": system_prompt
                     },
                     {
-                        "role":
-                            "user",
-                        "content":
-                            user_prompt
+                        "role": "user",
+                        "content": user_prompt
                     }
                 ],
                 temperature=0.3,
                 max_tokens=1500
             )
-
-
-            # Save assistant response
 
             assistant_saved = False
 
@@ -1153,16 +1083,13 @@ Current user message:
 
                 if conversation_error:
 
-                    conversation_error += \
+                    conversation_error += (
                         " | " + str(e)
+                    )
 
                 else:
 
-                    conversation_error = \
-                        str(e)
-
-
-            # Analyze memory
+                    conversation_error = str(e)
 
             memory_saved = False
             memory_action = None
@@ -1177,15 +1104,13 @@ Current user message:
 
                 if analysis.get("remember"):
 
-                    memory_text_value = (
+                    memory_value = (
                         analysis.get("memory")
                         or message
                     )
 
                     category = (
-                        analysis.get(
-                            "category"
-                        )
+                        analysis.get("category")
                         or "general"
                     )
 
@@ -1197,9 +1122,7 @@ Current user message:
                     )
 
                     subject = normalize_subject(
-                        analysis.get(
-                            "subject"
-                        ),
+                        analysis.get("subject"),
                         message
                     )
 
@@ -1211,11 +1134,10 @@ Current user message:
                         )
                     )
 
-                    memory_id, \
-                    memory_action = \
+                    memory_id, memory_action = \
                         save_memory(
                             user_id,
-                            memory_text_value,
+                            memory_value,
                             category,
                             importance,
                             subject
@@ -1227,36 +1149,24 @@ Current user message:
 
                 memory_error = str(e)
 
-
             send_json(
                 self,
                 {
                     "reply": reply,
-
                     "conversation_user_saved":
-                        conversation_error
-                        is None,
-
+                        conversation_error is None,
                     "conversation_assistant_saved":
                         assistant_saved,
-
                     "conversation_error":
                         conversation_error,
-
                     "conversation_messages_used":
-                        len(
-                            conversation_history
-                        ),
-
+                        len(conversation_history),
                     "memory_saved":
                         memory_saved,
-
                     "memory_action":
                         memory_action,
-
                     "memory_id":
                         memory_id,
-
                     "memory_error":
                         memory_error
                 }
@@ -1267,8 +1177,7 @@ Current user message:
             send_json(
                 self,
                 {
-                    "error":
-                        str(e)
+                    "error": str(e)
                 },
                 500
             )
@@ -1298,23 +1207,10 @@ Current user message:
             )
 
             memory_id = data.get("id")
-
-            memory = data.get(
-                "memory"
-            )
-
-            category = data.get(
-                "category"
-            )
-
-            importance = data.get(
-                "importance"
-            )
-
-            subject = data.get(
-                "subject"
-            )
-
+            memory = data.get("memory")
+            category = data.get("category")
+            importance = data.get("importance")
+            subject = data.get("subject")
 
             if not memory_id:
 
@@ -1329,7 +1225,6 @@ Current user message:
 
                 return
 
-
             if not memory:
 
                 send_json(
@@ -1342,7 +1237,6 @@ Current user message:
                 )
 
                 return
-
 
             try:
 
@@ -1370,7 +1264,6 @@ Current user message:
 
                 return
 
-
             if importance < 1 or importance > 10:
 
                 send_json(
@@ -1384,9 +1277,7 @@ Current user message:
 
                 return
 
-
             db_url = get_database_url()
-
 
             if not db_url:
 
@@ -1401,24 +1292,21 @@ Current user message:
 
                 return
 
-
-            subject = (
-                subject or "general"
-            ).strip()
+            memory = memory.strip()
 
             category = (
                 category or "general"
             ).strip()
 
-            memory = memory.strip()
-
+            subject = (
+                subject or "general"
+            ).strip()
 
             memory_key = make_memory_key(
                 subject,
                 category,
                 memory
             )
-
 
             with psycopg.connect(
                 db_url
@@ -1458,7 +1346,6 @@ Current user message:
 
                     row = cur.fetchone()
 
-
                     if not row:
 
                         send_json(
@@ -1472,54 +1359,35 @@ Current user message:
 
                         return
 
-
                 conn.commit()
-
 
             send_json(
                 self,
                 {
-                    "updated":
-                        True,
-
+                    "updated": True,
                     "memory": {
-                        "id":
-                            row[0],
-
-                        "user_id":
-                            row[1],
-
-                        "memory":
-                            row[2],
-
-                        "created_at":
+                        "id": row[0],
+                        "user_id": row[1],
+                        "memory": row[2],
+                        "created_at": (
                             row[3].isoformat()
                             if row[3]
-                            else None,
-
-                        "category":
-                            row[4],
-
-                        "importance":
-                            row[5],
-
-                        "subject":
-                            row[6],
-
-                        "memory_key":
-                            row[7]
+                            else None
+                        ),
+                        "category": row[4],
+                        "importance": row[5],
+                        "subject": row[6],
+                        "memory_key": row[7]
                     }
                 }
             )
-
 
         except Exception as e:
 
             send_json(
                 self,
                 {
-                    "error":
-                        str(e)
+                    "error": str(e)
                 },
                 500
             )
@@ -1541,13 +1409,11 @@ Current user message:
                 parsed_url.query
             )
 
-            memory_id_values = \
-                query.get(
-                    "memory_id"
-                )
+            memory_ids = query.get(
+                "memory_id"
+            )
 
-
-            if not memory_id_values:
+            if not memory_ids:
 
                 send_json(
                     self,
@@ -1560,11 +1426,10 @@ Current user message:
 
                 return
 
-
             try:
 
                 memory_id = int(
-                    memory_id_values[0]
+                    memory_ids[0]
                 )
 
             except ValueError:
@@ -1580,9 +1445,7 @@ Current user message:
 
                 return
 
-
             db_url = get_database_url()
-
 
             if not db_url:
 
@@ -1596,7 +1459,6 @@ Current user message:
                 )
 
                 return
-
 
             with psycopg.connect(
                 db_url
@@ -1617,7 +1479,6 @@ Current user message:
 
                     row = cur.fetchone()
 
-
                     if not row:
 
                         send_json(
@@ -1631,29 +1492,22 @@ Current user message:
 
                         return
 
-
                 conn.commit()
-
 
             send_json(
                 self,
                 {
-                    "deleted":
-                        True,
-
-                    "memory_id":
-                        memory_id
+                    "deleted": True,
+                    "memory_id": memory_id
                 }
             )
-
 
         except Exception as e:
 
             send_json(
                 self,
                 {
-                    "error":
-                        str(e)
+                    "error": str(e)
                 },
                 500
             )
