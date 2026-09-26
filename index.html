@@ -141,7 +141,7 @@
         .error {
             color: #b91c1c;
             background: #fef2f2;
-            border-color: #fecaca;
+            border: 1px solid #fecaca;
         }
 
         @media (max-width: 700px) {
@@ -277,7 +277,8 @@ async function sendMessage() {
                     method: "POST",
 
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
                     },
 
                     body: JSON.stringify({
@@ -287,17 +288,26 @@ async function sendMessage() {
             );
 
 
+        const responseText =
+            await response.text();
+
+
         let data;
 
         try {
 
             data =
-                await response.json();
+                JSON.parse(responseText);
 
         } catch (jsonError) {
 
             throw new Error(
-                "Server returned an invalid response."
+                "Server returned an invalid response.\n\n" +
+                "HTTP Status: " +
+                response.status +
+                "\n\n" +
+                "Raw response:\n" +
+                responseText
             );
         }
 
@@ -308,16 +318,34 @@ async function sendMessage() {
                 data.error ||
                 "Something went wrong.";
 
-            if (
-                data.gemini_error &&
-                data.gemini_error.error &&
-                data.gemini_error.error.message
-            ) {
 
-                errorMessage =
-                    data.gemini_error.error.message;
+            if (data.status_code) {
 
+                errorMessage +=
+                    "\n\nHTTP Status: " +
+                    data.status_code;
             }
+
+
+            if (data.details) {
+
+                errorMessage +=
+                    "\n\nDetails:\n" +
+                    data.details;
+            }
+
+
+            if (data.groq_error) {
+
+                errorMessage +=
+                    "\n\nGroq Error:\n" +
+                    JSON.stringify(
+                        data.groq_error,
+                        null,
+                        2
+                    );
+            }
+
 
             throw new Error(
                 errorMessage
