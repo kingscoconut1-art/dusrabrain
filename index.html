@@ -2,306 +2,428 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>Dusra Brain</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                Roboto, Helvetica, Arial, sans-serif;
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Roboto,
+                Arial,
+                sans-serif;
+
             background: #f7f7f8;
             color: #202123;
-            height: 100vh;
+        }
+
+        /* =========================
+           HEADER
+        ========================= */
+
+        header {
+            height: 64px;
+            background: #ffffff;
+            border-bottom: 1px solid #e5e5e5;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            padding: 0 24px;
+
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .memory-button {
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+            color: #111827;
+
+            padding: 9px 14px;
+            border-radius: 10px;
+
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .memory-button:hover {
+            background: #f3f4f6;
+        }
+
+        /* =========================
+           MAIN CHAT
+        ========================= */
+
+        .chat-container {
+            max-width: 900px;
+            margin: 0 auto;
+
+            min-height: calc(100vh - 64px);
+
             display: flex;
             flex-direction: column;
         }
 
-        header {
-            height: 64px;
-            background: white;
-            border-bottom: 1px solid #e5e5e5;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 24px;
-            font-size: 20px;
-            font-weight: 600;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-        }
-
-        .logo {
-            margin-right: 10px;
-        }
-
-        .memory-button {
-            width: auto;
-            padding: 9px 14px;
-            border-radius: 10px;
-            background: #f3f4f6;
-            color: #111827;
-            border: 1px solid #e5e7eb;
-            font-size: 14px;
-        }
-
-        .memory-button:hover {
-            background: #e5e7eb;
-        }
-
-        main {
-            flex: 1;
-            overflow-y: auto;
-            padding: 30px 20px 140px;
-        }
-
-        .welcome {
-            max-width: 760px;
-            margin: 80px auto;
-            text-align: center;
-        }
-
-        .welcome h1 {
-            font-size: 42px;
-            margin-bottom: 12px;
-        }
-
-        .welcome p {
-            color: #6b7280;
-            font-size: 18px;
-        }
-
         .messages {
-            max-width: 760px;
-            margin: 0 auto;
+            flex: 1;
+            padding: 30px 20px 130px;
         }
 
         .message {
-            margin: 18px 0;
-            padding: 16px 20px;
-            border-radius: 14px;
+            margin-bottom: 22px;
             line-height: 1.6;
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message-bubble {
+            display: inline-block;
+
+            max-width: 80%;
+
+            padding: 12px 16px;
+
+            border-radius: 14px;
+
             white-space: pre-wrap;
             word-wrap: break-word;
         }
 
-        .user {
-            background: #e8f0fe;
-            margin-left: 80px;
+        .message.user .message-bubble {
+            background: #111827;
+            color: #ffffff;
         }
 
-        .assistant {
-            background: white;
-            border: 1px solid #e5e5e5;
-            margin-right: 80px;
+        .message.assistant .message-bubble {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            color: #202123;
         }
 
-        /* =====================================================
-           MEMORY DASHBOARD
-           ===================================================== */
-
-        .memory-dashboard {
-            max-width: 900px;
-            margin: 0 auto;
-            display: none;
-        }
-
-        .memory-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-        }
-
-        .memory-header h1 {
-            margin: 0;
-            font-size: 32px;
-        }
-
-        .memory-header p {
-            margin: 6px 0 0;
-            color: #6b7280;
-            font-size: 15px;
-        }
-
-        .back-button {
-            width: auto;
-            padding: 9px 14px;
-            background: white;
-            color: #111827;
-            border: 1px solid #d1d5db;
-            border-radius: 10px;
-        }
-
-        .memory-stats {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: white;
-            border: 1px solid #e5e5e5;
-            border-radius: 14px;
-            padding: 18px;
-        }
-
-        .stat-number {
-            font-size: 26px;
-            font-weight: 700;
-        }
-
-        .stat-label {
-            margin-top: 5px;
-            color: #6b7280;
-            font-size: 13px;
-        }
-
-        .memory-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .memory-card {
-            background: white;
-            border: 1px solid #e5e5e5;
-            border-radius: 14px;
-            padding: 18px;
-        }
-
-        .memory-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-
-        .memory-subject {
-            font-weight: 600;
-            font-size: 15px;
-        }
-
-        .memory-category {
-            background: #f3f4f6;
-            color: #4b5563;
-            border-radius: 999px;
-            padding: 4px 9px;
-            font-size: 12px;
-        }
-
-        .memory-text {
-            line-height: 1.55;
-            font-size: 15px;
-        }
-
-        .memory-meta {
-            margin-top: 12px;
-            color: #9ca3af;
-            font-size: 12px;
-        }
-
-        .importance {
-            color: #111827;
-            font-weight: 600;
-        }
-
-        .memory-empty {
-            background: white;
-            border: 1px solid #e5e5e5;
-            border-radius: 14px;
-            padding: 30px;
-            text-align: center;
-            color: #6b7280;
-        }
-
-        .memory-loading {
-            text-align: center;
-            color: #6b7280;
-            padding: 40px;
-        }
-
-        .memory-error {
-            background: #fef2f2;
-            color: #b91c1c;
-            border: 1px solid #fecaca;
-            border-radius: 14px;
-            padding: 18px;
-        }
-
-        /* =====================================================
-           CHAT INPUT
-           ===================================================== */
+        /* =========================
+           INPUT AREA
+        ========================= */
 
         .input-area {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
+
             background: rgba(247, 247, 248, 0.96);
-            padding: 18px 20px;
+
             border-top: 1px solid #e5e5e5;
+
+            padding: 14px 20px;
         }
 
-        .input-box {
-            max-width: 760px;
-            margin: auto;
+        .input-wrapper {
+            max-width: 900px;
+            margin: 0 auto;
+
             display: flex;
             gap: 10px;
         }
 
         textarea {
             flex: 1;
+
             resize: none;
-            min-height: 52px;
+
+            min-height: 50px;
             max-height: 160px;
-            padding: 14px 16px;
+
             border: 1px solid #d1d5db;
-            border-radius: 14px;
-            font-size: 16px;
+            border-radius: 12px;
+
+            padding: 14px;
+
+            font-family: inherit;
+            font-size: 15px;
+
             outline: none;
-            background: white;
+
+            background: #ffffff;
         }
 
         textarea:focus {
-            border-color: #999;
+            border-color: #9ca3af;
         }
 
-        button {
+        .send-button {
             width: 90px;
+
             border: none;
-            border-radius: 14px;
+            border-radius: 12px;
+
             background: #111827;
-            color: white;
-            font-size: 15px;
+            color: #ffffff;
+
+            font-size: 14px;
+            font-weight: 600;
+
             cursor: pointer;
         }
 
-        button:disabled {
+        .send-button:hover {
+            background: #000000;
+        }
+
+        .send-button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .thinking {
-            color: #6b7280;
-            font-style: italic;
+        /* =========================
+           MEMORY DASHBOARD
+        ========================= */
+
+        #memoryDashboard {
+            display: none;
+
+            max-width: 1100px;
+
+            margin: 0 auto;
+
+            padding: 30px 20px 60px;
         }
 
-        .error {
-            color: #b91c1c;
-            background: #fef2f2;
-            border: 1px solid #fecaca;
+        .dashboard-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            margin-bottom: 25px;
         }
+
+        .dashboard-title {
+            margin: 0;
+
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .back-button {
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+
+            padding: 9px 14px;
+
+            border-radius: 10px;
+
+            cursor: pointer;
+
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .back-button:hover {
+            background: #f3f4f6;
+        }
+
+        /* =========================
+           MEMORY STATS
+        ========================= */
+
+        .memory-stats {
+            display: grid;
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
+            gap: 15px;
+
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #ffffff;
+
+            border: 1px solid #e5e7eb;
+
+            border-radius: 14px;
+
+            padding: 20px;
+        }
+
+        .stat-label {
+            color: #6b7280;
+
+            font-size: 13px;
+
+            margin-bottom: 7px;
+        }
+
+        .stat-value {
+            font-size: 27px;
+
+            font-weight: 700;
+        }
+
+        /* =========================
+           MEMORY LIST
+        ========================= */
+
+        .memory-list {
+            display: grid;
+
+            grid-template-columns:
+                repeat(2, 1fr);
+
+            gap: 18px;
+        }
+
+        .memory-card {
+            background: #ffffff;
+
+            border: 1px solid #e5e7eb;
+
+            border-radius: 15px;
+
+            padding: 20px;
+
+            position: relative;
+        }
+
+        .memory-card:hover {
+            border-color: #d1d5db;
+        }
+
+        .memory-subject {
+            font-size: 17px;
+
+            font-weight: 700;
+
+            margin-bottom: 5px;
+        }
+
+        .memory-category {
+            display: inline-block;
+
+            font-size: 12px;
+
+            color: #4b5563;
+
+            background: #f3f4f6;
+
+            border-radius: 999px;
+
+            padding: 4px 9px;
+
+            margin-bottom: 13px;
+        }
+
+        .memory-text {
+            font-size: 15px;
+
+            line-height: 1.55;
+
+            color: #374151;
+
+            margin-bottom: 15px;
+        }
+
+        .memory-meta {
+            font-size: 12px;
+
+            color: #6b7280;
+        }
+
+        .importance {
+            font-weight: 700;
+            color: #111827;
+        }
+
+        /* =========================
+           DELETE BUTTON
+        ========================= */
+
+        .delete-memory {
+            width: auto;
+
+            margin-top: 14px;
+
+            padding: 7px 12px;
+
+            background: #ffffff;
+
+            color: #b91c1c;
+
+            border: 1px solid #fecaca;
+
+            border-radius: 9px;
+
+            font-size: 13px;
+
+            font-weight: 600;
+
+            cursor: pointer;
+        }
+
+        .delete-memory:hover {
+            background: #fef2f2;
+        }
+
+        /* =========================
+           EMPTY STATE
+        ========================= */
+
+        .empty-memory {
+            grid-column: 1 / -1;
+
+            background: #ffffff;
+
+            border: 1px solid #e5e7eb;
+
+            border-radius: 15px;
+
+            padding: 40px;
+
+            text-align: center;
+
+            color: #6b7280;
+        }
+
+        /* =========================
+           LOADING
+        ========================= */
+
+        .loading {
+            color: #6b7280;
+
+            padding: 30px;
+
+            text-align: center;
+        }
+
+        /* =========================
+           MOBILE
+        ========================= */
 
         @media (max-width: 700px) {
 
@@ -309,780 +431,917 @@
                 padding: 0 15px;
             }
 
-            .welcome h1 {
-                font-size: 32px;
-            }
-
-            .user {
-                margin-left: 20px;
-            }
-
-            .assistant {
-                margin-right: 20px;
-            }
-
-            .input-box {
-                gap: 6px;
-            }
-
-            button {
-                width: 75px;
-            }
-
-            .memory-stats {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .memory-header {
-                align-items: flex-start;
-                gap: 15px;
-            }
-
-            .memory-header h1 {
-                font-size: 26px;
+            .logo {
+                font-size: 18px;
             }
 
             .memory-button {
                 padding: 8px 10px;
                 font-size: 13px;
             }
+
+            .memory-stats {
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+
+            .memory-list {
+                grid-template-columns: 1fr;
+            }
+
+            .message-bubble {
+                max-width: 90%;
+            }
+
+            .dashboard-title {
+                font-size: 23px;
+            }
+
+            .input-area {
+                padding: 10px;
+            }
+
+            .send-button {
+                width: 70px;
+            }
         }
+
     </style>
 </head>
 
 <body>
 
-<header>
+    <!-- =========================
+         HEADER
+    ========================= -->
 
-    <div class="brand">
-        <span class="logo">🧠</span>
-        Dusra Brain
-    </div>
+    <header>
 
-    <button
-        class="memory-button"
-        id="memoryButton"
-    >
-        🧠 My Memory
-    </button>
+        <div class="logo">
+            🧠 Dusra Brain
+        </div>
 
-</header>
+        <button
+            id="memoryButton"
+            class="memory-button"
+        >
+            🧠 My Memory
+        </button>
+
+    </header>
 
 
-<main id="chat">
-
-    <!-- =====================================================
+    <!-- =========================
          CHAT
-         ===================================================== -->
+    ========================= -->
 
-    <div class="welcome" id="welcome">
-
-        <h1>Dusra Brain</h1>
-
-        <p>
-            Your personal AI brain, powered by memory.
-        </p>
-
-    </div>
-
-
-    <div
-        class="messages"
-        id="messages"
-    ></div>
-
-
-    <!-- =====================================================
-         MEMORY DASHBOARD
-         ===================================================== -->
-
-    <div
-        class="memory-dashboard"
-        id="memoryDashboard"
+    <main
+        id="chatContainer"
+        class="chat-container"
     >
 
-        <div class="memory-header">
+        <div
+            id="messages"
+            class="messages"
+        >
 
-            <div>
+            <div class="message assistant">
 
-                <h1>🧠 My Memory</h1>
+                <div class="message-bubble">
 
-                <p>
-                    Everything Dusra Brain currently remembers about you.
-                </p>
+                    Hello! I am Dusra Brain 🧠
+
+                    <br><br>
+
+                    Tell me something you want me to remember,
+                    or ask me anything.
+
+                </div>
 
             </div>
 
+        </div>
+
+    </main>
+
+
+    <!-- =========================
+         INPUT
+    ========================= -->
+
+    <div
+        id="inputArea"
+        class="input-area"
+    >
+
+        <div class="input-wrapper">
+
+            <textarea
+                id="messageInput"
+                placeholder="Message Dusra Brain..."
+                rows="1"
+            ></textarea>
+
             <button
-                class="back-button"
-                id="backButton"
+                id="sendButton"
+                class="send-button"
             >
-                ← Chat
+                Send
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         MEMORY DASHBOARD
+    ========================= -->
+
+    <section
+        id="memoryDashboard"
+    >
+
+        <div class="dashboard-header">
+
+            <h1 class="dashboard-title">
+                🧠 My Memory
+            </h1>
+
+            <button
+                id="backButton"
+                class="back-button"
+            >
+                ← Back to Chat
             </button>
 
         </div>
 
 
-        <div
-            class="memory-stats"
-            id="memoryStats"
-        ></div>
+        <!-- MEMORY STATS -->
 
-
-        <div
-            class="memory-list"
-            id="memoryList"
-        >
-
-            <div class="memory-loading">
-                Loading memories...
-            </div>
-
-        </div>
-
-    </div>
-
-</main>
-
-
-<!-- =========================================================
-     CHAT INPUT
-     ========================================================= -->
-
-<div
-    class="input-area"
-    id="inputArea"
->
-
-    <div class="input-box">
-
-        <textarea
-            id="message"
-            placeholder="Ask Dusra Brain anything..."
-            rows="1"
-        ></textarea>
-
-        <button id="send">
-            Send
-        </button>
-
-    </div>
-
-</div>
-
-
-<script>
-
-/* =========================================================
-   ELEMENTS
-   ========================================================= */
-
-const messageInput =
-    document.getElementById("message");
-
-const sendButton =
-    document.getElementById("send");
-
-const messages =
-    document.getElementById("messages");
-
-const welcome =
-    document.getElementById("welcome");
-
-const memoryButton =
-    document.getElementById("memoryButton");
-
-const memoryDashboard =
-    document.getElementById("memoryDashboard");
-
-const memoryList =
-    document.getElementById("memoryList");
-
-const memoryStats =
-    document.getElementById("memoryStats");
-
-const backButton =
-    document.getElementById("backButton");
-
-const inputArea =
-    document.getElementById("inputArea");
-
-
-/* =========================================================
-   ADD CHAT MESSAGE
-   ========================================================= */
-
-function addMessage(text, type) {
-
-    welcome.style.display = "none";
-
-    const div =
-        document.createElement("div");
-
-    div.className =
-        "message " + type;
-
-    div.textContent =
-        text;
-
-    messages.appendChild(div);
-
-    window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth"
-    });
-
-    return div;
-}
-
-
-/* =========================================================
-   SEND MESSAGE
-   ========================================================= */
-
-async function sendMessage() {
-
-    const message =
-        messageInput.value.trim();
-
-    if (!message) {
-        return;
-    }
-
-    addMessage(
-        message,
-        "user"
-    );
-
-    messageInput.value = "";
-
-    messageInput.style.height = "auto";
-
-    sendButton.disabled = true;
-
-    const thinking =
-        addMessage(
-            "Dusra Brain is thinking...",
-            "assistant thinking"
-        );
-
-    try {
-
-        const response =
-            await fetch(
-                "/api",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        message: message
-                    })
-                }
-            );
-
-
-        const responseText =
-            await response.text();
-
-
-        let data;
-
-        try {
-
-            data =
-                JSON.parse(responseText);
-
-        } catch (jsonError) {
-
-            throw new Error(
-                "Server returned an invalid response.\n\n" +
-                "HTTP Status: " +
-                response.status +
-                "\n\n" +
-                "Raw response:\n" +
-                responseText
-            );
-        }
-
-
-        if (!response.ok) {
-
-            let errorMessage =
-                data.error ||
-                "Something went wrong.";
-
-
-            if (data.status_code) {
-
-                errorMessage +=
-                    "\n\nHTTP Status: " +
-                    data.status_code;
-            }
-
-
-            if (data.details) {
-
-                errorMessage +=
-                    "\n\nDetails:\n" +
-                    data.details;
-            }
-
-
-            if (data.groq_error) {
-
-                errorMessage +=
-                    "\n\nGroq Error:\n" +
-                    JSON.stringify(
-                        data.groq_error,
-                        null,
-                        2
-                    );
-            }
-
-
-            throw new Error(
-                errorMessage
-            );
-        }
-
-
-        thinking.remove();
-
-
-        addMessage(
-            data.reply ||
-            data.response ||
-            "No response received.",
-            "assistant"
-        );
-
-
-    } catch (error) {
-
-        thinking.classList.add(
-            "error"
-        );
-
-        thinking.textContent =
-            "Sorry, something went wrong:\n\n" +
-            error.message;
-
-
-    } finally {
-
-        sendButton.disabled = false;
-
-        messageInput.focus();
-
-    }
-
-}
-
-
-/* =========================================================
-   LOAD MEMORY DASHBOARD
-   ========================================================= */
-
-async function loadMemories() {
-
-    memoryList.innerHTML =
-        `
-        <div class="memory-loading">
-            Loading memories...
-        </div>
-        `;
-
-    memoryStats.innerHTML = "";
-
-    try {
-
-        const response =
-            await fetch(
-                "/api?memories=true"
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "Unable to load memories."
-            );
-        }
-
-
-        const memories =
-            data.memories || [];
-
-
-        /* =================================================
-           STATISTICS
-           ================================================= */
-
-        const total =
-            memories.length;
-
-
-        const projects =
-            memories.filter(
-                memory =>
-                    memory.category === "project"
-            ).length;
-
-
-        const businesses =
-            memories.filter(
-                memory =>
-                    memory.category === "business"
-            ).length;
-
-
-        const important =
-            memories.filter(
-                memory =>
-                    Number(memory.importance) >= 8
-            ).length;
-
-
-        memoryStats.innerHTML = `
+        <div class="memory-stats">
 
             <div class="stat-card">
-
-                <div class="stat-number">
-                    ${total}
-                </div>
 
                 <div class="stat-label">
                     Total Memories
                 </div>
 
+                <div
+                    id="totalMemories"
+                    class="stat-value"
+                >
+                    0
+                </div>
+
             </div>
 
 
             <div class="stat-card">
-
-                <div class="stat-number">
-                    ${projects}
-                </div>
 
                 <div class="stat-label">
                     Projects
                 </div>
 
+                <div
+                    id="projectMemories"
+                    class="stat-value"
+                >
+                    0
+                </div>
+
             </div>
 
 
             <div class="stat-card">
-
-                <div class="stat-number">
-                    ${businesses}
-                </div>
 
                 <div class="stat-label">
                     Businesses
                 </div>
 
+                <div
+                    id="businessMemories"
+                    class="stat-value"
+                >
+                    0
+                </div>
+
             </div>
 
 
             <div class="stat-card">
 
-                <div class="stat-number">
-                    ${important}
-                </div>
-
                 <div class="stat-label">
                     High Importance
                 </div>
 
-            </div>
-
-        `;
-
-
-        /* =================================================
-           NO MEMORIES
-           ================================================= */
-
-        if (memories.length === 0) {
-
-            memoryList.innerHTML = `
-
-                <div class="memory-empty">
-
-                    🧠 Dusra Brain doesn't have
-                    any long-term memories yet.
-
+                <div
+                    id="importantMemories"
+                    class="stat-value"
+                >
+                    0
                 </div>
 
-            `;
+            </div>
 
-            return;
+        </div>
+
+
+        <!-- MEMORY LIST -->
+
+        <div
+            id="memoryList"
+            class="memory-list"
+        >
+
+            <div class="loading">
+                Loading memories...
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <script>
+
+        /* =========================
+           ELEMENTS
+        ========================= */
+
+        const messages =
+            document.getElementById(
+                "messages"
+            );
+
+        const messageInput =
+            document.getElementById(
+                "messageInput"
+            );
+
+        const sendButton =
+            document.getElementById(
+                "sendButton"
+            );
+
+        const memoryButton =
+            document.getElementById(
+                "memoryButton"
+            );
+
+        const backButton =
+            document.getElementById(
+                "backButton"
+            );
+
+        const chatContainer =
+            document.getElementById(
+                "chatContainer"
+            );
+
+        const inputArea =
+            document.getElementById(
+                "inputArea"
+            );
+
+        const memoryDashboard =
+            document.getElementById(
+                "memoryDashboard"
+            );
+
+        const memoryList =
+            document.getElementById(
+                "memoryList"
+            );
+
+
+        /* =========================
+           ADD MESSAGE
+        ========================= */
+
+        function addMessage(
+            text,
+            role
+        ) {
+
+            const message =
+                document.createElement(
+                    "div"
+                );
+
+            message.className =
+                "message " + role;
+
+
+            const bubble =
+                document.createElement(
+                    "div"
+                );
+
+            bubble.className =
+                "message-bubble";
+
+            bubble.textContent =
+                text;
+
+
+            message.appendChild(
+                bubble
+            );
+
+            messages.appendChild(
+                message
+            );
+
+
+            window.scrollTo(
+                0,
+                document.body.scrollHeight
+            );
         }
 
 
-        /* =================================================
-           MEMORY CARDS
-           ================================================= */
+        /* =========================
+           SEND MESSAGE
+        ========================= */
 
-        memoryList.innerHTML = "";
+        async function sendMessage() {
+
+            const message =
+                messageInput.value.trim();
 
 
-        memories.forEach(
-            memory => {
+            if (!message) {
+                return;
+            }
 
-                const card =
-                    document.createElement(
-                        "div"
+
+            addMessage(
+                message,
+                "user"
+            );
+
+
+            messageInput.value = "";
+
+            sendButton.disabled = true;
+
+
+            const loading =
+                document.createElement(
+                    "div"
+                );
+
+            loading.className =
+                "message assistant";
+
+            loading.id =
+                "loadingMessage";
+
+
+            const loadingBubble =
+                document.createElement(
+                    "div"
+                );
+
+            loadingBubble.className =
+                "message-bubble";
+
+            loadingBubble.textContent =
+                "Thinking...";
+
+
+            loading.appendChild(
+                loadingBubble
+            );
+
+            messages.appendChild(
+                loading
+            );
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api",
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                message: message
+                            })
+                        }
                     );
 
-                card.className =
-                    "memory-card";
+
+                const data =
+                    await response.json();
 
 
-                const created =
-                    memory.created_at
-                    ? new Date(
-                        memory.created_at
-                    ).toLocaleString()
-                    : "";
+                const loadingElement =
+                    document.getElementById(
+                        "loadingMessage"
+                    );
 
 
-                card.innerHTML = `
+                if (loadingElement) {
 
-                    <div class="memory-top">
+                    loadingElement.remove();
 
-                        <div class="memory-subject">
-
-                            🧠 ${
-                                escapeHtml(
-                                    memory.subject ||
-                                    "General"
-                                )
-                            }
-
-                        </div>
+                }
 
 
-                        <div class="memory-category">
+                if (!response.ok) {
 
-                            ${
-                                escapeHtml(
-                                    memory.category ||
-                                    "general"
-                                )
-                            }
+                    throw new Error(
+                        data.error ||
+                        "Something went wrong."
+                    );
 
-                        </div>
-
-                    </div>
+                }
 
 
-                    <div class="memory-text">
-
-                        ${
-                            escapeHtml(
-                                memory.memory
-                            )
-                        }
-
-                    </div>
-
-
-                    <div class="memory-meta">
-
-                        Importance:
-                        <span class="importance">
-                            ${
-                                Number(
-                                    memory.importance ||
-                                    0
-                                )
-                            }/10
-                        </span>
-
-                        &nbsp; • &nbsp;
-
-                        ${
-                            escapeHtml(
-                                created
-                            )
-                        }
-
-                    </div>
-
-                `;
-
-
-                memoryList.appendChild(
-                    card
+                addMessage(
+                    data.reply ||
+                    data.response ||
+                    "I couldn't generate a response.",
+                    "assistant"
                 );
+
+
+            } catch (error) {
+
+                const loadingElement =
+                    document.getElementById(
+                        "loadingMessage"
+                    );
+
+
+                if (loadingElement) {
+
+                    loadingElement.remove();
+
+                }
+
+
+                addMessage(
+                    "Error: " +
+                    error.message,
+                    "assistant"
+                );
+
+            }
+
+
+            sendButton.disabled =
+                false;
+
+
+            messageInput.focus();
+
+        }
+
+
+        /* =========================
+           SEND BUTTON
+        ========================= */
+
+        sendButton.addEventListener(
+            "click",
+            sendMessage
+        );
+
+
+        /* =========================
+           ENTER TO SEND
+        ========================= */
+
+        messageInput.addEventListener(
+            "keydown",
+            function(event) {
+
+                if (
+                    event.key === "Enter" &&
+                    !event.shiftKey
+                ) {
+
+                    event.preventDefault();
+
+                    sendMessage();
+
+                }
 
             }
         );
 
 
-    } catch (error) {
+        /* =========================
+           ESCAPE HTML
+        ========================= */
 
-        memoryList.innerHTML = `
+        function escapeHtml(
+            value
+        ) {
 
-            <div class="memory-error">
+            const div =
+                document.createElement(
+                    "div"
+                );
 
-                Unable to load memories.
+            div.textContent =
+                value == null
+                    ? ""
+                    : String(value);
 
-                <br><br>
+            return div.innerHTML;
 
-                ${escapeHtml(
+        }
+
+
+        /* =========================
+           LOAD MEMORIES
+        ========================= */
+
+        async function loadMemories() {
+
+            memoryList.innerHTML =
+                `
+                    <div class="loading">
+                        Loading memories...
+                    </div>
+                `;
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api?memories=true"
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        data.error ||
+                        "Unable to load memories."
+                    );
+
+                }
+
+
+                const memories =
+                    data.memories || [];
+
+
+                /* =========================
+                   STATISTICS
+                ========================= */
+
+                const total =
+                    memories.length;
+
+
+                const projects =
+                    memories.filter(
+                        memory =>
+                            String(
+                                memory.category ||
+                                ""
+                            ).toLowerCase()
+                            === "project"
+                    ).length;
+
+
+                const businesses =
+                    memories.filter(
+                        memory =>
+                            String(
+                                memory.category ||
+                                ""
+                            ).toLowerCase()
+                            === "business"
+                    ).length;
+
+
+                const important =
+                    memories.filter(
+                        memory =>
+                            Number(
+                                memory.importance ||
+                                0
+                            ) >= 8
+                    ).length;
+
+
+                document.getElementById(
+                    "totalMemories"
+                ).textContent =
+                    total;
+
+
+                document.getElementById(
+                    "projectMemories"
+                ).textContent =
+                    projects;
+
+
+                document.getElementById(
+                    "businessMemories"
+                ).textContent =
+                    businesses;
+
+
+                document.getElementById(
+                    "importantMemories"
+                ).textContent =
+                    important;
+
+
+                /* =========================
+                   EMPTY STATE
+                ========================= */
+
+                if (memories.length === 0) {
+
+                    memoryList.innerHTML =
+                        `
+                            <div class="empty-memory">
+
+                                🧠
+
+                                <br><br>
+
+                                Dusra Brain doesn't
+                                remember anything yet.
+
+                                <br><br>
+
+                                Start chatting and
+                                important information
+                                will be remembered.
+
+                            </div>
+                        `;
+
+                    return;
+
+                }
+
+
+                /* =========================
+                   MEMORY CARDS
+                ========================= */
+
+                memoryList.innerHTML =
+                    memories
+                        .map(
+                            memory => {
+
+                                const created =
+                                    memory.created_at
+                                        ? new Date(
+                                            memory.created_at
+                                        ).toLocaleString()
+                                        : "";
+
+
+                                const subject =
+                                    memory.subject ||
+                                    "General";
+
+
+                                const category =
+                                    memory.category ||
+                                    "general";
+
+
+                                const importance =
+                                    Number(
+                                        memory.importance ||
+                                        0
+                                    );
+
+
+                                return `
+
+                                    <div
+                                        class="memory-card"
+                                    >
+
+                                        <div
+                                            class="memory-subject"
+                                        >
+                                            ${escapeHtml(
+                                                subject
+                                            )}
+                                        </div>
+
+
+                                        <div
+                                            class="memory-category"
+                                        >
+                                            ${escapeHtml(
+                                                category
+                                            )}
+                                        </div>
+
+
+                                        <div
+                                            class="memory-text"
+                                        >
+                                            ${escapeHtml(
+                                                memory.memory
+                                            )}
+                                        </div>
+
+
+                                        <div
+                                            class="memory-meta"
+                                        >
+
+                                            Importance:
+
+                                            <span
+                                                class="importance"
+                                            >
+                                                ${importance}/10
+                                            </span>
+
+                                            &nbsp; • &nbsp;
+
+                                            ${escapeHtml(
+                                                created
+                                            )}
+
+                                        </div>
+
+
+                                        <button
+                                            class="delete-memory"
+                                            onclick="deleteMemory(${Number(
+                                                memory.id
+                                            )})"
+                                        >
+                                            🗑️ Delete
+                                        </button>
+
+                                    </div>
+
+                                `;
+
+                            }
+                        )
+                        .join("");
+
+            } catch (error) {
+
+                memoryList.innerHTML =
+                    `
+                        <div class="empty-memory">
+
+                            Unable to load memories.
+
+                            <br><br>
+
+                            ${escapeHtml(
+                                error.message
+                            )}
+
+                        </div>
+                    `;
+
+            }
+
+        }
+
+
+        /* =========================
+           DELETE MEMORY
+        ========================= */
+
+        async function deleteMemory(
+            memoryId
+        ) {
+
+            const confirmed =
+                confirm(
+                    "Are you sure you want to delete this memory?"
+                );
+
+
+            if (!confirmed) {
+
+                return;
+
+            }
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api?memory_id=" +
+                        encodeURIComponent(
+                            memoryId
+                        ),
+                        {
+                            method: "DELETE"
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (
+                    !response.ok ||
+                    !data.deleted
+                ) {
+
+                    throw new Error(
+                        data.error ||
+                        "Unable to delete memory."
+                    );
+
+                }
+
+
+                await loadMemories();
+
+
+            } catch (error) {
+
+                alert(
+                    "Could not delete memory:\n\n" +
                     error.message
-                )}
+                );
 
-            </div>
-
-        `;
-
-    }
-
-}
-
-
-/* =========================================================
-   HTML ESCAPE
-   ========================================================= */
-
-function escapeHtml(value) {
-
-    const div =
-        document.createElement("div");
-
-    div.textContent =
-        value == null
-            ? ""
-            : String(value);
-
-    return div.innerHTML;
-
-}
-
-
-/* =========================================================
-   OPEN MEMORY DASHBOARD
-   ========================================================= */
-
-memoryButton.addEventListener(
-    "click",
-    function() {
-
-        welcome.style.display = "none";
-
-        messages.style.display = "none";
-
-        memoryDashboard.style.display =
-            "block";
-
-        inputArea.style.display =
-            "none";
-
-        loadMemories();
-
-    }
-);
-
-
-/* =========================================================
-   BACK TO CHAT
-   ========================================================= */
-
-backButton.addEventListener(
-    "click",
-    function() {
-
-        memoryDashboard.style.display =
-            "none";
-
-        messages.style.display =
-            "block";
-
-        inputArea.style.display =
-            "block";
-
-        if (
-            messages.children.length === 0
-        ) {
-
-            welcome.style.display =
-                "block";
+            }
 
         }
 
-        messageInput.focus();
 
-    }
-);
+        /* =========================
+           OPEN MEMORY DASHBOARD
+        ========================= */
 
+        memoryButton.addEventListener(
+            "click",
+            async function() {
 
-/* =========================================================
-   SEND BUTTON
-   ========================================================= */
+                chatContainer.style.display =
+                    "none";
 
-sendButton.addEventListener(
-    "click",
-    sendMessage
-);
+                inputArea.style.display =
+                    "none";
 
-
-/* =========================================================
-   ENTER TO SEND
-   ========================================================= */
-
-messageInput.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (
-            event.key === "Enter" &&
-            !event.shiftKey
-        ) {
-
-            event.preventDefault();
-
-            sendMessage();
-
-        }
-
-    }
-);
+                memoryDashboard.style.display =
+                    "block";
 
 
-/* =========================================================
-   AUTO RESIZE TEXTAREA
-   ========================================================= */
+                await loadMemories();
 
-messageInput.addEventListener(
-    "input",
-    function() {
+            }
+        );
 
-        this.style.height =
-            "auto";
 
-        this.style.height =
-            Math.min(
-                this.scrollHeight,
-                160
-            ) + "px";
+        /* =========================
+           BACK TO CHAT
+        ========================= */
 
-    }
-);
+        backButton.addEventListener(
+            "click",
+            function() {
 
-</script>
+                memoryDashboard.style.display =
+                    "none";
+
+                chatContainer.style.display =
+                    "flex";
+
+                inputArea.style.display =
+                    "block";
+
+                messageInput.focus();
+
+            }
+        );
+
+
+    </script>
 
 </body>
 </html>
