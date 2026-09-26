@@ -3,499 +3,358 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Dusra Brain</title>
 
     <style>
-
         * {
             box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            font-family:
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                Roboto,
-                Arial,
-                sans-serif;
-            background: #f7f7f8;
-            color: #202123;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f7fb;
+            color: #1f2937;
         }
 
-        /* =========================
-           HEADER
-        ========================= */
-
-        header {
-            height: 64px;
-            background: #ffffff;
-            border-bottom: 1px solid #e5e5e5;
-
+        .header {
+            background: #111827;
+            color: white;
+            padding: 18px 24px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-
-            padding: 0 24px;
-
-            position: sticky;
-            top: 0;
-            z-index: 20;
         }
 
-        .logo {
-            font-size: 20px;
+        .brand {
+            font-size: 22px;
             font-weight: 700;
-            color: #111827;
         }
 
-        .memory-button {
-            border: 1px solid #d1d5db;
-            background: #ffffff;
-            color: #111827;
-
-            padding: 9px 14px;
-            border-radius: 10px;
-
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .memory-button:hover {
-            background: #f3f4f6;
-        }
-
-        /* =========================
-           CHAT
-        ========================= */
-
-        .chat-container {
-            max-width: 900px;
-            margin: 0 auto;
-
-            min-height: calc(100vh - 64px);
-
-            display: flex;
-            flex-direction: column;
-        }
-
-        .messages {
-            flex: 1;
-            padding: 30px 20px 130px;
-        }
-
-        .message {
-            margin-bottom: 22px;
-            line-height: 1.6;
-        }
-
-        .message.user {
-            text-align: right;
-        }
-
-        .message-bubble {
-            display: inline-block;
-            max-width: 80%;
-
-            padding: 12px 16px;
-            border-radius: 14px;
-
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
-        .message.user .message-bubble {
-            background: #111827;
-            color: #ffffff;
-        }
-
-        .message.assistant .message-bubble {
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            color: #202123;
-        }
-
-        /* =========================
-           INPUT
-        ========================= */
-
-        .input-area {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-
-            background: rgba(247, 247, 248, 0.96);
-            border-top: 1px solid #e5e5e5;
-
-            padding: 14px 20px;
-            z-index: 15;
-        }
-
-        .input-wrapper {
-            max-width: 900px;
-            margin: 0 auto;
-
+        .header-buttons {
             display: flex;
             gap: 10px;
         }
 
-        textarea {
-            flex: 1;
-
-            resize: none;
-
-            min-height: 50px;
-            max-height: 160px;
-
-            border: 1px solid #d1d5db;
-            border-radius: 12px;
-
-            padding: 14px;
-
-            font-family: inherit;
-            font-size: 15px;
-
-            outline: none;
-            background: #ffffff;
-        }
-
-        textarea:focus {
-            border-color: #9ca3af;
-        }
-
-        .send-button {
-            width: 90px;
-
+        button {
             border: none;
-            border-radius: 12px;
-
-            background: #111827;
-            color: #ffffff;
-
-            font-size: 14px;
-            font-weight: 600;
-
+            border-radius: 8px;
+            padding: 10px 16px;
             cursor: pointer;
+            font-size: 14px;
         }
 
-        .send-button:hover {
-            background: #000000;
+        .memory-button {
+            background: white;
+            color: #111827;
         }
 
-        .send-button:disabled {
-            opacity: 0.5;
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .welcome {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .welcome h1 {
+            margin-bottom: 8px;
+            font-size: 32px;
+        }
+
+        .welcome p {
+            color: #6b7280;
+        }
+
+        .chat-box {
+            background: white;
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        #messages {
+            min-height: 350px;
+            max-height: 550px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .bubble {
+            max-width: 80%;
+            padding: 12px 15px;
+            border-radius: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .user .bubble {
+            background: #111827;
+            color: white;
+        }
+
+        .assistant .bubble {
+            background: #eef2f7;
+            color: #1f2937;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 13px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            font-size: 15px;
+            outline: none;
+        }
+
+        #messageInput:focus {
+            border-color: #111827;
+        }
+
+        #sendButton {
+            background: #111827;
+            color: white;
+            min-width: 90px;
+        }
+
+        #sendButton:disabled {
+            opacity: 0.6;
             cursor: not-allowed;
         }
 
-        /* =========================
-           DASHBOARD
-        ========================= */
-
-        #memoryDashboard {
+        .memory-dashboard {
             display: none;
-
-            max-width: 1100px;
-            margin: 0 auto;
-
-            padding: 30px 20px 60px;
         }
 
         .dashboard-header {
             display: flex;
-            align-items: center;
             justify-content: space-between;
-
-            margin-bottom: 25px;
+            align-items: center;
+            margin-bottom: 20px;
         }
 
-        .dashboard-title {
+        .dashboard-header h2 {
             margin: 0;
-
-            font-size: 28px;
-            font-weight: 700;
         }
 
         .back-button {
-            border: 1px solid #d1d5db;
-            background: #ffffff;
-
-            padding: 9px 14px;
-            border-radius: 10px;
-
-            cursor: pointer;
-
-            font-size: 14px;
-            font-weight: 600;
+            background: #e5e7eb;
+            color: #111827;
         }
 
-        .back-button:hover {
-            background: #f3f4f6;
-        }
-
-        /* =========================
-           STATS
-        ========================= */
-
-        .memory-stats {
+        .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-
             gap: 15px;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
         .stat-card {
-            background: #ffffff;
+            background: white;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        }
 
-            border: 1px solid #e5e7eb;
-            border-radius: 14px;
-
-            padding: 20px;
+        .stat-number {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 5px;
         }
 
         .stat-label {
             color: #6b7280;
             font-size: 13px;
-
-            margin-bottom: 7px;
         }
 
-        .stat-value {
-            font-size: 27px;
-            font-weight: 700;
+        .search-container {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
         }
 
-        /* =========================
-           MEMORY LIST
-        ========================= */
-
-        .memory-list {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-
-            gap: 18px;
+        .search-row {
+            display: flex;
+            gap: 10px;
         }
 
-        .memory-card {
-            background: #ffffff;
-
-            border: 1px solid #e5e7eb;
-            border-radius: 15px;
-
-            padding: 20px;
-        }
-
-        .memory-card:hover {
-            border-color: #d1d5db;
-        }
-
-        .memory-subject {
-            font-size: 17px;
-            font-weight: 700;
-
-            margin-bottom: 5px;
-        }
-
-        .memory-category {
-            display: inline-block;
-
-            font-size: 12px;
-            color: #4b5563;
-
-            background: #f3f4f6;
-
-            border-radius: 999px;
-
-            padding: 4px 9px;
-
-            margin-bottom: 13px;
-        }
-
-        .memory-text {
+        #memorySearch {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 9px;
             font-size: 15px;
-
-            line-height: 1.55;
-
-            color: #374151;
-
-            margin-bottom: 15px;
+            outline: none;
         }
 
-        .memory-meta {
-            font-size: 12px;
-            color: #6b7280;
+        #memorySearch:focus {
+            border-color: #111827;
         }
 
-        .importance {
-            font-weight: 700;
+        .clear-search {
+            background: #e5e7eb;
             color: #111827;
         }
 
-        /* =========================
-           ACTION BUTTONS
-        ========================= */
+        .search-info {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .memory-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .memory-card {
+            background: white;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        }
+
+        .memory-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .memory-text {
+            font-size: 16px;
+            line-height: 1.5;
+            flex: 1;
+        }
+
+        .importance {
+            font-size: 12px;
+            background: #f3f4f6;
+            padding: 5px 9px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .memory-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .tag {
+            background: #eef2ff;
+            color: #3730a3;
+            padding: 5px 9px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
+        .memory-date {
+            color: #9ca3af;
+            font-size: 12px;
+            margin-top: 10px;
+        }
 
         .memory-actions {
             display: flex;
             gap: 8px;
-
-            margin-top: 15px;
+            margin-top: 14px;
         }
 
-        .edit-memory,
-        .delete-memory {
-            padding: 7px 12px;
-
-            border-radius: 9px;
-
-            font-size: 13px;
-            font-weight: 600;
-
-            cursor: pointer;
-        }
-
-        .edit-memory {
-            background: #ffffff;
+        .edit-button {
+            background: #e5e7eb;
             color: #111827;
-
-            border: 1px solid #d1d5db;
         }
 
-        .edit-memory:hover {
-            background: #f3f4f6;
+        .delete-button {
+            background: #fee2e2;
+            color: #991b1b;
         }
 
-        .delete-memory {
-            background: #ffffff;
-            color: #b91c1c;
-
-            border: 1px solid #fecaca;
-        }
-
-        .delete-memory:hover {
-            background: #fef2f2;
-        }
-
-        /* =========================
-           EMPTY / LOADING
-        ========================= */
-
-        .empty-memory {
-            grid-column: 1 / -1;
-
-            background: #ffffff;
-
-            border: 1px solid #e5e7eb;
-
-            border-radius: 15px;
-
+        .empty-state {
+            background: white;
             padding: 40px;
-
             text-align: center;
-
+            border-radius: 12px;
             color: #6b7280;
         }
 
         .loading {
-            color: #6b7280;
-
-            padding: 30px;
-
             text-align: center;
+            padding: 30px;
+            color: #6b7280;
         }
 
-        /* =========================
-           EDIT MODAL
-        ========================= */
-
-        #editModal {
+        .modal-overlay {
             display: none;
-
             position: fixed;
             inset: 0;
-
-            background: rgba(0, 0, 0, 0.45);
-
-            z-index: 100;
-
+            background: rgba(0,0,0,0.45);
             align-items: center;
             justify-content: center;
-
             padding: 20px;
+            z-index: 1000;
         }
 
-        .edit-modal-box {
+        .modal {
+            background: white;
             width: 100%;
-            max-width: 600px;
-
-            max-height: 90vh;
-            overflow-y: auto;
-
-            background: #ffffff;
-
-            border-radius: 18px;
-
-            padding: 25px;
-
-            box-shadow:
-                0 20px 60px
-                rgba(0, 0, 0, 0.2);
+            max-width: 550px;
+            border-radius: 14px;
+            padding: 24px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.2);
         }
 
-        .edit-modal-title {
-            margin: 0 0 20px;
-
-            font-size: 22px;
-            font-weight: 700;
+        .modal h3 {
+            margin-top: 0;
         }
 
         .form-group {
-            margin-bottom: 17px;
+            margin-bottom: 16px;
         }
 
         .form-group label {
             display: block;
-
+            margin-bottom: 7px;
             font-size: 13px;
             font-weight: 600;
-
-            color: #374151;
-
-            margin-bottom: 7px;
         }
 
         .form-group input,
         .form-group textarea,
         .form-group select {
             width: 100%;
-
+            padding: 11px;
             border: 1px solid #d1d5db;
-
-            border-radius: 10px;
-
-            padding: 11px 12px;
-
-            font-family: inherit;
+            border-radius: 8px;
             font-size: 14px;
-
-            outline: none;
-
-            background: #ffffff;
+            font-family: inherit;
         }
 
         .form-group textarea {
             min-height: 110px;
             resize: vertical;
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus,
-        .form-group select:focus {
-            border-color: #6b7280;
         }
 
         .importance-row {
@@ -504,165 +363,99 @@
             gap: 12px;
         }
 
-        .importance-row input {
+        #editImportance {
             flex: 1;
         }
 
         #importanceValue {
-            width: 35px;
-
+            min-width: 35px;
             font-weight: 700;
-            text-align: center;
         }
 
         .modal-actions {
             display: flex;
-
             justify-content: flex-end;
-
             gap: 10px;
-
-            margin-top: 25px;
-        }
-
-        .cancel-button,
-        .save-button {
-            padding: 10px 16px;
-
-            border-radius: 10px;
-
-            cursor: pointer;
-
-            font-size: 14px;
-            font-weight: 600;
+            margin-top: 20px;
         }
 
         .cancel-button {
-            background: #ffffff;
-            color: #374151;
-
-            border: 1px solid #d1d5db;
-        }
-
-        .cancel-button:hover {
-            background: #f3f4f6;
+            background: #e5e7eb;
         }
 
         .save-button {
             background: #111827;
-            color: #ffffff;
-
-            border: none;
+            color: white;
         }
-
-        .save-button:hover {
-            background: #000000;
-        }
-
-        .save-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* =========================
-           MOBILE
-        ========================= */
 
         @media (max-width: 700px) {
-
-            header {
-                padding: 0 15px;
-            }
-
-            .logo {
-                font-size: 18px;
-            }
-
-            .memory-button {
-                padding: 8px 10px;
-                font-size: 13px;
-            }
-
-            .memory-stats {
+            .stats {
                 grid-template-columns: repeat(2, 1fr);
             }
 
-            .memory-list {
-                grid-template-columns: 1fr;
-            }
-
-            .message-bubble {
-                max-width: 90%;
-            }
-
-            .dashboard-title {
-                font-size: 23px;
-            }
-
             .input-area {
-                padding: 10px;
+                flex-direction: column;
             }
 
-            .send-button {
-                width: 70px;
+            #sendButton {
+                width: 100%;
             }
 
-            .edit-modal-box {
-                padding: 20px;
+            .search-row {
+                flex-direction: column;
+            }
+
+            .memory-top {
+                flex-direction: column;
             }
         }
-
     </style>
 </head>
 
-
 <body>
 
+    <div class="header">
+        <div class="brand">🧠 Dusra Brain</div>
 
-    <!-- =====================================================
-         HEADER
-    ====================================================== -->
-
-    <header>
-
-        <div class="logo">
-            🧠 Dusra Brain
+        <div class="header-buttons">
+            <button class="memory-button" id="memoryButton">
+                🧠 My Memory
+            </button>
         </div>
+    </div>
 
-        <button
-            id="memoryButton"
-            class="memory-button"
-        >
-            🧠 My Memory
-        </button>
+    <div class="container">
 
-    </header>
+        <!-- CHAT -->
+        <div id="chatView">
 
+            <div class="welcome">
+                <h1>Dusra Brain</h1>
+                <p>Your personal AI brain and memory assistant.</p>
+            </div>
 
-    <!-- =====================================================
-         CHAT
-    ====================================================== -->
+            <div class="chat-box">
 
-    <main
-        id="chatContainer"
-        class="chat-container"
-    >
+                <div id="messages">
+                    <div class="message assistant">
+                        <div class="bubble">
+                            Hello! I’m Dusra Brain, your personal AI brain and memory assistant. How can I help you today?
+                        </div>
+                    </div>
+                </div>
 
-        <div
-            id="messages"
-            class="messages"
-        >
+                <div class="input-area">
 
-            <div class="message assistant">
+                    <input
+                        type="text"
+                        id="messageInput"
+                        placeholder="Talk to Dusra Brain..."
+                        autocomplete="off"
+                    >
 
-                <div class="message-bubble">
-
-                    Hello! I am Dusra Brain 🧠
-
-                    <br><br>
-
-                    Tell me something you want me to remember,
-                    or ask me anything.
+                    <button id="sendButton">
+                        Send
+                    </button>
 
                 </div>
 
@@ -670,160 +463,118 @@
 
         </div>
 
-    </main>
+
+        <!-- MEMORY DASHBOARD -->
+        <div id="memoryDashboard" class="memory-dashboard">
+
+            <div class="dashboard-header">
+
+                <h2>🧠 My Memory</h2>
+
+                <button class="back-button" id="backButton">
+                    ← Back to Chat
+                </button>
+
+            </div>
 
 
-    <!-- =====================================================
-         CHAT INPUT
-    ====================================================== -->
+            <!-- STATS -->
+            <div class="stats">
 
-    <div
-        id="inputArea"
-        class="input-area"
-    >
+                <div class="stat-card">
+                    <div class="stat-number" id="totalMemories">
+                        0
+                    </div>
 
-        <div class="input-wrapper">
+                    <div class="stat-label">
+                        Total Memories
+                    </div>
+                </div>
 
-            <textarea
-                id="messageInput"
-                placeholder="Message Dusra Brain..."
-                rows="1"
-            ></textarea>
 
-            <button
-                id="sendButton"
-                class="send-button"
-            >
-                Send
-            </button>
+                <div class="stat-card">
+                    <div class="stat-number" id="projectMemories">
+                        0
+                    </div>
+
+                    <div class="stat-label">
+                        Projects
+                    </div>
+                </div>
+
+
+                <div class="stat-card">
+                    <div class="stat-number" id="businessMemories">
+                        0
+                    </div>
+
+                    <div class="stat-label">
+                        Business
+                    </div>
+                </div>
+
+
+                <div class="stat-card">
+                    <div class="stat-number" id="highImportance">
+                        0
+                    </div>
+
+                    <div class="stat-label">
+                        High Importance
+                    </div>
+                </div>
+
+            </div>
+
+
+            <!-- SEARCH -->
+            <div class="search-container">
+
+                <div class="search-row">
+
+                    <input
+                        type="text"
+                        id="memorySearch"
+                        placeholder="🔎 Search your memories..."
+                        autocomplete="off"
+                    >
+
+                    <button
+                        class="clear-search"
+                        id="clearSearch"
+                    >
+                        Clear
+                    </button>
+
+                </div>
+
+                <div class="search-info" id="searchInfo">
+                    Showing all memories
+                </div>
+
+            </div>
+
+
+            <!-- MEMORY LIST -->
+            <div id="memoryList" class="memory-list">
+
+                <div class="loading">
+                    Loading memories...
+                </div>
+
+            </div>
 
         </div>
 
     </div>
 
 
-    <!-- =====================================================
-         MEMORY DASHBOARD
-    ====================================================== -->
+    <!-- EDIT MODAL -->
+    <div class="modal-overlay" id="editModal">
 
-    <section
-        id="memoryDashboard"
-    >
+        <div class="modal">
 
-        <div class="dashboard-header">
-
-            <h1 class="dashboard-title">
-                🧠 My Memory
-            </h1>
-
-            <button
-                id="backButton"
-                class="back-button"
-            >
-                ← Back to Chat
-            </button>
-
-        </div>
-
-
-        <div class="memory-stats">
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-                    Total Memories
-                </div>
-
-                <div
-                    id="totalMemories"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-                    Projects
-                </div>
-
-                <div
-                    id="projectMemories"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-                    Businesses
-                </div>
-
-                <div
-                    id="businessMemories"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-                    High Importance
-                </div>
-
-                <div
-                    id="importantMemories"
-                    class="stat-value"
-                >
-                    0
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div
-            id="memoryList"
-            class="memory-list"
-        >
-
-            <div class="loading">
-                Loading memories...
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- =====================================================
-         EDIT MEMORY MODAL
-    ====================================================== -->
-
-    <div
-        id="editModal"
-    >
-
-        <div
-            class="edit-modal-box"
-        >
-
-            <h2 class="edit-modal-title">
-                ✏️ Edit Memory
-            </h2>
-
+            <h3>✏️ Edit Memory</h3>
 
             <div class="form-group">
 
@@ -831,10 +582,7 @@
                     Memory
                 </label>
 
-                <textarea
-                    id="editMemory"
-                    placeholder="Memory"
-                ></textarea>
+                <textarea id="editMemory"></textarea>
 
             </div>
 
@@ -846,9 +594,9 @@
                 </label>
 
                 <input
-                    id="editSubject"
                     type="text"
-                    placeholder="Subject"
+                    id="editSubject"
+                    placeholder="e.g. Dusra Brain"
                 >
 
             </div>
@@ -860,9 +608,11 @@
                     Category
                 </label>
 
-                <select
-                    id="editCategory"
-                >
+                <select id="editCategory">
+
+                    <option value="general">
+                        General
+                    </option>
 
                     <option value="personal">
                         Personal
@@ -900,10 +650,6 @@
                         Instruction
                     </option>
 
-                    <option value="general">
-                        General
-                    </option>
-
                 </select>
 
             </div>
@@ -918,8 +664,8 @@
                 <div class="importance-row">
 
                     <input
-                        id="editImportance"
                         type="range"
+                        id="editImportance"
                         min="1"
                         max="10"
                         value="5"
@@ -929,6 +675,8 @@
                         5
                     </span>
 
+                    / 10
+
                 </div>
 
             </div>
@@ -937,15 +685,15 @@
             <div class="modal-actions">
 
                 <button
-                    id="cancelEditButton"
                     class="cancel-button"
+                    id="cancelEdit"
                 >
                     Cancel
                 </button>
 
                 <button
-                    id="saveEditButton"
                     class="save-button"
+                    id="saveEdit"
                 >
                     Save Changes
                 </button>
@@ -957,807 +705,794 @@
     </div>
 
 
-    <script>
+<script>
 
-        /* ====================================================
-           ELEMENTS
-        ==================================================== */
-
-        const messages =
-            document.getElementById("messages");
-
-        const messageInput =
-            document.getElementById("messageInput");
-
-        const sendButton =
-            document.getElementById("sendButton");
-
-        const memoryButton =
-            document.getElementById("memoryButton");
-
-        const backButton =
-            document.getElementById("backButton");
-
-        const chatContainer =
-            document.getElementById("chatContainer");
-
-        const inputArea =
-            document.getElementById("inputArea");
-
-        const memoryDashboard =
-            document.getElementById("memoryDashboard");
-
-        const memoryList =
-            document.getElementById("memoryList");
-
-        const editModal =
-            document.getElementById("editModal");
-
-        const editMemory =
-            document.getElementById("editMemory");
-
-        const editSubject =
-            document.getElementById("editSubject");
-
-        const editCategory =
-            document.getElementById("editCategory");
-
-        const editImportance =
-            document.getElementById("editImportance");
-
-        const importanceValue =
-            document.getElementById("importanceValue");
-
-        const cancelEditButton =
-            document.getElementById("cancelEditButton");
-
-        const saveEditButton =
-            document.getElementById("saveEditButton");
+    let loadedMemories = [];
+    let editingMemoryId = null;
 
 
-        let editingMemoryId = null;
+    // -----------------------------
+    // CHAT
+    // -----------------------------
 
-        let loadedMemories = [];
+    const messageInput =
+        document.getElementById("messageInput");
 
+    const sendButton =
+        document.getElementById("sendButton");
 
-        /* ====================================================
-           ADD MESSAGE
-        ==================================================== */
-
-        function addMessage(
-            text,
-            role
-        ) {
-
-            const message =
-                document.createElement("div");
-
-            message.className =
-                "message " + role;
+    const messages =
+        document.getElementById("messages");
 
 
-            const bubble =
-                document.createElement("div");
+    function addMessage(role, text) {
 
-            bubble.className =
-                "message-bubble";
+        const message =
+            document.createElement("div");
 
-            bubble.textContent =
-                text;
-
-
-            message.appendChild(bubble);
-
-            messages.appendChild(message);
+        message.className =
+            "message " + role;
 
 
-            window.scrollTo(
-                0,
-                document.body.scrollHeight
-            );
+        const bubble =
+            document.createElement("div");
+
+        bubble.className =
+            "bubble";
+
+        bubble.textContent =
+            text;
+
+
+        message.appendChild(bubble);
+
+        messages.appendChild(message);
+
+        messages.scrollTop =
+            messages.scrollHeight;
+    }
+
+
+    async function sendMessage() {
+
+        const message =
+            messageInput.value.trim();
+
+
+        if (!message) {
+            return;
         }
 
 
-        /* ====================================================
-           SEND MESSAGE
-        ==================================================== */
+        addMessage("user", message);
 
-        async function sendMessage() {
+        messageInput.value = "";
 
-            const message =
-                messageInput.value.trim();
+        sendButton.disabled = true;
+
+        sendButton.textContent = "Thinking...";
 
 
-            if (!message) {
-                return;
+        try {
+
+            const response =
+                await fetch("/api", {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: "default_user"
+                    })
+
+                });
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error || "Request failed"
+                );
+
             }
 
 
             addMessage(
-                message,
-                "user"
+                "assistant",
+                data.response || "I couldn't generate a response."
             );
 
 
-            messageInput.value = "";
+        } catch (error) {
 
-            sendButton.disabled = true;
-
-
-            const loading =
-                document.createElement("div");
-
-            loading.className =
-                "message assistant";
-
-            loading.id =
-                "loadingMessage";
-
-
-            const loadingBubble =
-                document.createElement("div");
-
-            loadingBubble.className =
-                "message-bubble";
-
-            loadingBubble.textContent =
-                "Thinking...";
-
-
-            loading.appendChild(
-                loadingBubble
+            addMessage(
+                "assistant",
+                "Sorry, something went wrong: " + error.message
             );
-
-            messages.appendChild(
-                loading
-            );
-
-
-            try {
-
-                const response =
-                    await fetch(
-                        "/api",
-                        {
-                            method: "POST",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body: JSON.stringify({
-                                message: message
-                            })
-                        }
-                    );
-
-
-                const data =
-                    await response.json();
-
-
-                const loadingElement =
-                    document.getElementById(
-                        "loadingMessage"
-                    );
-
-
-                if (loadingElement) {
-                    loadingElement.remove();
-                }
-
-
-                if (!response.ok) {
-
-                    throw new Error(
-                        data.error ||
-                        "Something went wrong."
-                    );
-
-                }
-
-
-                addMessage(
-                    data.reply ||
-                    data.response ||
-                    "I couldn't generate a response.",
-                    "assistant"
-                );
-
-
-            } catch (error) {
-
-                const loadingElement =
-                    document.getElementById(
-                        "loadingMessage"
-                    );
-
-
-                if (loadingElement) {
-                    loadingElement.remove();
-                }
-
-
-                addMessage(
-                    "Error: " +
-                    error.message,
-                    "assistant"
-                );
-
-            }
-
-
-            sendButton.disabled = false;
-
-            messageInput.focus();
 
         }
 
 
-        sendButton.addEventListener(
+        sendButton.disabled = false;
+
+        sendButton.textContent = "Send";
+
+        messageInput.focus();
+
+    }
+
+
+    sendButton.addEventListener(
+        "click",
+        sendMessage
+    );
+
+
+    messageInput.addEventListener(
+        "keydown",
+        function(event) {
+
+            if (event.key === "Enter") {
+
+                event.preventDefault();
+
+                sendMessage();
+
+            }
+
+        }
+    );
+
+
+    // -----------------------------
+    // VIEW SWITCHING
+    // -----------------------------
+
+    const chatView =
+        document.getElementById("chatView");
+
+    const memoryDashboard =
+        document.getElementById("memoryDashboard");
+
+
+    document
+        .getElementById("memoryButton")
+        .addEventListener(
             "click",
-            sendMessage
-        );
+            function() {
 
+                chatView.style.display =
+                    "none";
 
-        /* ====================================================
-           ENTER TO SEND
-        ==================================================== */
+                memoryDashboard.style.display =
+                    "block";
 
-        messageInput.addEventListener(
-            "keydown",
-            function(event) {
-
-                if (
-                    event.key === "Enter" &&
-                    !event.shiftKey
-                ) {
-
-                    event.preventDefault();
-
-                    sendMessage();
-
-                }
+                loadMemories();
 
             }
         );
 
 
-        /* ====================================================
-           ESCAPE HTML
-        ==================================================== */
+    document
+        .getElementById("backButton")
+        .addEventListener(
+            "click",
+            function() {
 
-        function escapeHtml(value) {
+                memoryDashboard.style.display =
+                    "none";
 
-            const div =
-                document.createElement("div");
+                chatView.style.display =
+                    "block";
 
-            div.textContent =
-                value == null
-                    ? ""
-                    : String(value);
-
-            return div.innerHTML;
-        }
+            }
+        );
 
 
-        /* ====================================================
-           LOAD MEMORIES
-        ==================================================== */
+    // -----------------------------
+    // LOAD MEMORIES
+    // -----------------------------
 
-        async function loadMemories() {
+    async function loadMemories() {
+
+        const memoryList =
+            document.getElementById("memoryList");
+
+
+        memoryList.innerHTML =
+            '<div class="loading">Loading memories...</div>';
+
+
+        try {
+
+            const response =
+                await fetch("/api?memories=true");
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error || "Unable to load memories"
+                );
+
+            }
+
+
+            loadedMemories =
+                data.memories || [];
+
+
+            updateStats();
+
+            renderMemories();
+
+
+        } catch (error) {
 
             memoryList.innerHTML =
-                `
-                    <div class="loading">
-                        Loading memories...
-                    </div>
-                `;
+                '<div class="empty-state">Unable to load memories. ' +
+                escapeHtml(error.message) +
+                '</div>';
+
+        }
+
+    }
 
 
-            try {
+    // -----------------------------
+    // UPDATE STATS
+    // -----------------------------
 
-                const response =
-                    await fetch(
-                        "/api?memories=true"
-                    );
+    function updateStats() {
 
-
-                const data =
-                    await response.json();
+        const total =
+            loadedMemories.length;
 
 
-                if (!response.ok) {
+        const projects =
+            loadedMemories.filter(
+                function(memory) {
+                    return memory.category === "project";
+                }
+            ).length;
 
-                    throw new Error(
-                        data.error ||
-                        "Unable to load memories."
-                    );
+
+        const businesses =
+            loadedMemories.filter(
+                function(memory) {
+                    return memory.category === "business";
+                }
+            ).length;
+
+
+        const highImportance =
+            loadedMemories.filter(
+                function(memory) {
+                    return Number(memory.importance || 0) >= 8;
+                }
+            ).length;
+
+
+        document.getElementById(
+            "totalMemories"
+        ).textContent = total;
+
+
+        document.getElementById(
+            "projectMemories"
+        ).textContent = projects;
+
+
+        document.getElementById(
+            "businessMemories"
+        ).textContent = businesses;
+
+
+        document.getElementById(
+            "highImportance"
+        ).textContent = highImportance;
+
+    }
+
+
+    // -----------------------------
+    // SEARCH
+    // -----------------------------
+
+    const memorySearch =
+        document.getElementById("memorySearch");
+
+
+    const clearSearch =
+        document.getElementById("clearSearch");
+
+
+    memorySearch.addEventListener(
+        "input",
+        function() {
+
+            renderMemories();
+
+        }
+    );
+
+
+    clearSearch.addEventListener(
+        "click",
+        function() {
+
+            memorySearch.value = "";
+
+            renderMemories();
+
+            memorySearch.focus();
+
+        }
+    );
+
+
+    function getFilteredMemories() {
+
+        const query =
+            memorySearch.value
+                .trim()
+                .toLowerCase();
+
+
+        if (!query) {
+
+            return loadedMemories;
+
+        }
+
+
+        return loadedMemories.filter(
+            function(memory) {
+
+                const text =
+                    [
+                        memory.memory || "",
+                        memory.subject || "",
+                        memory.category || ""
+                    ]
+                    .join(" ")
+                    .toLowerCase();
+
+
+                return text.includes(query);
+
+            }
+        );
+
+    }
+
+
+    // -----------------------------
+    // RENDER MEMORIES
+    // -----------------------------
+
+    function renderMemories() {
+
+        const memoryList =
+            document.getElementById("memoryList");
+
+
+        const filteredMemories =
+            getFilteredMemories();
+
+
+        const query =
+            memorySearch.value.trim();
+
+
+        if (query) {
+
+            document.getElementById(
+                "searchInfo"
+            ).textContent =
+                "Showing " +
+                filteredMemories.length +
+                " of " +
+                loadedMemories.length +
+                " memories";
+
+        } else {
+
+            document.getElementById(
+                "searchInfo"
+            ).textContent =
+                "Showing all " +
+                loadedMemories.length +
+                " memories";
+
+        }
+
+
+        memoryList.innerHTML = "";
+
+
+        if (filteredMemories.length === 0) {
+
+            const empty =
+                document.createElement("div");
+
+            empty.className =
+                "empty-state";
+
+
+            if (query) {
+
+                empty.textContent =
+                    'No memories found for "' +
+                    query +
+                    '"';
+
+            } else {
+
+                empty.textContent =
+                    "No memories yet.";
+
+            }
+
+
+            memoryList.appendChild(empty);
+
+            return;
+
+        }
+
+
+        filteredMemories.forEach(
+            function(memory) {
+
+                const card =
+                    document.createElement("div");
+
+                card.className =
+                    "memory-card";
+
+
+                const top =
+                    document.createElement("div");
+
+                top.className =
+                    "memory-top";
+
+
+                const text =
+                    document.createElement("div");
+
+                text.className =
+                    "memory-text";
+
+                text.textContent =
+                    memory.memory || "";
+
+
+                const importance =
+                    document.createElement("div");
+
+                importance.className =
+                    "importance";
+
+                importance.textContent =
+                    (memory.importance || 0) +
+                    "/10";
+
+
+                top.appendChild(text);
+
+                top.appendChild(importance);
+
+
+                const meta =
+                    document.createElement("div");
+
+                meta.className =
+                    "memory-meta";
+
+
+                if (memory.subject) {
+
+                    const subjectTag =
+                        document.createElement("span");
+
+                    subjectTag.className =
+                        "tag";
+
+                    subjectTag.textContent =
+                        "📌 " +
+                        memory.subject;
+
+                    meta.appendChild(subjectTag);
 
                 }
 
 
-                loadedMemories =
-                    data.memories || [];
+                if (memory.category) {
 
+                    const categoryTag =
+                        document.createElement("span");
 
-                const memories =
-                    loadedMemories;
+                    categoryTag.className =
+                        "tag";
 
+                    categoryTag.textContent =
+                        memory.category;
 
-                /* =========================
-                   STATS
-                ========================= */
+                    meta.appendChild(categoryTag);
 
-                document.getElementById(
-                    "totalMemories"
-                ).textContent =
-                    memories.length;
-
-
-                document.getElementById(
-                    "projectMemories"
-                ).textContent =
-                    memories.filter(
-                        memory =>
-                            String(
-                                memory.category || ""
-                            ).toLowerCase() ===
-                            "project"
-                    ).length;
-
-
-                document.getElementById(
-                    "businessMemories"
-                ).textContent =
-                    memories.filter(
-                        memory =>
-                            String(
-                                memory.category || ""
-                            ).toLowerCase() ===
-                            "business"
-                    ).length;
-
-
-                document.getElementById(
-                    "importantMemories"
-                ).textContent =
-                    memories.filter(
-                        memory =>
-                            Number(
-                                memory.importance || 0
-                            ) >= 8
-                    ).length;
-
-
-                /* =========================
-                   EMPTY
-                ========================= */
-
-                if (memories.length === 0) {
-
-                    memoryList.innerHTML =
-                        `
-                            <div class="empty-memory">
-
-                                🧠
-
-                                <br><br>
-
-                                Dusra Brain doesn't
-                                remember anything yet.
-
-                                <br><br>
-
-                                Start chatting and
-                                important information
-                                will be remembered.
-
-                            </div>
-                        `;
-
-                    return;
                 }
 
 
-                /* =========================
-                   CARDS
-                ========================= */
+                const date =
+                    document.createElement("div");
 
-                memoryList.innerHTML = "";
+                date.className =
+                    "memory-date";
 
+                if (memory.created_at) {
 
-                memories.forEach(
-                    function(memory) {
-
-                        const card =
-                            document.createElement(
-                                "div"
-                            );
-
-                        card.className =
-                            "memory-card";
-
-
-                        const subject =
-                            document.createElement(
-                                "div"
-                            );
-
-                        subject.className =
-                            "memory-subject";
-
-                        subject.textContent =
-                            memory.subject ||
-                            "General";
-
-
-                        const category =
-                            document.createElement(
-                                "div"
-                            );
-
-                        category.className =
-                            "memory-category";
-
-                        category.textContent =
-                            memory.category ||
-                            "general";
-
-
-                        const memoryText =
-                            document.createElement(
-                                "div"
-                            );
-
-                        memoryText.className =
-                            "memory-text";
-
-                        memoryText.textContent =
-                            memory.memory ||
-                            "";
-
-
-                        const meta =
-                            document.createElement(
-                                "div"
-                            );
-
-                        meta.className =
-                            "memory-meta";
-
-
-                        const importance =
-                            Number(
-                                memory.importance || 0
-                            );
-
-
-                        const importanceSpan =
-                            document.createElement(
-                                "span"
-                            );
-
-                        importanceSpan.className =
-                            "importance";
-
-                        importanceSpan.textContent =
-                            importance + "/10";
-
-
-                        const created =
+                    date.textContent =
+                        "Created: " +
+                        new Date(
                             memory.created_at
-                                ? new Date(
-                                    memory.created_at
-                                ).toLocaleString()
-                                : "";
+                        ).toLocaleString();
+
+                }
 
 
-                        meta.appendChild(
-                            document.createTextNode(
-                                "Importance: "
-                            )
-                        );
+                const actions =
+                    document.createElement("div");
 
-                        meta.appendChild(
-                            importanceSpan
-                        );
-
-                        meta.appendChild(
-                            document.createTextNode(
-                                " • " + created
-                            )
-                        );
+                actions.className =
+                    "memory-actions";
 
 
-                        /* =====================
-                           ACTIONS
-                        ===================== */
+                // EDIT
+                const editButton =
+                    document.createElement("button");
 
-                        const actions =
-                            document.createElement(
-                                "div"
-                            );
+                editButton.className =
+                    "edit-button";
 
-                        actions.className =
-                            "memory-actions";
+                editButton.textContent =
+                    "✏️ Edit";
 
 
-                        const editButton =
-                            document.createElement(
-                                "button"
-                            );
+                editButton.addEventListener(
+                    "click",
+                    function() {
 
-                        editButton.type =
-                            "button";
-
-                        editButton.className =
-                            "edit-memory";
-
-                        editButton.textContent =
-                            "✏️ Edit";
-
-
-                        /*
-                         * IMPORTANT:
-                         * We only pass the numeric ID.
-                         * No memory text is placed inside
-                         * an onclick attribute.
-                         */
-
-                        editButton.addEventListener(
-                            "click",
-                            function() {
-
-                                openEditMemory(
-                                    memory.id
-                                );
-
-                            }
-                        );
-
-
-                        const deleteButton =
-                            document.createElement(
-                                "button"
-                            );
-
-                        deleteButton.type =
-                            "button";
-
-                        deleteButton.className =
-                            "delete-memory";
-
-                        deleteButton.textContent =
-                            "🗑️ Delete";
-
-
-                        deleteButton.addEventListener(
-                            "click",
-                            function() {
-
-                                deleteMemory(
-                                    memory.id
-                                );
-
-                            }
-                        );
-
-
-                        actions.appendChild(
-                            editButton
-                        );
-
-                        actions.appendChild(
-                            deleteButton
-                        );
-
-
-                        card.appendChild(
-                            subject
-                        );
-
-                        card.appendChild(
-                            category
-                        );
-
-                        card.appendChild(
-                            memoryText
-                        );
-
-                        card.appendChild(
-                            meta
-                        );
-
-                        card.appendChild(
-                            actions
-                        );
-
-
-                        memoryList.appendChild(
-                            card
+                        openEditMemory(
+                            memory.id
                         );
 
                     }
                 );
 
-            } catch (error) {
 
-                memoryList.innerHTML =
-                    `
-                        <div class="empty-memory">
+                // DELETE
+                const deleteButton =
+                    document.createElement("button");
 
-                            Unable to load memories.
+                deleteButton.className =
+                    "delete-button";
 
-                            <br><br>
+                deleteButton.textContent =
+                    "🗑️ Delete";
 
-                            ${escapeHtml(
-                                error.message
-                            )}
 
-                        </div>
-                    `;
+                deleteButton.addEventListener(
+                    "click",
+                    function() {
+
+                        deleteMemory(
+                            memory.id
+                        );
+
+                    }
+                );
+
+
+                actions.appendChild(editButton);
+
+                actions.appendChild(deleteButton);
+
+
+                card.appendChild(top);
+
+                card.appendChild(meta);
+
+                card.appendChild(date);
+
+                card.appendChild(actions);
+
+
+                memoryList.appendChild(card);
 
             }
+        );
 
+    }
+
+
+    // -----------------------------
+    // DELETE MEMORY
+    // -----------------------------
+
+    async function deleteMemory(memoryId) {
+
+        const confirmed =
+            confirm(
+                "Are you sure you want to delete this memory?"
+            );
+
+
+        if (!confirmed) {
+            return;
         }
 
 
-        /* ====================================================
-           OPEN EDIT MEMORY
-        ==================================================== */
+        try {
 
-        function openEditMemory(
-            memoryId
-        ) {
-
-            const memory =
-                loadedMemories.find(
-                    item =>
-                        Number(item.id) ===
-                        Number(memoryId)
+            const response =
+                await fetch(
+                    "/api?memory_id=" +
+                    encodeURIComponent(memoryId),
+                    {
+                        method: "DELETE"
+                    }
                 );
 
 
-            if (!memory) {
+            const data =
+                await response.json();
 
-                alert(
-                    "Memory could not be found."
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error || "Delete failed"
                 );
 
-                return;
             }
 
 
-            editingMemoryId =
-                memory.id;
-
-
-            editMemory.value =
-                memory.memory || "";
-
-
-            editSubject.value =
-                memory.subject ||
-                "general";
-
-
-            editCategory.value =
-                memory.category ||
-                "general";
-
-
-            editImportance.value =
-                Number(
-                    memory.importance || 5
+            loadedMemories =
+                loadedMemories.filter(
+                    function(memory) {
+                        return memory.id !== memoryId;
+                    }
                 );
 
 
-            importanceValue.textContent =
-                editImportance.value;
+            updateStats();
+
+            renderMemories();
 
 
-            editModal.style.display =
-                "flex";
+        } catch (error) {
 
-
-            setTimeout(
-                function() {
-
-                    editMemory.focus();
-
-                },
-                100
+            alert(
+                "Unable to delete memory: " +
+                error.message
             );
 
         }
 
-
-        /* ====================================================
-           IMPORTANCE SLIDER
-        ==================================================== */
-
-        editImportance.addEventListener(
-            "input",
-            function() {
-
-                importanceValue.textContent =
-                    editImportance.value;
-
-            }
-        );
+    }
 
 
-        /* ====================================================
-           CLOSE EDIT MODAL
-        ==================================================== */
+    // -----------------------------
+    // EDIT MEMORY
+    // -----------------------------
 
-        function closeEditModal() {
+    function openEditMemory(memoryId) {
 
-            editModal.style.display =
-                "none";
+        const memory =
+            loadedMemories.find(
+                function(item) {
+                    return item.id === memoryId;
+                }
+            );
 
-            editingMemoryId =
-                null;
+
+        if (!memory) {
+
+            alert("Memory not found.");
+
+            return;
 
         }
 
 
-        cancelEditButton.addEventListener(
-            "click",
-            closeEditModal
-        );
+        editingMemoryId =
+            memoryId;
 
 
-        /* ====================================================
-           CLICK OUTSIDE MODAL
-        ==================================================== */
+        document.getElementById(
+            "editMemory"
+        ).value =
+            memory.memory || "";
 
-        editModal.addEventListener(
-            "click",
+
+        document.getElementById(
+            "editSubject"
+        ).value =
+            memory.subject || "general";
+
+
+        document.getElementById(
+            "editCategory"
+        ).value =
+            memory.category || "general";
+
+
+        const importance =
+            Number(
+                memory.importance || 5
+            );
+
+
+        document.getElementById(
+            "editImportance"
+        ).value =
+            importance;
+
+
+        document.getElementById(
+            "importanceValue"
+        ).textContent =
+            importance;
+
+
+        document.getElementById(
+            "editModal"
+        ).style.display =
+            "flex";
+
+    }
+
+
+    // -----------------------------
+    // IMPORTANCE SLIDER
+    // -----------------------------
+
+    document
+        .getElementById("editImportance")
+        .addEventListener(
+            "input",
             function(event) {
 
-                if (
-                    event.target ===
-                    editModal
-                ) {
-
-                    closeEditModal();
-
-                }
+                document.getElementById(
+                    "importanceValue"
+                ).textContent =
+                    event.target.value;
 
             }
         );
 
 
-        /* ====================================================
-           ESCAPE CLOSE
-        ==================================================== */
+    // -----------------------------
+    // SAVE EDIT
+    // -----------------------------
 
-        document.addEventListener(
-            "keydown",
-            function(event) {
-
-                if (
-                    event.key === "Escape" &&
-                    editModal.style.display ===
-                    "flex"
-                ) {
-
-                    closeEditModal();
-
-                }
-
-            }
-        );
-
-
-        /* ====================================================
-           SAVE EDIT
-        ==================================================== */
-
-        saveEditButton.addEventListener(
+    document
+        .getElementById("saveEdit")
+        .addEventListener(
             "click",
             async function() {
 
@@ -1767,37 +1502,52 @@
 
 
                 const memory =
-                    editMemory.value.trim();
+                    document.getElementById(
+                        "editMemory"
+                    ).value.trim();
 
 
                 const subject =
-                    editSubject.value.trim();
+                    document.getElementById(
+                        "editSubject"
+                    ).value.trim();
 
 
                 const category =
-                    editCategory.value;
+                    document.getElementById(
+                        "editCategory"
+                    ).value;
 
 
                 const importance =
                     Number(
-                        editImportance.value
+                        document.getElementById(
+                            "editImportance"
+                        ).value
                     );
 
 
                 if (!memory) {
 
                     alert(
-                        "Memory text cannot be empty."
+                        "Memory cannot be empty."
                     );
 
                     return;
+
                 }
 
 
-                saveEditButton.disabled =
+                const saveButton =
+                    document.getElementById(
+                        "saveEdit"
+                    );
+
+
+                saveButton.disabled =
                     true;
 
-                saveEditButton.textContent =
+                saveButton.textContent =
                     "Saving...";
 
 
@@ -1834,6 +1584,7 @@
                                         importance
 
                                 })
+
                             }
                         );
 
@@ -1842,157 +1593,140 @@
                         await response.json();
 
 
-                    if (
-                        !response.ok ||
-                        !data.updated
-                    ) {
+                    if (!response.ok) {
 
                         throw new Error(
                             data.error ||
-                            "Unable to update memory."
+                            "Update failed"
                         );
+
+                    }
+
+
+                    const index =
+                        loadedMemories.findIndex(
+                            function(item) {
+                                return item.id ===
+                                    editingMemoryId;
+                            }
+                        );
+
+
+                    if (index !== -1) {
+
+                        loadedMemories[index] =
+                            data.memory;
 
                     }
 
 
                     closeEditModal();
 
+                    updateStats();
 
-                    await loadMemories();
+                    renderMemories();
 
 
                 } catch (error) {
 
                     alert(
-                        "Could not update memory:\n\n" +
+                        "Unable to update memory: " +
                         error.message
                     );
 
                 }
 
 
-                saveEditButton.disabled =
+                saveButton.disabled =
                     false;
 
-                saveEditButton.textContent =
+                saveButton.textContent =
                     "Save Changes";
 
             }
         );
 
 
-        /* ====================================================
-           DELETE MEMORY
-        ==================================================== */
+    // -----------------------------
+    // CLOSE EDIT MODAL
+    // -----------------------------
 
-        async function deleteMemory(
-            memoryId
-        ) {
+    function closeEditModal() {
 
-            const confirmed =
-                confirm(
-                    "Are you sure you want to delete this memory?"
-                );
+        document.getElementById(
+            "editModal"
+        ).style.display =
+            "none";
 
 
-            if (!confirmed) {
-                return;
-            }
+        editingMemoryId =
+            null;
+
+    }
 
 
-            try {
-
-                const response =
-                    await fetch(
-                        "/api?memory_id=" +
-                        encodeURIComponent(
-                            memoryId
-                        ),
-                        {
-                            method: "DELETE"
-                        }
-                    );
+    document
+        .getElementById("cancelEdit")
+        .addEventListener(
+            "click",
+            closeEditModal
+        );
 
 
-                const data =
-                    await response.json();
-
+    document
+        .getElementById("editModal")
+        .addEventListener(
+            "click",
+            function(event) {
 
                 if (
-                    !response.ok ||
-                    !data.deleted
+                    event.target ===
+                    document.getElementById("editModal")
                 ) {
 
-                    throw new Error(
-                        data.error ||
-                        "Unable to delete memory."
-                    );
+                    closeEditModal();
 
                 }
 
+            }
+        );
 
-                await loadMemories();
 
+    document.addEventListener(
+        "keydown",
+        function(event) {
 
-            } catch (error) {
+            if (
+                event.key === "Escape" &&
+                document.getElementById(
+                    "editModal"
+                ).style.display === "flex"
+            ) {
 
-                alert(
-                    "Could not delete memory:\n\n" +
-                    error.message
-                );
+                closeEditModal();
 
             }
 
         }
+    );
 
 
-        /* ====================================================
-           OPEN DASHBOARD
-        ==================================================== */
+    // -----------------------------
+    // HTML SAFETY
+    // -----------------------------
 
-        memoryButton.addEventListener(
-            "click",
-            async function() {
+    function escapeHtml(value) {
 
-                chatContainer.style.display =
-                    "none";
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
 
-                inputArea.style.display =
-                    "none";
+    }
 
-                memoryDashboard.style.display =
-                    "block";
-
-
-                await loadMemories();
-
-            }
-        );
-
-
-        /* ====================================================
-           BACK TO CHAT
-        ==================================================== */
-
-        backButton.addEventListener(
-            "click",
-            function() {
-
-                memoryDashboard.style.display =
-                    "none";
-
-                chatContainer.style.display =
-                    "flex";
-
-                inputArea.style.display =
-                    "block";
-
-                messageInput.focus();
-
-            }
-        );
-
-    </script>
+</script>
 
 </body>
 </html>
