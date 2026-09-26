@@ -28,13 +28,33 @@
             border-bottom: 1px solid #e5e5e5;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             padding: 0 24px;
             font-size: 20px;
             font-weight: 600;
         }
 
+        .brand {
+            display: flex;
+            align-items: center;
+        }
+
         .logo {
             margin-right: 10px;
+        }
+
+        .memory-button {
+            width: auto;
+            padding: 9px 14px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #111827;
+            border: 1px solid #e5e7eb;
+            font-size: 14px;
+        }
+
+        .memory-button:hover {
+            background: #e5e7eb;
         }
 
         main {
@@ -83,6 +103,145 @@
             border: 1px solid #e5e5e5;
             margin-right: 80px;
         }
+
+        /* =====================================================
+           MEMORY DASHBOARD
+           ===================================================== */
+
+        .memory-dashboard {
+            max-width: 900px;
+            margin: 0 auto;
+            display: none;
+        }
+
+        .memory-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .memory-header h1 {
+            margin: 0;
+            font-size: 32px;
+        }
+
+        .memory-header p {
+            margin: 6px 0 0;
+            color: #6b7280;
+            font-size: 15px;
+        }
+
+        .back-button {
+            width: auto;
+            padding: 9px 14px;
+            background: white;
+            color: #111827;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+        }
+
+        .memory-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border: 1px solid #e5e5e5;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .stat-number {
+            font-size: 26px;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            margin-top: 5px;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .memory-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .memory-card {
+            background: white;
+            border: 1px solid #e5e5e5;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .memory-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .memory-subject {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .memory-category {
+            background: #f3f4f6;
+            color: #4b5563;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 12px;
+        }
+
+        .memory-text {
+            line-height: 1.55;
+            font-size: 15px;
+        }
+
+        .memory-meta {
+            margin-top: 12px;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+
+        .importance {
+            color: #111827;
+            font-weight: 600;
+        }
+
+        .memory-empty {
+            background: white;
+            border: 1px solid #e5e5e5;
+            border-radius: 14px;
+            padding: 30px;
+            text-align: center;
+            color: #6b7280;
+        }
+
+        .memory-loading {
+            text-align: center;
+            color: #6b7280;
+            padding: 40px;
+        }
+
+        .memory-error {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        /* =====================================================
+           CHAT INPUT
+           ===================================================== */
 
         .input-area {
             position: fixed;
@@ -146,6 +305,10 @@
 
         @media (max-width: 700px) {
 
+            header {
+                padding: 0 15px;
+            }
+
             .welcome h1 {
                 font-size: 32px;
             }
@@ -165,6 +328,24 @@
             button {
                 width: 75px;
             }
+
+            .memory-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .memory-header {
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .memory-header h1 {
+                font-size: 26px;
+            }
+
+            .memory-button {
+                padding: 8px 10px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
@@ -172,22 +353,106 @@
 <body>
 
 <header>
-    <span class="logo">🧠</span>
-    Dusra Brain
+
+    <div class="brand">
+        <span class="logo">🧠</span>
+        Dusra Brain
+    </div>
+
+    <button
+        class="memory-button"
+        id="memoryButton"
+    >
+        🧠 My Memory
+    </button>
+
 </header>
+
 
 <main id="chat">
 
+    <!-- =====================================================
+         CHAT
+         ===================================================== -->
+
     <div class="welcome" id="welcome">
+
         <h1>Dusra Brain</h1>
-        <p>Your personal AI brain, powered by memory.</p>
+
+        <p>
+            Your personal AI brain, powered by memory.
+        </p>
+
     </div>
 
-    <div class="messages" id="messages"></div>
+
+    <div
+        class="messages"
+        id="messages"
+    ></div>
+
+
+    <!-- =====================================================
+         MEMORY DASHBOARD
+         ===================================================== -->
+
+    <div
+        class="memory-dashboard"
+        id="memoryDashboard"
+    >
+
+        <div class="memory-header">
+
+            <div>
+
+                <h1>🧠 My Memory</h1>
+
+                <p>
+                    Everything Dusra Brain currently remembers about you.
+                </p>
+
+            </div>
+
+            <button
+                class="back-button"
+                id="backButton"
+            >
+                ← Chat
+            </button>
+
+        </div>
+
+
+        <div
+            class="memory-stats"
+            id="memoryStats"
+        ></div>
+
+
+        <div
+            class="memory-list"
+            id="memoryList"
+        >
+
+            <div class="memory-loading">
+                Loading memories...
+            </div>
+
+        </div>
+
+    </div>
 
 </main>
 
-<div class="input-area">
+
+<!-- =========================================================
+     CHAT INPUT
+     ========================================================= -->
+
+<div
+    class="input-area"
+    id="inputArea"
+>
 
     <div class="input-box">
 
@@ -205,7 +470,12 @@
 
 </div>
 
+
 <script>
+
+/* =========================================================
+   ELEMENTS
+   ========================================================= */
 
 const messageInput =
     document.getElementById("message");
@@ -219,6 +489,28 @@ const messages =
 const welcome =
     document.getElementById("welcome");
 
+const memoryButton =
+    document.getElementById("memoryButton");
+
+const memoryDashboard =
+    document.getElementById("memoryDashboard");
+
+const memoryList =
+    document.getElementById("memoryList");
+
+const memoryStats =
+    document.getElementById("memoryStats");
+
+const backButton =
+    document.getElementById("backButton");
+
+const inputArea =
+    document.getElementById("inputArea");
+
+
+/* =========================================================
+   ADD CHAT MESSAGE
+   ========================================================= */
 
 function addMessage(text, type) {
 
@@ -244,6 +536,10 @@ function addMessage(text, type) {
 }
 
 
+/* =========================================================
+   SEND MESSAGE
+   ========================================================= */
+
 async function sendMessage() {
 
     const message =
@@ -259,6 +555,8 @@ async function sendMessage() {
     );
 
     messageInput.value = "";
+
+    messageInput.style.height = "auto";
 
     sendButton.disabled = true;
 
@@ -357,6 +655,7 @@ async function sendMessage() {
 
 
         addMessage(
+            data.reply ||
             data.response ||
             "No response received.",
             "assistant"
@@ -379,15 +678,370 @@ async function sendMessage() {
         sendButton.disabled = false;
 
         messageInput.focus();
+
     }
+
 }
 
+
+/* =========================================================
+   LOAD MEMORY DASHBOARD
+   ========================================================= */
+
+async function loadMemories() {
+
+    memoryList.innerHTML =
+        `
+        <div class="memory-loading">
+            Loading memories...
+        </div>
+        `;
+
+    memoryStats.innerHTML = "";
+
+    try {
+
+        const response =
+            await fetch(
+                "/api?memories=true"
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                "Unable to load memories."
+            );
+        }
+
+
+        const memories =
+            data.memories || [];
+
+
+        /* =================================================
+           STATISTICS
+           ================================================= */
+
+        const total =
+            memories.length;
+
+
+        const projects =
+            memories.filter(
+                memory =>
+                    memory.category === "project"
+            ).length;
+
+
+        const businesses =
+            memories.filter(
+                memory =>
+                    memory.category === "business"
+            ).length;
+
+
+        const important =
+            memories.filter(
+                memory =>
+                    Number(memory.importance) >= 8
+            ).length;
+
+
+        memoryStats.innerHTML = `
+
+            <div class="stat-card">
+
+                <div class="stat-number">
+                    ${total}
+                </div>
+
+                <div class="stat-label">
+                    Total Memories
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-number">
+                    ${projects}
+                </div>
+
+                <div class="stat-label">
+                    Projects
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-number">
+                    ${businesses}
+                </div>
+
+                <div class="stat-label">
+                    Businesses
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-number">
+                    ${important}
+                </div>
+
+                <div class="stat-label">
+                    High Importance
+                </div>
+
+            </div>
+
+        `;
+
+
+        /* =================================================
+           NO MEMORIES
+           ================================================= */
+
+        if (memories.length === 0) {
+
+            memoryList.innerHTML = `
+
+                <div class="memory-empty">
+
+                    🧠 Dusra Brain doesn't have
+                    any long-term memories yet.
+
+                </div>
+
+            `;
+
+            return;
+        }
+
+
+        /* =================================================
+           MEMORY CARDS
+           ================================================= */
+
+        memoryList.innerHTML = "";
+
+
+        memories.forEach(
+            memory => {
+
+                const card =
+                    document.createElement(
+                        "div"
+                    );
+
+                card.className =
+                    "memory-card";
+
+
+                const created =
+                    memory.created_at
+                    ? new Date(
+                        memory.created_at
+                    ).toLocaleString()
+                    : "";
+
+
+                card.innerHTML = `
+
+                    <div class="memory-top">
+
+                        <div class="memory-subject">
+
+                            🧠 ${
+                                escapeHtml(
+                                    memory.subject ||
+                                    "General"
+                                )
+                            }
+
+                        </div>
+
+
+                        <div class="memory-category">
+
+                            ${
+                                escapeHtml(
+                                    memory.category ||
+                                    "general"
+                                )
+                            }
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="memory-text">
+
+                        ${
+                            escapeHtml(
+                                memory.memory
+                            )
+                        }
+
+                    </div>
+
+
+                    <div class="memory-meta">
+
+                        Importance:
+                        <span class="importance">
+                            ${
+                                Number(
+                                    memory.importance ||
+                                    0
+                                )
+                            }/10
+                        </span>
+
+                        &nbsp; • &nbsp;
+
+                        ${
+                            escapeHtml(
+                                created
+                            )
+                        }
+
+                    </div>
+
+                `;
+
+
+                memoryList.appendChild(
+                    card
+                );
+
+            }
+        );
+
+
+    } catch (error) {
+
+        memoryList.innerHTML = `
+
+            <div class="memory-error">
+
+                Unable to load memories.
+
+                <br><br>
+
+                ${escapeHtml(
+                    error.message
+                )}
+
+            </div>
+
+        `;
+
+    }
+
+}
+
+
+/* =========================================================
+   HTML ESCAPE
+   ========================================================= */
+
+function escapeHtml(value) {
+
+    const div =
+        document.createElement("div");
+
+    div.textContent =
+        value == null
+            ? ""
+            : String(value);
+
+    return div.innerHTML;
+
+}
+
+
+/* =========================================================
+   OPEN MEMORY DASHBOARD
+   ========================================================= */
+
+memoryButton.addEventListener(
+    "click",
+    function() {
+
+        welcome.style.display = "none";
+
+        messages.style.display = "none";
+
+        memoryDashboard.style.display =
+            "block";
+
+        inputArea.style.display =
+            "none";
+
+        loadMemories();
+
+    }
+);
+
+
+/* =========================================================
+   BACK TO CHAT
+   ========================================================= */
+
+backButton.addEventListener(
+    "click",
+    function() {
+
+        memoryDashboard.style.display =
+            "none";
+
+        messages.style.display =
+            "block";
+
+        inputArea.style.display =
+            "block";
+
+        if (
+            messages.children.length === 0
+        ) {
+
+            welcome.style.display =
+                "block";
+
+        }
+
+        messageInput.focus();
+
+    }
+);
+
+
+/* =========================================================
+   SEND BUTTON
+   ========================================================= */
 
 sendButton.addEventListener(
     "click",
     sendMessage
 );
 
+
+/* =========================================================
+   ENTER TO SEND
+   ========================================================= */
 
 messageInput.addEventListener(
     "keydown",
@@ -401,17 +1055,23 @@ messageInput.addEventListener(
             event.preventDefault();
 
             sendMessage();
+
         }
 
     }
 );
 
 
+/* =========================================================
+   AUTO RESIZE TEXTAREA
+   ========================================================= */
+
 messageInput.addEventListener(
     "input",
     function() {
 
-        this.style.height = "auto";
+        this.style.height =
+            "auto";
 
         this.style.height =
             Math.min(
