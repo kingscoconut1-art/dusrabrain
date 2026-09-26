@@ -35,7 +35,12 @@ class handler(BaseHTTPRequestHandler):
             or os.environ.get("DATABASE_URL")
         )
 
-    def groq_request(self, api_key, messages, max_tokens=1000):
+    def groq_request(
+        self,
+        api_key,
+        messages,
+        max_tokens=1000
+    ):
         url = (
             "https://api.groq.com/openai/v1/"
             "chat/completions"
@@ -104,6 +109,7 @@ class handler(BaseHTTPRequestHandler):
         ).strip()
 
     def get_memories(self, user_id):
+
         database_url = self.get_database_url()
 
         if not database_url:
@@ -120,10 +126,15 @@ class handler(BaseHTTPRequestHandler):
 
                     cursor.execute(
                         """
-                        SELECT memory, category, importance
+                        SELECT
+                            memory,
+                            category,
+                            importance
                         FROM memories
                         WHERE user_id = %s
-                        ORDER BY importance DESC, created_at DESC
+                        ORDER BY
+                            importance DESC,
+                            created_at DESC
                         LIMIT 20
                         """,
                         (user_id,)
@@ -150,6 +161,7 @@ class handler(BaseHTTPRequestHandler):
         category,
         importance
     ):
+
         database_url = self.get_database_url()
 
         if not database_url:
@@ -173,7 +185,13 @@ class handler(BaseHTTPRequestHandler):
                             category,
                             importance
                         )
-                        VALUES (%s, %s, %s, %s)
+                        VALUES
+                        (
+                            %s,
+                            %s,
+                            %s,
+                            %s
+                        )
                         """,
                         (
                             user_id,
@@ -191,6 +209,7 @@ class handler(BaseHTTPRequestHandler):
             return False
 
     def clean_json_response(self, text):
+
         if not text:
             return ""
 
@@ -222,6 +241,7 @@ class handler(BaseHTTPRequestHandler):
         api_key,
         message
     ):
+
         analysis_prompt = """
 You are the memory extraction system for Dusra Brain.
 
@@ -251,7 +271,6 @@ Do NOT remember:
 - One-time calculations
 - General knowledge questions
 - Questions about information that is not about the user
-- Assistant instructions that are not personal to the user
 
 Return ONLY valid JSON.
 
@@ -260,7 +279,7 @@ If the message should be remembered:
 {
   "should_remember": true,
   "memory": "A clean factual statement describing what should be remembered.",
-  "category": "personal",
+  "category": "project",
   "importance": 8
 }
 
@@ -347,10 +366,13 @@ User message:
             )
 
             try:
+
                 importance = int(
                     importance
                 )
+
             except Exception:
+
                 importance = 5
 
             importance = max(
@@ -375,37 +397,48 @@ User message:
             }
 
             if category not in allowed_categories:
+
                 category = "general"
 
             if not should_remember:
+
                 return {
                     "should_remember": False,
                     "memory": "",
                     "category": "general",
-                    "importance": 1
+                    "importance": 1,
+                    "error": None
                 }
 
             if not memory:
+
                 return {
                     "should_remember": False,
                     "memory": "",
                     "category": "general",
-                    "importance": 1
+                    "importance": 1,
+                    "error": (
+                        "Memory extraction returned "
+                        "no memory text."
+                    )
                 }
 
             return {
                 "should_remember": True,
                 "memory": memory,
                 "category": category,
-                "importance": importance
+                "importance": importance,
+                "error": None
             }
 
-        except Exception:
+        except Exception as e:
+
             return {
                 "should_remember": False,
                 "memory": "",
                 "category": "general",
-                "importance": 1
+                "importance": 1,
+                "error": str(e)
             }
 
     def do_GET(self):
@@ -643,6 +676,11 @@ User message:
                         memory_analysis[
                             "importance"
                         ]
+                    ),
+                    "memory_error": (
+                        memory_analysis.get(
+                            "error"
+                        )
                     ),
                     "memories_used": len(
                         memories
