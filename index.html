@@ -2,11 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Dusra Brain</title>
 
@@ -25,7 +21,6 @@
                 Roboto,
                 Arial,
                 sans-serif;
-
             background: #f7f7f8;
             color: #202123;
         }
@@ -36,9 +31,7 @@
 
         header {
             height: 64px;
-
             background: #ffffff;
-
             border-bottom: 1px solid #e5e5e5;
 
             display: flex;
@@ -49,7 +42,6 @@
 
             position: sticky;
             top: 0;
-
             z-index: 20;
         }
 
@@ -61,19 +53,14 @@
 
         .memory-button {
             border: 1px solid #d1d5db;
-
             background: #ffffff;
-
             color: #111827;
 
             padding: 9px 14px;
-
             border-radius: 10px;
 
             cursor: pointer;
-
             font-size: 14px;
-
             font-weight: 600;
         }
 
@@ -81,34 +68,27 @@
             background: #f3f4f6;
         }
 
-
         /* =========================
            CHAT
         ========================= */
 
         .chat-container {
             max-width: 900px;
-
             margin: 0 auto;
 
-            min-height:
-                calc(100vh - 64px);
+            min-height: calc(100vh - 64px);
 
             display: flex;
-
             flex-direction: column;
         }
 
         .messages {
             flex: 1;
-
-            padding:
-                30px 20px 130px;
+            padding: 30px 20px 130px;
         }
 
         .message {
             margin-bottom: 22px;
-
             line-height: 1.6;
         }
 
@@ -118,34 +98,25 @@
 
         .message-bubble {
             display: inline-block;
-
             max-width: 80%;
 
             padding: 12px 16px;
-
             border-radius: 14px;
 
             white-space: pre-wrap;
-
             word-wrap: break-word;
         }
 
-        .message.user
-        .message-bubble {
+        .message.user .message-bubble {
             background: #111827;
-
             color: #ffffff;
         }
 
-        .message.assistant
-        .message-bubble {
+        .message.assistant .message-bubble {
             background: #ffffff;
-
             border: 1px solid #e5e7eb;
-
             color: #202123;
         }
-
 
         /* =========================
            INPUT
@@ -153,36 +124,22 @@
 
         .input-area {
             position: fixed;
-
             bottom: 0;
-
             left: 0;
-
             right: 0;
 
-            background:
-                rgba(
-                    247,
-                    247,
-                    248,
-                    0.96
-                );
-
-            border-top:
-                1px solid #e5e5e5;
+            background: rgba(247, 247, 248, 0.96);
+            border-top: 1px solid #e5e5e5;
 
             padding: 14px 20px;
-
             z-index: 15;
         }
 
         .input-wrapper {
             max-width: 900px;
-
             margin: 0 auto;
 
             display: flex;
-
             gap: 10px;
         }
 
@@ -192,22 +149,17 @@
             resize: none;
 
             min-height: 50px;
-
             max-height: 160px;
 
-            border:
-                1px solid #d1d5db;
-
+            border: 1px solid #d1d5db;
             border-radius: 12px;
 
             padding: 14px;
 
             font-family: inherit;
-
             font-size: 15px;
 
             outline: none;
-
             background: #ffffff;
         }
 
@@ -219,15 +171,12 @@
             width: 90px;
 
             border: none;
-
             border-radius: 12px;
 
             background: #111827;
-
             color: #ffffff;
 
             font-size: 14px;
-
             font-weight: 600;
 
             cursor: pointer;
@@ -239,10 +188,8 @@
 
         .send-button:disabled {
             opacity: 0.5;
-
             cursor: not-allowed;
         }
-
 
         /* =========================
            DASHBOARD
@@ -252,7 +199,6 @@
             display: none;
 
             max-width: 1100px;
-
             margin: 0 auto;
 
             padding: 30px 20px 60px;
@@ -260,9 +206,7 @@
 
         .dashboard-header {
             display: flex;
-
             align-items: center;
-
             justify-content: space-between;
 
             margin-bottom: 25px;
@@ -272,24 +216,19 @@
             margin: 0;
 
             font-size: 28px;
-
             font-weight: 700;
         }
 
         .back-button {
-            border:
-                1px solid #d1d5db;
-
+            border: 1px solid #d1d5db;
             background: #ffffff;
 
             padding: 9px 14px;
-
             border-radius: 10px;
 
             cursor: pointer;
 
             font-size: 14px;
-
             font-weight: 600;
         }
 
@@ -297,28 +236,22 @@
             background: #f3f4f6;
         }
 
-
         /* =========================
            STATS
         ========================= */
 
         .memory-stats {
             display: grid;
-
-            grid-template-columns:
-                repeat(4, 1fr);
+            grid-template-columns: repeat(4, 1fr);
 
             gap: 15px;
-
             margin-bottom: 30px;
         }
 
         .stat-card {
             background: #ffffff;
 
-            border:
-                1px solid #e5e7eb;
-
+            border: 1px solid #e5e7eb;
             border-radius: 14px;
 
             padding: 20px;
@@ -326,7 +259,6 @@
 
         .stat-label {
             color: #6b7280;
-
             font-size: 13px;
 
             margin-bottom: 7px;
@@ -334,10 +266,8 @@
 
         .stat-value {
             font-size: 27px;
-
             font-weight: 700;
         }
-
 
         /* =========================
            MEMORY LIST
@@ -345,9 +275,7 @@
 
         .memory-list {
             display: grid;
-
-            grid-template-columns:
-                repeat(2, 1fr);
+            grid-template-columns: repeat(2, 1fr);
 
             gap: 18px;
         }
@@ -355,9 +283,7 @@
         .memory-card {
             background: #ffffff;
 
-            border:
-                1px solid #e5e7eb;
-
+            border: 1px solid #e5e7eb;
             border-radius: 15px;
 
             padding: 20px;
@@ -369,7 +295,6 @@
 
         .memory-subject {
             font-size: 17px;
-
             font-weight: 700;
 
             margin-bottom: 5px;
@@ -379,7 +304,6 @@
             display: inline-block;
 
             font-size: 12px;
-
             color: #4b5563;
 
             background: #f3f4f6;
@@ -403,24 +327,20 @@
 
         .memory-meta {
             font-size: 12px;
-
             color: #6b7280;
         }
 
         .importance {
             font-weight: 700;
-
             color: #111827;
         }
 
-
         /* =========================
-           MEMORY ACTIONS
+           ACTION BUTTONS
         ========================= */
 
         .memory-actions {
             display: flex;
-
             gap: 8px;
 
             margin-top: 15px;
@@ -433,7 +353,6 @@
             border-radius: 9px;
 
             font-size: 13px;
-
             font-weight: 600;
 
             cursor: pointer;
@@ -441,11 +360,9 @@
 
         .edit-memory {
             background: #ffffff;
-
             color: #111827;
 
-            border:
-                1px solid #d1d5db;
+            border: 1px solid #d1d5db;
         }
 
         .edit-memory:hover {
@@ -454,20 +371,17 @@
 
         .delete-memory {
             background: #ffffff;
-
             color: #b91c1c;
 
-            border:
-                1px solid #fecaca;
+            border: 1px solid #fecaca;
         }
 
         .delete-memory:hover {
             background: #fef2f2;
         }
 
-
         /* =========================
-           EMPTY
+           EMPTY / LOADING
         ========================= */
 
         .empty-memory {
@@ -475,8 +389,7 @@
 
             background: #ffffff;
 
-            border:
-                1px solid #e5e7eb;
+            border: 1px solid #e5e7eb;
 
             border-radius: 15px;
 
@@ -495,7 +408,6 @@
             text-align: center;
         }
 
-
         /* =========================
            EDIT MODAL
         ========================= */
@@ -504,21 +416,13 @@
             display: none;
 
             position: fixed;
-
             inset: 0;
 
-            background:
-                rgba(
-                    0,
-                    0,
-                    0,
-                    0.45
-                );
+            background: rgba(0, 0, 0, 0.45);
 
             z-index: 100;
 
             align-items: center;
-
             justify-content: center;
 
             padding: 20px;
@@ -526,11 +430,9 @@
 
         .edit-modal-box {
             width: 100%;
-
             max-width: 600px;
 
             max-height: 90vh;
-
             overflow-y: auto;
 
             background: #ffffff;
@@ -541,19 +443,13 @@
 
             box-shadow:
                 0 20px 60px
-                rgba(
-                    0,
-                    0,
-                    0,
-                    0.2
-                );
+                rgba(0, 0, 0, 0.2);
         }
 
         .edit-modal-title {
             margin: 0 0 20px;
 
             font-size: 22px;
-
             font-weight: 700;
         }
 
@@ -565,7 +461,6 @@
             display: block;
 
             font-size: 13px;
-
             font-weight: 600;
 
             color: #374151;
@@ -578,15 +473,13 @@
         .form-group select {
             width: 100%;
 
-            border:
-                1px solid #d1d5db;
+            border: 1px solid #d1d5db;
 
             border-radius: 10px;
 
             padding: 11px 12px;
 
             font-family: inherit;
-
             font-size: 14px;
 
             outline: none;
@@ -596,7 +489,6 @@
 
         .form-group textarea {
             min-height: 110px;
-
             resize: vertical;
         }
 
@@ -608,9 +500,7 @@
 
         .importance-row {
             display: flex;
-
             align-items: center;
-
             gap: 12px;
         }
 
@@ -622,7 +512,6 @@
             width: 35px;
 
             font-weight: 700;
-
             text-align: center;
         }
 
@@ -645,17 +534,14 @@
             cursor: pointer;
 
             font-size: 14px;
-
             font-weight: 600;
         }
 
         .cancel-button {
             background: #ffffff;
-
             color: #374151;
 
-            border:
-                1px solid #d1d5db;
+            border: 1px solid #d1d5db;
         }
 
         .cancel-button:hover {
@@ -664,7 +550,6 @@
 
         .save-button {
             background: #111827;
-
             color: #ffffff;
 
             border: none;
@@ -676,10 +561,8 @@
 
         .save-button:disabled {
             opacity: 0.5;
-
             cursor: not-allowed;
         }
-
 
         /* =========================
            MOBILE
@@ -697,13 +580,11 @@
 
             .memory-button {
                 padding: 8px 10px;
-
                 font-size: 13px;
             }
 
             .memory-stats {
-                grid-template-columns:
-                    repeat(2, 1fr);
+                grid-template-columns: repeat(2, 1fr);
             }
 
             .memory-list {
@@ -729,7 +610,6 @@
             .edit-modal-box {
                 padding: 20px;
             }
-
         }
 
     </style>
@@ -739,9 +619,9 @@
 <body>
 
 
-    <!-- ======================================================
+    <!-- =====================================================
          HEADER
-    ======================================================= -->
+    ====================================================== -->
 
     <header>
 
@@ -759,9 +639,9 @@
     </header>
 
 
-    <!-- ======================================================
+    <!-- =====================================================
          CHAT
-    ======================================================= -->
+    ====================================================== -->
 
     <main
         id="chatContainer"
@@ -793,9 +673,9 @@
     </main>
 
 
-    <!-- ======================================================
-         INPUT
-    ======================================================= -->
+    <!-- =====================================================
+         CHAT INPUT
+    ====================================================== -->
 
     <div
         id="inputArea"
@@ -822,9 +702,9 @@
     </div>
 
 
-    <!-- ======================================================
+    <!-- =====================================================
          MEMORY DASHBOARD
-    ======================================================= -->
+    ====================================================== -->
 
     <section
         id="memoryDashboard"
@@ -845,8 +725,6 @@
 
         </div>
 
-
-        <!-- STATS -->
 
         <div class="memory-stats">
 
@@ -916,8 +794,6 @@
         </div>
 
 
-        <!-- MEMORY LIST -->
-
         <div
             id="memoryList"
             class="memory-list"
@@ -932,9 +808,9 @@
     </section>
 
 
-    <!-- ======================================================
+    <!-- =====================================================
          EDIT MEMORY MODAL
-    ======================================================= -->
+    ====================================================== -->
 
     <div
         id="editModal"
@@ -944,14 +820,10 @@
             class="edit-modal-box"
         >
 
-            <h2
-                class="edit-modal-title"
-            >
+            <h2 class="edit-modal-title">
                 ✏️ Edit Memory
             </h2>
 
-
-            <!-- MEMORY -->
 
             <div class="form-group">
 
@@ -967,8 +839,6 @@
             </div>
 
 
-            <!-- SUBJECT -->
-
             <div class="form-group">
 
                 <label for="editSubject">
@@ -983,8 +853,6 @@
 
             </div>
 
-
-            <!-- CATEGORY -->
 
             <div class="form-group">
 
@@ -1041,17 +909,13 @@
             </div>
 
 
-            <!-- IMPORTANCE -->
-
             <div class="form-group">
 
                 <label for="editImportance">
                     Importance
                 </label>
 
-                <div
-                    class="importance-row"
-                >
+                <div class="importance-row">
 
                     <input
                         id="editImportance"
@@ -1061,9 +925,7 @@
                         value="5"
                     >
 
-                    <span
-                        id="importanceValue"
-                    >
+                    <span id="importanceValue">
                         5
                     </span>
 
@@ -1071,8 +933,6 @@
 
             </div>
 
-
-            <!-- ACTIONS -->
 
             <div class="modal-actions">
 
@@ -1104,96 +964,64 @@
         ==================================================== */
 
         const messages =
-            document.getElementById(
-                "messages"
-            );
+            document.getElementById("messages");
 
         const messageInput =
-            document.getElementById(
-                "messageInput"
-            );
+            document.getElementById("messageInput");
 
         const sendButton =
-            document.getElementById(
-                "sendButton"
-            );
+            document.getElementById("sendButton");
 
         const memoryButton =
-            document.getElementById(
-                "memoryButton"
-            );
+            document.getElementById("memoryButton");
 
         const backButton =
-            document.getElementById(
-                "backButton"
-            );
+            document.getElementById("backButton");
 
         const chatContainer =
-            document.getElementById(
-                "chatContainer"
-            );
+            document.getElementById("chatContainer");
 
         const inputArea =
-            document.getElementById(
-                "inputArea"
-            );
+            document.getElementById("inputArea");
 
         const memoryDashboard =
-            document.getElementById(
-                "memoryDashboard"
-            );
+            document.getElementById("memoryDashboard");
 
         const memoryList =
-            document.getElementById(
-                "memoryList"
-            );
+            document.getElementById("memoryList");
 
         const editModal =
-            document.getElementById(
-                "editModal"
-            );
+            document.getElementById("editModal");
 
         const editMemory =
-            document.getElementById(
-                "editMemory"
-            );
+            document.getElementById("editMemory");
 
         const editSubject =
-            document.getElementById(
-                "editSubject"
-            );
+            document.getElementById("editSubject");
 
         const editCategory =
-            document.getElementById(
-                "editCategory"
-            );
+            document.getElementById("editCategory");
 
         const editImportance =
-            document.getElementById(
-                "editImportance"
-            );
+            document.getElementById("editImportance");
 
         const importanceValue =
-            document.getElementById(
-                "importanceValue"
-            );
+            document.getElementById("importanceValue");
 
         const cancelEditButton =
-            document.getElementById(
-                "cancelEditButton"
-            );
+            document.getElementById("cancelEditButton");
 
         const saveEditButton =
-            document.getElementById(
-                "saveEditButton"
-            );
+            document.getElementById("saveEditButton");
 
 
         let editingMemoryId = null;
 
+        let loadedMemories = [];
+
 
         /* ====================================================
-           ADD CHAT MESSAGE
+           ADD MESSAGE
         ==================================================== */
 
         function addMessage(
@@ -1202,18 +1030,14 @@
         ) {
 
             const message =
-                document.createElement(
-                    "div"
-                );
+                document.createElement("div");
 
             message.className =
                 "message " + role;
 
 
             const bubble =
-                document.createElement(
-                    "div"
-                );
+                document.createElement("div");
 
             bubble.className =
                 "message-bubble";
@@ -1222,20 +1046,15 @@
                 text;
 
 
-            message.appendChild(
-                bubble
-            );
+            message.appendChild(bubble);
 
-            messages.appendChild(
-                message
-            );
+            messages.appendChild(message);
 
 
             window.scrollTo(
                 0,
                 document.body.scrollHeight
             );
-
         }
 
 
@@ -1266,9 +1085,7 @@
 
 
             const loading =
-                document.createElement(
-                    "div"
-                );
+                document.createElement("div");
 
             loading.className =
                 "message assistant";
@@ -1278,9 +1095,7 @@
 
 
             const loadingBubble =
-                document.createElement(
-                    "div"
-                );
+                document.createElement("div");
 
             loadingBubble.className =
                 "message-bubble";
@@ -1373,17 +1188,12 @@
             }
 
 
-            sendButton.disabled =
-                false;
+            sendButton.disabled = false;
 
             messageInput.focus();
 
         }
 
-
-        /* ====================================================
-           SEND BUTTON
-        ==================================================== */
 
         sendButton.addEventListener(
             "click",
@@ -1418,14 +1228,10 @@
            ESCAPE HTML
         ==================================================== */
 
-        function escapeHtml(
-            value
-        ) {
+        function escapeHtml(value) {
 
             const div =
-                document.createElement(
-                    "div"
-                );
+                document.createElement("div");
 
             div.textContent =
                 value == null
@@ -1433,7 +1239,6 @@
                     : String(value);
 
             return div.innerHTML;
-
         }
 
 
@@ -1473,81 +1278,68 @@
                 }
 
 
-                const memories =
+                loadedMemories =
                     data.memories || [];
 
 
-                /* STATS */
-
-                const total =
-                    memories.length;
+                const memories =
+                    loadedMemories;
 
 
-                const projects =
-                    memories.filter(
-                        memory =>
-                            String(
-                                memory.category ||
-                                ""
-                            ).toLowerCase()
-                            === "project"
-                    ).length;
-
-
-                const businesses =
-                    memories.filter(
-                        memory =>
-                            String(
-                                memory.category ||
-                                ""
-                            ).toLowerCase()
-                            === "business"
-                    ).length;
-
-
-                const important =
-                    memories.filter(
-                        memory =>
-                            Number(
-                                memory.importance ||
-                                0
-                            ) >= 8
-                    ).length;
-
+                /* =========================
+                   STATS
+                ========================= */
 
                 document.getElementById(
                     "totalMemories"
                 ).textContent =
-                    total;
+                    memories.length;
 
 
                 document.getElementById(
                     "projectMemories"
                 ).textContent =
-                    projects;
+                    memories.filter(
+                        memory =>
+                            String(
+                                memory.category || ""
+                            ).toLowerCase() ===
+                            "project"
+                    ).length;
 
 
                 document.getElementById(
                     "businessMemories"
                 ).textContent =
-                    businesses;
+                    memories.filter(
+                        memory =>
+                            String(
+                                memory.category || ""
+                            ).toLowerCase() ===
+                            "business"
+                    ).length;
 
 
                 document.getElementById(
                     "importantMemories"
                 ).textContent =
-                    important;
+                    memories.filter(
+                        memory =>
+                            Number(
+                                memory.importance || 0
+                            ) >= 8
+                    ).length;
 
 
-                /* EMPTY */
+                /* =========================
+                   EMPTY
+                ========================= */
 
                 if (memories.length === 0) {
 
                     memoryList.innerHTML =
                         `
-                            <div
-                                class="empty-memory"
-                            >
+                            <div class="empty-memory">
 
                                 🧠
 
@@ -1566,142 +1358,235 @@
                         `;
 
                     return;
-
                 }
 
 
-                /* MEMORY CARDS */
+                /* =========================
+                   CARDS
+                ========================= */
 
-                memoryList.innerHTML =
-                    memories
-                        .map(
-                            memory => {
+                memoryList.innerHTML = "";
 
-                                const created =
+
+                memories.forEach(
+                    function(memory) {
+
+                        const card =
+                            document.createElement(
+                                "div"
+                            );
+
+                        card.className =
+                            "memory-card";
+
+
+                        const subject =
+                            document.createElement(
+                                "div"
+                            );
+
+                        subject.className =
+                            "memory-subject";
+
+                        subject.textContent =
+                            memory.subject ||
+                            "General";
+
+
+                        const category =
+                            document.createElement(
+                                "div"
+                            );
+
+                        category.className =
+                            "memory-category";
+
+                        category.textContent =
+                            memory.category ||
+                            "general";
+
+
+                        const memoryText =
+                            document.createElement(
+                                "div"
+                            );
+
+                        memoryText.className =
+                            "memory-text";
+
+                        memoryText.textContent =
+                            memory.memory ||
+                            "";
+
+
+                        const meta =
+                            document.createElement(
+                                "div"
+                            );
+
+                        meta.className =
+                            "memory-meta";
+
+
+                        const importance =
+                            Number(
+                                memory.importance || 0
+                            );
+
+
+                        const importanceSpan =
+                            document.createElement(
+                                "span"
+                            );
+
+                        importanceSpan.className =
+                            "importance";
+
+                        importanceSpan.textContent =
+                            importance + "/10";
+
+
+                        const created =
+                            memory.created_at
+                                ? new Date(
                                     memory.created_at
-                                        ? new Date(
-                                            memory.created_at
-                                        ).toLocaleString()
-                                        : "";
+                                ).toLocaleString()
+                                : "";
 
 
-                                const subject =
-                                    memory.subject ||
-                                    "General";
+                        meta.appendChild(
+                            document.createTextNode(
+                                "Importance: "
+                            )
+                        );
+
+                        meta.appendChild(
+                            importanceSpan
+                        );
+
+                        meta.appendChild(
+                            document.createTextNode(
+                                " • " + created
+                            )
+                        );
 
 
-                                const category =
-                                    memory.category ||
-                                    "general";
+                        /* =====================
+                           ACTIONS
+                        ===================== */
+
+                        const actions =
+                            document.createElement(
+                                "div"
+                            );
+
+                        actions.className =
+                            "memory-actions";
 
 
-                                const importance =
-                                    Number(
-                                        memory.importance ||
-                                        0
-                                    );
+                        const editButton =
+                            document.createElement(
+                                "button"
+                            );
+
+                        editButton.type =
+                            "button";
+
+                        editButton.className =
+                            "edit-memory";
+
+                        editButton.textContent =
+                            "✏️ Edit";
 
 
-                                return `
+                        /*
+                         * IMPORTANT:
+                         * We only pass the numeric ID.
+                         * No memory text is placed inside
+                         * an onclick attribute.
+                         */
 
-                                    <div
-                                        class="memory-card"
-                                    >
+                        editButton.addEventListener(
+                            "click",
+                            function() {
 
-                                        <div
-                                            class="memory-subject"
-                                        >
-                                            ${escapeHtml(
-                                                subject
-                                            )}
-                                        </div>
-
-
-                                        <div
-                                            class="memory-category"
-                                        >
-                                            ${escapeHtml(
-                                                category
-                                            )}
-                                        </div>
-
-
-                                        <div
-                                            class="memory-text"
-                                        >
-                                            ${escapeHtml(
-                                                memory.memory
-                                            )}
-                                        </div>
-
-
-                                        <div
-                                            class="memory-meta"
-                                        >
-
-                                            Importance:
-
-                                            <span
-                                                class="importance"
-                                            >
-                                                ${importance}/10
-                                            </span>
-
-                                            &nbsp; • &nbsp;
-
-                                            ${escapeHtml(
-                                                created
-                                            )}
-
-                                        </div>
-
-
-                                        <div
-                                            class="memory-actions"
-                                        >
-
-                                            <button
-                                                class="edit-memory"
-                                                onclick="openEditMemory(${Number(
-                                                    memory.id
-                                                )}, ${JSON.stringify(
-                                                    memory.memory || ""
-                                                )}, ${JSON.stringify(
-                                                    memory.subject || "general"
-                                                )}, ${JSON.stringify(
-                                                    memory.category || "general"
-                                                )}, ${importance})"
-                                            >
-                                                ✏️ Edit
-                                            </button>
-
-
-                                            <button
-                                                class="delete-memory"
-                                                onclick="deleteMemory(${Number(
-                                                    memory.id
-                                                )})"
-                                            >
-                                                🗑️ Delete
-                                            </button>
-
-                                        </div>
-
-                                    </div>
-
-                                `;
+                                openEditMemory(
+                                    memory.id
+                                );
 
                             }
-                        )
-                        .join("");
+                        );
+
+
+                        const deleteButton =
+                            document.createElement(
+                                "button"
+                            );
+
+                        deleteButton.type =
+                            "button";
+
+                        deleteButton.className =
+                            "delete-memory";
+
+                        deleteButton.textContent =
+                            "🗑️ Delete";
+
+
+                        deleteButton.addEventListener(
+                            "click",
+                            function() {
+
+                                deleteMemory(
+                                    memory.id
+                                );
+
+                            }
+                        );
+
+
+                        actions.appendChild(
+                            editButton
+                        );
+
+                        actions.appendChild(
+                            deleteButton
+                        );
+
+
+                        card.appendChild(
+                            subject
+                        );
+
+                        card.appendChild(
+                            category
+                        );
+
+                        card.appendChild(
+                            memoryText
+                        );
+
+                        card.appendChild(
+                            meta
+                        );
+
+                        card.appendChild(
+                            actions
+                        );
+
+
+                        memoryList.appendChild(
+                            card
+                        );
+
+                    }
+                );
 
             } catch (error) {
 
                 memoryList.innerHTML =
                     `
-                        <div
-                            class="empty-memory"
-                        >
+                        <div class="empty-memory">
 
                             Unable to load memories.
 
@@ -1724,35 +1609,53 @@
         ==================================================== */
 
         function openEditMemory(
-            memoryId,
-            memory,
-            subject,
-            category,
-            importance
+            memoryId
         ) {
 
+            const memory =
+                loadedMemories.find(
+                    item =>
+                        Number(item.id) ===
+                        Number(memoryId)
+                );
+
+
+            if (!memory) {
+
+                alert(
+                    "Memory could not be found."
+                );
+
+                return;
+            }
+
+
             editingMemoryId =
-                memoryId;
+                memory.id;
 
 
             editMemory.value =
-                memory || "";
+                memory.memory || "";
 
 
             editSubject.value =
-                subject || "general";
+                memory.subject ||
+                "general";
 
 
             editCategory.value =
-                category || "general";
+                memory.category ||
+                "general";
 
 
             editImportance.value =
-                importance || 5;
+                Number(
+                    memory.importance || 5
+                );
 
 
             importanceValue.textContent =
-                importance || 5;
+                editImportance.value;
 
 
             editModal.style.display =
@@ -1829,7 +1732,7 @@
 
 
         /* ====================================================
-           ESCAPE CLOSES MODAL
+           ESCAPE CLOSE
         ==================================================== */
 
         document.addEventListener(
@@ -1839,7 +1742,7 @@
                 if (
                     event.key === "Escape" &&
                     editModal.style.display ===
-                        "flex"
+                    "flex"
                 ) {
 
                     closeEditModal();
@@ -1851,7 +1754,7 @@
 
 
         /* ====================================================
-           SAVE EDITED MEMORY
+           SAVE EDIT
         ==================================================== */
 
         saveEditButton.addEventListener(
@@ -1859,9 +1762,7 @@
             async function() {
 
                 if (!editingMemoryId) {
-
                     return;
-
                 }
 
 
@@ -1890,7 +1791,6 @@
                     );
 
                     return;
-
                 }
 
 
@@ -1915,6 +1815,7 @@
                                 },
 
                                 body: JSON.stringify({
+
                                     id:
                                         editingMemoryId,
 
@@ -1931,6 +1832,7 @@
 
                                     importance:
                                         importance
+
                                 })
                             }
                         );
@@ -2045,7 +1947,7 @@
 
 
         /* ====================================================
-           OPEN MEMORY DASHBOARD
+           OPEN DASHBOARD
         ==================================================== */
 
         memoryButton.addEventListener(
