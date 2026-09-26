@@ -1,13 +1,12 @@
 import json
 import os
+import urllib.request
 from http.server import BaseHTTPRequestHandler
-
-from anthropic import Anthropic
 
 
 class handler(BaseHTTPRequestHandler):
 
-    def _send_json(self, status, data):
+    def send_json(self, status, data):
         body = json.dumps(data).encode("utf-8")
 
         self.send_response(status)
@@ -17,7 +16,7 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        self._send_json(
+        self.send_json(
             200,
             {
                 "name": "Dusra Brain",
@@ -28,18 +27,14 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            content_length = int(
-                self.headers.get("Content-Length", 0)
-            )
-
-            body = self.rfile.read(content_length)
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
 
             data = json.loads(body or b"{}")
-
             message = data.get("message", "").strip()
 
             if not message:
-                self._send_json(
+                self.send_json(
                     400,
                     {"error": "Message is required."}
                 )
@@ -48,36 +43,48 @@ class handler(BaseHTTPRequestHandler):
             api_key = os.environ.get("ANTHROPIC_API_KEY")
 
             if not api_key:
-                self._send_json(
+                self.send_json(
                     500,
                     {"error": "ANTHROPIC_API_KEY is not configured."}
                 )
                 return
 
-            client = Anthropic(api_key=api_key)
-
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1000,
-                system=(
-                    "You are Dusra Brain, a personal AI brain and memory "
-                    "assistant. Be helpful, concise and practical."
+            payload = {
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 1000,
+                "system": (
+                    "You are Dusra Brain, a personal AI brain and "
+                    "memory assistant. Be helpful, concise and practical."
                 ),
-                messages=[
+                "messages": [
                     {
                         "role": "user",
                         "content": message
                     }
-                ],
+                ]
+            }
+
+            request = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01"
+                },
+                method="POST"
             )
+
+            with urllib.request.urlopen(request, timeout=30) as response:
+                result = json.loads(response.read().decode("utf-8"))
 
             text = ""
 
-            for block in response.content:
-                if hasattr(block, "text"):
-                    text += block.text
+            for block in result.get("content", []):
+                if block.get("type") == "text":
+                    text += block.get("text", "")
 
-            self._send_json(
+            self.send_json(
                 200,
                 {
                     "name": "Dusra Brain",
@@ -86,7 +93,7 @@ class handler(BaseHTTPRequestHandler):
             )
 
         except Exception as e:
-            self._send_json(
+            self.send_json(
                 500,
                 {
                     "error": str(e)
