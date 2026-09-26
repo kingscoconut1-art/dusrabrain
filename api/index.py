@@ -1,1062 +1,826 @@
 import json
 import os
 import re
-import urllib.error
 import urllib.request
+import urllib.error
 from http.server import BaseHTTPRequestHandler
 
 import psycopg
 
 
-class handler(BaseHTTPRequestHandler):
+# ============================================================
+# BASIC HELPERS
+# ============================================================
 
-    def send_json(self, status, data):
-        body = json.dumps(data).encode("utf-8")
+def send_json(handler, data, status=200):
+    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
 
-        self.send_response(status)
-        self.send_header(
-            "Content-Type",
-            "application/json; charset=utf-8"
-        )
-        self.send_header(
-            "Content-Length",
-            str(len(body))
-        )
-        self.end_headers()
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    handler.end_headers()
 
-        self.wfile.write(body)
+    handler.wfile.write(body)
 
-    def get_database_url(self):
-        return (
-            os.environ.get("STORAGE_URL")
-            or os.environ.get("DATABASE_URL")
-        )
 
-    def groq_request(
-        self,
-        api_key,
-        messages,
-        max_tokens=1000
-    ):
-        url = (
-            "https://api.groq.com/openai/v1/"
-            "chat/completions"
-        )
+def get_database_url():
+    """
+    Vercel Neon integration may expose the database URL
+    under different environment variable names.
+    """
 
-        payload = {
-            "model": "openai/gpt-oss-20b",
-            "messages": messages,
-            "max_tokens": max_tokens
+    possible_names = [
+        "DATABASE_URL",
+        "POSTGRES_URL",
+        "POSTGRES_PRISMA_URL",
+        "POSTGRES_URL_NON_POOLING",
+        "STORAGE_POSTGRES_URL",
+        "STORAGE_DATABASE_URL",
+    ]
+
+    for name in possible_names:
+        value = os.environ.get(name)
+
+        if value:
+            return value
+
+    return None
+
+
+# ============================================================
+# GROQ
+# ============================================================
+
+def groq_request(api_key, messages, temperature=0.2):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": messages,
+        "temperature": temperature
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "Mozilla/5.0"
         }
+    )
 
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": "Bearer " + api_key,
-                "User-Agent": (
-                    "Mozilla/5.0 "
-                    "(Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 "
-                    "Safari/537.36"
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            raw = response.read().decode("utf-8")
+            result = json.loads(raw)
+
+            return result["choices"][0]["message"]["content"]
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+
+        raise Exception(
+            f"Groq HTTP {e.code}: {error_body}"
+        )
+
+    except Exception as e:
+        raise Exception(f"Groq request failed: {str(e)}")
+
+
+# ============================================================
+# CONVERSATION MEMORY
+# ============================================================
+
+def save_conversation(user_id, role, message):
+    db_url = get_database_url()
+
+    if not db_url:
+        return False
+
+    try:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO conversations
+                    (user_id, role, message)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (user_id, role, message)
                 )
-            },
-            method="POST"
+
+        return True
+
+    except Exception:
+        return False
+
+
+def get_conversation_history(user_id, limit=20):
+    db_url = get_database_url()
+
+    if not db_url:
+        return []
+
+    try:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT role, message
+                    FROM conversations
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (user_id, limit)
+                )
+
+                rows = cur.fetchall()
+
+        rows.reverse()
+
+        return [
+            {
+                "role": row[0],
+                "content": row[1]
+            }
+            for row in rows
+        ]
+
+    except Exception:
+        return []
+
+
+# ============================================================
+# LONG-TERM MEMORY
+# ============================================================
+
+def get_memories(user_id, message=""):
+    db_url = get_database_url()
+
+    if not db_url:
+        return []
+
+    try:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        created_at
+                    FROM memories
+                    WHERE user_id = %s
+                    ORDER BY importance DESC, created_at DESC
+                    LIMIT 50
+                    """,
+                    (user_id,)
+                )
+
+                rows = cur.fetchall()
+
+        message_lower = message.lower()
+
+        memories = []
+
+        for row in rows:
+            item = {
+                "id": row[0],
+                "memory": row[1],
+                "category": row[2],
+                "importance": row[3],
+                "subject": row[4],
+                "created_at": row[5]
+            }
+
+            subject = str(row[4] or "").lower()
+
+            if subject and subject in message_lower:
+                item["_subject_match"] = True
+            else:
+                item["_subject_match"] = False
+
+            memories.append(item)
+
+        memories.sort(
+            key=lambda x: (
+                x["_subject_match"],
+                x["importance"] or 0,
+                x["created_at"]
+            ),
+            reverse=True
         )
 
-        with urllib.request.urlopen(
-            request,
-            timeout=30
-        ) as response:
+        for item in memories:
+            item.pop("_subject_match", None)
 
-            response_body = (
-                response.read()
-                .decode("utf-8")
-            )
+        return memories
 
-            result = json.loads(response_body)
+    except Exception:
+        return []
 
-        choices = result.get("choices", [])
 
-        if not choices:
-            raise Exception(
-                "Groq returned no choices."
-            )
+def get_subject_memories(user_id, subject):
+    db_url = get_database_url()
 
-        response_message = choices[0].get(
-            "message",
-            {}
+    if not db_url:
+        return []
+
+    try:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        created_at
+                    FROM memories
+                    WHERE user_id = %s
+                    AND LOWER(subject) = LOWER(%s)
+                    ORDER BY importance DESC, created_at DESC
+                    LIMIT 50
+                    """,
+                    (user_id, subject)
+                )
+
+                rows = cur.fetchall()
+
+        return rows
+
+    except Exception:
+        return []
+
+
+# ============================================================
+# MEMORY DUPLICATE DETECTION
+# ============================================================
+
+def make_memory_key(subject, category, memory):
+    text = f"{subject}|{category}|{memory}"
+
+    text = text.lower().strip()
+
+    text = re.sub(r"\s+", " ", text)
+
+    text = re.sub(r"[^\w\s|]", "", text)
+
+    return text
+
+
+def find_semantic_duplicate(
+    api_key,
+    new_memory,
+    existing_memories
+):
+    if not existing_memories:
+        return None
+
+    existing_text = []
+
+    for row in existing_memories:
+        existing_text.append(
+            f"ID {row[0]}: {row[1]}"
         )
 
-        return response_message.get(
-            "content",
-            ""
-        ).strip()
-
-    # ---------------------------------------------------------
-    # CONVERSATION HISTORY
-    # ---------------------------------------------------------
-
-    def save_conversation(
-        self,
-        user_id,
-        role,
-        message
-    ):
-
-        database_url = self.get_database_url()
-
-        if not database_url:
-            return {
-                "saved": False,
-                "error": "Database URL not found."
-            }
-
-        try:
-
-            with psycopg.connect(
-                database_url,
-                connect_timeout=5
-            ) as connection:
-
-                with connection.cursor() as cursor:
-
-                    cursor.execute(
-                        """
-                        INSERT INTO conversations
-                        (
-                            user_id,
-                            role,
-                            message
-                        )
-                        VALUES
-                        (
-                            %s,
-                            %s,
-                            %s
-                        )
-                        """,
-                        (
-                            user_id,
-                            role,
-                            message
-                        )
-                    )
-
-                connection.commit()
-
-            return {
-                "saved": True,
-                "error": None
-            }
-
-        except Exception as e:
-
-            return {
-                "saved": False,
-                "error": str(e)
-            }
-
-    def get_conversation_history(
-        self,
-        user_id,
-        limit=20
-    ):
-
-        database_url = self.get_database_url()
-
-        if not database_url:
-            return []
-
-        try:
-
-            with psycopg.connect(
-                database_url,
-                connect_timeout=5
-            ) as connection:
-
-                with connection.cursor() as cursor:
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            role,
-                            message
-                        FROM conversations
-                        WHERE user_id = %s
-                        ORDER BY
-                            created_at DESC
-                        LIMIT %s
-                        """,
-                        (
-                            user_id,
-                            limit
-                        )
-                    )
-
-                    rows = cursor.fetchall()
-
-                    rows.reverse()
-
-                    return [
-                        {
-                            "role": row[0],
-                            "message": row[1]
-                        }
-                        for row in rows
-                    ]
-
-        except Exception:
-            return []
-
-    # ---------------------------------------------------------
-    # LONG-TERM MEMORY RETRIEVAL
-    # ---------------------------------------------------------
-
-    def get_memories(
-        self,
-        user_id,
-        message=""
-    ):
-
-        database_url = self.get_database_url()
-
-        if not database_url:
-            return []
-
-        try:
-
-            with psycopg.connect(
-                database_url,
-                connect_timeout=5
-            ) as connection:
-
-                with connection.cursor() as cursor:
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            memory,
-                            category,
-                            importance,
-                            subject
-                        FROM memories
-                        WHERE user_id = %s
-                        ORDER BY
-                            importance DESC,
-                            created_at DESC
-                        LIMIT 50
-                        """,
-                        (user_id,)
-                    )
-
-                    rows = cursor.fetchall()
-
-                    memories = [
-                        {
-                            "memory": row[0],
-                            "category": row[1],
-                            "importance": row[2],
-                            "subject": row[3]
-                        }
-                        for row in rows
-                    ]
-
-                    if not message:
-                        return memories[:30]
-
-                    message_lower = message.lower()
-
-                    subject_matches = []
-                    other_memories = []
-
-                    for item in memories:
-
-                        subject = str(
-                            item["subject"] or ""
-                        ).strip().lower()
-
-                        if (
-                            subject
-                            and subject != "general"
-                            and subject in message_lower
-                        ):
-                            subject_matches.append(item)
-                        else:
-                            other_memories.append(item)
-
-                    return (
-                        subject_matches
-                        + other_memories
-                    )[:30]
-
-        except Exception:
-            return []
-
-    def get_subject_memories(
-        self,
-        user_id,
-        subject
-    ):
-
-        database_url = self.get_database_url()
-
-        if not database_url:
-            return []
-
-        try:
-
-            with psycopg.connect(
-                database_url,
-                connect_timeout=5
-            ) as connection:
-
-                with connection.cursor() as cursor:
-
-                    cursor.execute(
-                        """
-                        SELECT
-                            id,
-                            memory,
-                            category,
-                            importance,
-                            subject
-                        FROM memories
-                        WHERE user_id = %s
-                        AND LOWER(subject) = LOWER(%s)
-                        ORDER BY
-                            importance DESC,
-                            created_at DESC
-                        LIMIT 20
-                        """,
-                        (
-                            user_id,
-                            subject
-                        )
-                    )
-
-                    rows = cursor.fetchall()
-
-                    return [
-                        {
-                            "id": row[0],
-                            "memory": row[1],
-                            "category": row[2],
-                            "importance": row[3],
-                            "subject": row[4]
-                        }
-                        for row in rows
-                    ]
-
-        except Exception:
-            return []
-
-    # ---------------------------------------------------------
-    # SEMANTIC DUPLICATE DETECTION
-    # ---------------------------------------------------------
-
-    def find_semantic_duplicate(
-        self,
-        api_key,
-        new_memory,
-        existing_memories
-    ):
-
-        if not existing_memories:
-            return {
-                "is_duplicate": False,
-                "memory_id": None,
-                "error": None
-            }
-
-        memory_lines = []
-
-        for item in existing_memories:
-
-            memory_lines.append(
-                "ID: "
-                + str(item["id"])
-                + "\nMemory: "
-                + item["memory"]
-            )
-
-        comparison_prompt = """
-You are the semantic memory comparison engine
-for Dusra Brain.
-
-Compare the NEW MEMORY with the EXISTING MEMORIES.
-
-Determine whether the new memory expresses the
-SAME underlying user fact as one of the existing
-memories.
-
-Important:
-
-- Compare meaning, not exact wording.
-- Different wording can represent the same fact.
-- Do not mark memories as duplicates merely because
-  they concern the same project or subject.
-- If the new memory contains genuinely new information,
-  it is NOT a duplicate.
-- Return the ID of the existing memory only when
-  the underlying fact is substantially the same.
-
-Example:
-
-Existing:
-"The user is building Evolve India as a major
-long-term business project."
-
-New:
-"Evolve India is one of the user's major
-long-term business ventures."
-
-Result:
-DUPLICATE
-
-Existing:
-"The user is building Evolve India as a major
-long-term business project."
-
-New:
-"The user plans to launch Evolve India within
-the next three months."
-
-Result:
-NEW
-
-Return ONLY valid JSON.
-
-Duplicate:
-{
-  "is_duplicate": true,
-  "memory_id": 123
-}
-
-New:
-{
-  "is_duplicate": false,
-  "memory_id": null
-}
+    prompt = f"""
+You are a memory deduplication system.
+
+Determine whether the NEW MEMORY means essentially the
+same thing as any EXISTING MEMORY.
 
 NEW MEMORY:
-""" + new_memory + """
+{new_memory}
 
 EXISTING MEMORIES:
+{chr(10).join(existing_text)}
 
-""" + "\n\n".join(memory_lines)
+Return ONLY valid JSON:
 
-        try:
+{{
+  "duplicate_id": null
+}}
 
-            result = self.groq_request(
-                api_key,
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a semantic memory "
-                            "comparison engine. "
-                            "Return JSON only."
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": comparison_prompt
-                    }
-                ],
-                max_tokens=200
-            )
+OR:
 
-            result = self.clean_json_response(
-                result
-            )
+{{
+  "duplicate_id": 123
+}}
 
-            parsed = json.loads(result)
+Rules:
 
-            is_duplicate = bool(
-                parsed.get(
-                    "is_duplicate",
-                    False
-                )
-            )
+- Use semantic meaning, not exact wording.
+- Different wording with the same fact is a duplicate.
+- Do not mark related but different facts as duplicates.
+- If there is no clear duplicate, return null.
+"""
 
-            memory_id = parsed.get(
-                "memory_id"
-            )
-
-            if memory_id is not None:
-
-                try:
-                    memory_id = int(memory_id)
-                except Exception:
-                    memory_id = None
-
-            if is_duplicate and memory_id is None:
-
-                return {
-                    "is_duplicate": False,
-                    "memory_id": None,
-                    "error": (
-                        "Semantic comparison marked "
-                        "duplicate but returned no ID."
-                    )
+    try:
+        response = groq_request(
+            api_key,
+            [
+                {
+                    "role": "system",
+                    "content": "You are a precise memory deduplication system."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
                 }
+            ],
+            temperature=0
+        )
 
-            return {
-                "is_duplicate": is_duplicate,
-                "memory_id": memory_id,
-                "error": None
-            }
+        cleaned = clean_json_response(response)
 
-        except Exception as e:
+        result = json.loads(cleaned)
 
-            return {
-                "is_duplicate": False,
-                "memory_id": None,
-                "error": str(e)
-            }
+        duplicate_id = result.get("duplicate_id")
 
-    # ---------------------------------------------------------
-    # MEMORY SAVE / UPDATE
-    # ---------------------------------------------------------
+        if duplicate_id:
+            return int(duplicate_id)
 
-    def save_memory(
-        self,
-        user_id,
-        memory,
-        category,
-        importance,
+    except Exception:
+        pass
+
+    return None
+
+
+# ============================================================
+# SAVE LONG-TERM MEMORY
+# ============================================================
+
+def save_memory(
+    user_id,
+    memory,
+    category,
+    importance,
+    subject,
+    api_key
+):
+    db_url = get_database_url()
+
+    if not db_url:
+        return {
+            "saved": False,
+            "error": "Database not available"
+        }
+
+    memory_key = make_memory_key(
         subject,
-        api_key
-    ):
+        category,
+        memory
+    )
 
-        database_url = self.get_database_url()
+    try:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
 
-        if not database_url:
-            return {
-                "saved": False,
-                "updated": False,
-                "semantic_duplicate": False,
-                "error": "Database URL not found."
-            }
+                # ------------------------------------------------
+                # Exact duplicate check
+                # ------------------------------------------------
 
-        try:
-
-            memory_key = (
-                str(subject).strip().lower()
-                + "|"
-                + str(category).strip().lower()
-                + "|"
-                + re.sub(
-                    r"\s+",
-                    " ",
-                    str(memory).strip().lower()
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM memories
+                    WHERE user_id = %s
+                    AND memory_key = %s
+                    LIMIT 1
+                    """,
+                    (user_id, memory_key)
                 )
-            )
 
-            existing_memories = (
-                self.get_subject_memories(
+                exact_duplicate = cur.fetchone()
+
+                if exact_duplicate:
+
+                    cur.execute(
+                        """
+                        UPDATE memories
+                        SET
+                            memory = %s,
+                            category = %s,
+                            importance = %s,
+                            subject = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            memory,
+                            category,
+                            importance,
+                            subject,
+                            exact_duplicate[0]
+                        )
+                    )
+
+                    return {
+                        "saved": True,
+                        "action": "updated_exact_duplicate",
+                        "id": exact_duplicate[0]
+                    }
+
+                # ------------------------------------------------
+                # Semantic duplicate check
+                # ------------------------------------------------
+
+                subject_memories = get_subject_memories(
                     user_id,
                     subject
                 )
-            )
 
-            semantic_result = (
-                self.find_semantic_duplicate(
+                duplicate_id = find_semantic_duplicate(
                     api_key,
                     memory,
-                    existing_memories
+                    subject_memories
                 )
-            )
 
-            if semantic_result["error"]:
+                if duplicate_id:
+
+                    cur.execute(
+                        """
+                        UPDATE memories
+                        SET
+                            memory = %s,
+                            category = %s,
+                            importance = %s,
+                            subject = %s,
+                            memory_key = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            memory,
+                            category,
+                            importance,
+                            subject,
+                            memory_key,
+                            duplicate_id
+                        )
+                    )
+
+                    return {
+                        "saved": True,
+                        "action": "updated_semantic_duplicate",
+                        "id": duplicate_id
+                    }
+
+                # ------------------------------------------------
+                # New memory
+                # ------------------------------------------------
+
+                cur.execute(
+                    """
+                    INSERT INTO memories
+                    (
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key
+                    )
+                    VALUES
+                    (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key
+                    )
+                )
+
+                new_id = cur.fetchone()[0]
 
                 return {
-                    "saved": False,
-                    "updated": False,
-                    "semantic_duplicate": False,
-                    "error": (
-                        "Semantic comparison failed: "
-                        + semantic_result["error"]
-                    )
+                    "saved": True,
+                    "action": "created",
+                    "id": new_id
                 }
 
-            with psycopg.connect(
-                database_url,
-                connect_timeout=5
-            ) as connection:
+    except Exception as e:
+        return {
+            "saved": False,
+            "error": str(e)
+        }
 
-                with connection.cursor() as cursor:
 
-                    if semantic_result[
-                        "is_duplicate"
-                    ]:
+# ============================================================
+# JSON CLEANER
+# ============================================================
 
-                        cursor.execute(
-                            """
-                            UPDATE memories
-                            SET
-                                memory = %s,
-                                category = %s,
-                                importance = %s,
-                                subject = %s,
-                                memory_key = %s
-                            WHERE id = %s
-                            AND user_id = %s
-                            """,
-                            (
-                                memory,
-                                category,
-                                importance,
-                                subject,
-                                memory_key,
-                                semantic_result[
-                                    "memory_id"
-                                ],
-                                user_id
-                            )
-                        )
+def clean_json_response(text):
+    text = text.strip()
 
-                        connection.commit()
-
-                        return {
-                            "saved": True,
-                            "updated": True,
-                            "semantic_duplicate": True,
-                            "error": None
-                        }
-
-                    cursor.execute(
-                        """
-                        SELECT id
-                        FROM memories
-                        WHERE user_id = %s
-                        AND memory_key = %s
-                        LIMIT 1
-                        """,
-                        (
-                            user_id,
-                            memory_key
-                        )
-                    )
-
-                    existing = cursor.fetchone()
-
-                    if existing:
-
-                        cursor.execute(
-                            """
-                            UPDATE memories
-                            SET
-                                memory = %s,
-                                category = %s,
-                                importance = %s,
-                                subject = %s
-                            WHERE id = %s
-                            """,
-                            (
-                                memory,
-                                category,
-                                importance,
-                                subject,
-                                existing[0]
-                            )
-                        )
-
-                        connection.commit()
-
-                        return {
-                            "saved": True,
-                            "updated": True,
-                            "semantic_duplicate": False,
-                            "error": None
-                        }
-
-                    cursor.execute(
-                        """
-                        INSERT INTO memories
-                        (
-                            user_id,
-                            memory,
-                            category,
-                            importance,
-                            subject,
-                            memory_key
-                        )
-                        VALUES
-                        (
-                            %s,
-                            %s,
-                            %s,
-                            %s,
-                            %s,
-                            %s
-                        )
-                        """,
-                        (
-                            user_id,
-                            memory,
-                            category,
-                            importance,
-                            subject,
-                            memory_key
-                        )
-                    )
-
-                connection.commit()
-
-            return {
-                "saved": True,
-                "updated": False,
-                "semantic_duplicate": False,
-                "error": None
-            }
-
-        except Exception as e:
-
-            return {
-                "saved": False,
-                "updated": False,
-                "semantic_duplicate": False,
-                "error": str(e)
-            }
-
-    # ---------------------------------------------------------
-    # JSON CLEANING
-    # ---------------------------------------------------------
-
-    def clean_json_response(self, text):
-
-        if not text:
-            return ""
-
-        text = text.strip()
-
+    if text.startswith("```"):
         text = re.sub(
-            r"^```json\s*",
+            r"^```(?:json)?",
             "",
             text,
             flags=re.IGNORECASE
         )
 
         text = re.sub(
-            r"^```\s*",
+            r"```$",
             "",
             text
         )
 
-        text = re.sub(
-            r"\s*```$",
-            "",
-            text
-        )
+    text = text.strip()
 
-        return text.strip()
+    start = text.find("{")
+    end = text.rfind("}")
 
-    # ---------------------------------------------------------
-    # MEMORY EXTRACTION
-    # ---------------------------------------------------------
+    if start != -1 and end != -1:
+        text = text[start:end + 1]
 
-    def analyze_memory(
-        self,
-        api_key,
-        message
-    ):
+    return text
 
-        analysis_prompt = """
-You are the memory extraction system for Dusra Brain.
 
-Decide whether the user's message contains
-LONG-TERM information about the user that
-should be remembered.
+# ============================================================
+# INTELLIGENT MEMORY ANALYSIS
+# ============================================================
 
-Remember:
+def analyze_memory(api_key, message):
+    prompt = f"""
+You are the long-term memory system for a personal AI called Dusra Brain.
 
-- Personal preferences
-- Important personal facts
-- Projects
-- Businesses
-- Goals
-- Long-term plans
-- Important people and relationships
-- Work information
-- Decisions
-- User instructions
-- Important facts explicitly stated by the user
+Analyze the user's message.
+
+USER MESSAGE:
+{message}
+
+Decide whether this message contains a useful long-term personal fact,
+preference, project, business, goal, relationship, instruction, decision,
+or other information that should be remembered.
 
 Do NOT remember:
 
-- Normal questions
-- Greetings
-- Casual conversation
-- Temporary requests
-- One-time calculations
-- General knowledge questions
-- Information unrelated to the user
+- greetings
+- casual conversation
+- simple questions
+- temporary requests
+- general knowledge
+- things that are only relevant to this single conversation
 
-The memory must contain ONLY facts supported
-by the user's message.
+Remember things such as:
 
-Never invent additional personal information.
+- personal facts
+- preferences
+- important instructions
+- projects
+- businesses
+- goals
+- decisions
+- relationships
+- long-term plans
 
-Also identify the main SUBJECT of the memory.
+If the message should NOT be remembered, return:
 
-Examples of subjects:
+{{
+  "remember": false
+}}
 
-Carbon Mandi
-Dusra Brain
-Evolve India
-AIG India Textiles
-Personal
-Work
-Family
+If it SHOULD be remembered, return ONLY:
 
-Return ONLY valid JSON.
-
-If the message should be remembered:
-
-{
-  "should_remember": true,
-  "memory": "A clean factual statement describing exactly what the user said.",
-  "category": "project",
-  "subject": "Carbon Mandi",
-  "importance": 8
-}
-
-If it should NOT be remembered:
-
-{
-  "should_remember": false,
-  "memory": "",
-  "category": "general",
-  "subject": "general",
-  "importance": 1
-}
-
-Allowed categories:
-
-personal
-preference
-project
-business
-goal
-relationship
-work
-decision
-instruction
-general
+{{
+  "remember": true,
+  "memory": "A clean factual statement describing what the user wants remembered.",
+  "category": "personal|preference|project|business|goal|relationship|work|decision|instruction|general",
+  "importance": 1,
+  "subject": "Short subject such as Dusra Brain, Carbon Mandi, Evolve India, etc."
+}}
 
 Importance must be an integer from 1 to 10.
 
-User message:
-""" + message
+Rules:
 
-        try:
+- Never invent information.
+- Do not add facts that are not present in the user message.
+- Keep the memory concise.
+- Write the memory as a factual statement.
+"""
 
-            result = self.groq_request(
-                api_key,
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are the memory extraction "
-                            "engine for Dusra Brain. "
-                            "Return JSON only. "
-                            "Never invent personal facts."
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": analysis_prompt
-                    }
-                ],
-                max_tokens=350
-            )
-
-            result = self.clean_json_response(
-                result
-            )
-
-            parsed = json.loads(result)
-
-            should_remember = bool(
-                parsed.get(
-                    "should_remember",
-                    False
-                )
-            )
-
-            memory = str(
-                parsed.get(
-                    "memory",
-                    ""
-                )
-            ).strip()
-
-            category = str(
-                parsed.get(
-                    "category",
-                    "general"
-                )
-            ).strip().lower()
-
-            subject = str(
-                parsed.get(
-                    "subject",
-                    "general"
-                )
-            ).strip()
-
-            importance = parsed.get(
-                "importance",
-                5
-            )
-
-            try:
-                importance = int(importance)
-            except Exception:
-                importance = 5
-
-            importance = max(
-                1,
-                min(
-                    10,
-                    importance
-                )
-            )
-
-            allowed_categories = {
-                "personal",
-                "preference",
-                "project",
-                "business",
-                "goal",
-                "relationship",
-                "work",
-                "decision",
-                "instruction",
-                "general"
-            }
-
-            if category not in allowed_categories:
-                category = "general"
-
-            if not subject:
-                subject = "general"
-
-            if not should_remember:
-
-                return {
-                    "should_remember": False,
-                    "memory": "",
-                    "category": "general",
-                    "subject": "general",
-                    "importance": 1,
-                    "error": None
+    try:
+        response = groq_request(
+            api_key,
+            [
+                {
+                    "role": "system",
+                    "content": "You are a precise long-term memory extraction system."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
                 }
+            ],
+            temperature=0
+        )
 
-            if not memory:
+        cleaned = clean_json_response(response)
 
-                return {
-                    "should_remember": False,
-                    "memory": "",
-                    "category": "general",
-                    "subject": "general",
-                    "importance": 1,
-                    "error": (
-                        "Memory extraction returned "
-                        "no memory text."
-                    )
-                }
+        result = json.loads(cleaned)
 
-            return {
-                "should_remember": True,
-                "memory": memory,
-                "category": category,
-                "subject": subject,
-                "importance": importance,
-                "error": None
-            }
+        return result
 
-        except Exception as e:
+    except Exception as e:
+        return {
+            "remember": False,
+            "error": str(e)
+        }
 
-            return {
-                "should_remember": False,
-                "memory": "",
-                "category": "general",
-                "subject": "general",
-                "importance": 1,
-                "error": str(e)
-            }
 
-    # ---------------------------------------------------------
-    # GET
-    # ---------------------------------------------------------
+# ============================================================
+# HTTP HANDLER
+# ============================================================
 
-    def do_GET(self):
+class handler(BaseHTTPRequestHandler):
 
-        self.send_json(
-            200,
+    # --------------------------------------------------------
+    # OPTIONS
+    # --------------------------------------------------------
+
+    def do_OPTIONS(self):
+        send_json(
+            self,
             {
-                "name": "Dusra Brain",
-                "status": "online",
-                "groq_key_detected": bool(
-                    os.environ.get(
-                        "GROQ_API_KEY"
-                    )
-                ),
-                "database_detected": bool(
-                    self.get_database_url()
-                )
+                "status": "ok"
             }
         )
 
-    # ---------------------------------------------------------
-    # POST
-    # ---------------------------------------------------------
+    # --------------------------------------------------------
+    # GET
+    # --------------------------------------------------------
 
-    def do_POST(self):
+    def do_GET(self):
 
         try:
+            db_url = get_database_url()
 
-            length = int(
-                self.headers.get(
-                    "Content-Length",
-                    "0"
-                )
-            )
+            # ------------------------------------------------
+            # MEMORY DASHBOARD API
+            # ------------------------------------------------
 
-            body = self.rfile.read(length)
+            if "memories=true" in self.path:
 
-            data = json.loads(
-                body or b"{}"
-            )
+                if not db_url:
+                    send_json(
+                        self,
+                        {
+                            "name": "Dusra Brain",
+                            "memories": [],
+                            "count": 0,
+                            "error": "Database not detected"
+                        },
+                        500
+                    )
+                    return
 
-            message = data.get(
-                "message",
-                ""
-            ).strip()
+                with psycopg.connect(db_url) as conn:
 
-            user_id = data.get(
-                "user_id",
-                "default_user"
-            ).strip()
+                    with conn.cursor() as cur:
 
-            if not message:
-
-                self.send_json(
-                    400,
-                    {
-                        "error": (
-                            "Message is required."
+                        cur.execute(
+                            """
+                            SELECT
+                                id,
+                                memory,
+                                category,
+                                importance,
+                                subject,
+                                created_at
+                            FROM memories
+                            ORDER BY importance DESC, created_at DESC
+                            LIMIT 200
+                            """
                         )
+
+                        rows = cur.fetchall()
+
+                memories = []
+
+                for row in rows:
+
+                    memories.append(
+                        {
+                            "id": row[0],
+                            "memory": row[1],
+                            "category": row[2],
+                            "importance": row[3],
+                            "subject": row[4],
+                            "created_at": (
+                                row[5].isoformat()
+                                if row[5]
+                                else None
+                            )
+                        }
+                    )
+
+                send_json(
+                    self,
+                    {
+                        "name": "Dusra Brain",
+                        "memories": memories,
+                        "count": len(memories)
                     }
                 )
 
                 return
+
+            # ------------------------------------------------
+            # NORMAL HEALTH CHECK
+            # ------------------------------------------------
+
+            send_json(
+                self,
+                {
+                    "name": "Dusra Brain",
+                    "status": "online",
+                    "groq_key_detected": bool(
+                        os.environ.get("GROQ_API_KEY")
+                    ),
+                    "database_detected": bool(db_url)
+                }
+            )
+
+        except Exception as e:
+
+            send_json(
+                self,
+                {
+                    "name": "Dusra Brain",
+                    "status": "error",
+                    "error": str(e)
+                },
+                500
+            )
+
+    # --------------------------------------------------------
+    # POST
+    # --------------------------------------------------------
+
+    def do_POST(self):
+
+        conversation_user_saved = False
+        conversation_assistant_saved = False
+        conversation_error = None
+        memory_error = None
+
+        try:
+
+            # ------------------------------------------------
+            # READ REQUEST
+            # ------------------------------------------------
+
+            content_length = int(
+                self.headers.get("Content-Length", 0)
+            )
+
+            body = self.rfile.read(content_length)
+
+            data = json.loads(
+                body.decode("utf-8")
+            )
+
+            message = str(
+                data.get("message", "")
+            ).strip()
+
+            user_id = str(
+                data.get("user_id", "default_user")
+            ).strip()
+
+            if not message:
+
+                send_json(
+                    self,
+                    {
+                        "error": "Message is required"
+                    },
+                    400
+                )
+
+                return
+
+            # ------------------------------------------------
+            # API KEY
+            # ------------------------------------------------
 
             api_key = os.environ.get(
                 "GROQ_API_KEY"
@@ -1064,22 +828,37 @@ User message:
 
             if not api_key:
 
-                self.send_json(
-                    500,
+                send_json(
+                    self,
                     {
-                        "error": (
-                            "GROQ_API_KEY is not configured."
-                        )
-                    }
+                        "error": "GROQ_API_KEY is not configured"
+                    },
+                    500
                 )
 
                 return
 
-            # -------------------------------------------------
-            # LOAD LONG-TERM MEMORY
-            # -------------------------------------------------
+            # ------------------------------------------------
+            # SAVE USER CONVERSATION
+            # ------------------------------------------------
 
-            memories = self.get_memories(
+            try:
+
+                conversation_user_saved = save_conversation(
+                    user_id,
+                    "user",
+                    message
+                )
+
+            except Exception as e:
+
+                conversation_error = str(e)
+
+            # ------------------------------------------------
+            # GET LONG-TERM MEMORIES
+            # ------------------------------------------------
+
+            memories = get_memories(
                 user_id,
                 message
             )
@@ -1090,330 +869,301 @@ User message:
 
                 memory_lines = []
 
-                for item in reversed(memories):
+                for item in memories:
 
                     memory_lines.append(
-                        "- Subject: "
-                        + item["subject"]
-                        + " | Category: "
-                        + item["category"]
-                        + " | Importance: "
-                        + str(item["importance"])
-                        + " | Memory: "
-                        + item["memory"]
+                        f"- {item['memory']} "
+                        f"(category: {item['category']}, "
+                        f"importance: {item['importance']}, "
+                        f"subject: {item['subject']})"
                     )
 
-                memory_text = (
-                    "\n\nUSER'S LONG-TERM MEMORIES:\n"
-                    + "\n".join(memory_lines)
+                memory_text = "\n".join(
+                    memory_lines
                 )
 
-            # -------------------------------------------------
-            # LOAD RECENT CONVERSATION
-            # -------------------------------------------------
+            else:
 
-            conversation_history = (
-                self.get_conversation_history(
-                    user_id,
-                    limit=20
-                )
+                memory_text = "No stored long-term memories."
+
+            # ------------------------------------------------
+            # GET RECENT CONVERSATION
+            # ------------------------------------------------
+
+            conversation_history = get_conversation_history(
+                user_id,
+                limit=20
             )
 
-            # -------------------------------------------------
-            # SAVE CURRENT USER MESSAGE
-            # -------------------------------------------------
-
-            user_save_result = (
-                self.save_conversation(
-                    user_id,
-                    "user",
-                    message
-                )
-            )
-
-            conversation_text = ""
-
-            if conversation_history:
-
-                conversation_lines = []
-
-                for item in conversation_history:
-
-                    conversation_lines.append(
-                        item["role"].upper()
-                        + ": "
-                        + item["message"]
-                    )
-
-                conversation_text = (
-                    "\n\nRECENT CONVERSATION:\n"
-                    + "\n".join(
-                        conversation_lines
-                    )
-                )
-
-            # -------------------------------------------------
+            # ------------------------------------------------
             # SYSTEM PROMPT
-            # -------------------------------------------------
+            # ------------------------------------------------
 
-            system_prompt = (
-                "You are Dusra Brain, "
-                "a personal AI brain and memory assistant. "
+            system_prompt = """
+You are Dusra Brain, a personal AI brain and memory assistant.
 
-                "You help the user think, remember, "
-                "plan and execute. "
+You help the user think, remember, organize information,
+and work on their projects.
 
-                "Be helpful, practical, clear and concise. "
+You have access to:
 
-                "IMPORTANT MEMORY RULES: "
+1. Long-term memories
+2. Recent conversation history
+3. The current user message
 
-                "The USER'S LONG-TERM MEMORIES section "
-                "contains facts that have actually been "
-                "stored about the user. "
+IMPORTANT PERSONAL-FACT RULES:
 
-                "When answering questions about the user's "
-                "personal life, projects, businesses, "
-                "preferences, goals, relationships, work, "
-                "or history, use only information supported "
-                "by the stored memories, recent conversation, "
-                "or the current message. "
+- Stored memories represent facts explicitly provided by the user.
+- For questions about the user's personal life, projects,
+  businesses, goals, preferences, decisions, or relationships,
+  use only information contained in stored memories,
+  recent conversation, or the current message.
+- Never invent personal facts.
+- Never assume missing details.
+- Never expand a stored fact with information that was not provided.
+- If there is not enough information, say that clearly.
 
-                "NEVER invent, assume, or expand personal "
-                "facts that are not supported by the stored "
-                "memories, recent conversation, or current "
-                "message. "
+CONVERSATION RULES:
 
-                "Do not turn a general description into "
-                "a personal fact. "
+- Use recent conversation to understand context.
+- Do not repeat questions the user already answered.
+- Answer naturally and directly.
+- Keep answers useful and concise unless the user asks for detail.
 
-                "Do not claim that the user owns, operates, "
-                "plans, wants, or has achieved something "
-                "unless that information is actually "
-                "supported. "
+MEMORY RULES:
 
-                "If the stored memories and conversation "
-                "do not contain enough information to answer "
-                "a personal question, say that you don't have "
-                "enough stored information and ask the user "
-                "if they want to provide more information. "
+- Long-term memory is separate from recent conversation.
+- Do not claim that something is stored long-term unless it actually appears
+  in the provided long-term memories.
+"""
 
-                "For general knowledge questions, you may "
-                "answer normally, but clearly distinguish "
-                "general knowledge from the user's personal "
-                "information. "
+            # ------------------------------------------------
+            # BUILD MESSAGES
+            # ------------------------------------------------
 
-                "Never mention the internal memory system "
-                "unless the user asks."
+            messages = [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                }
+            ]
 
-                + memory_text
-                + conversation_text
+            # ------------------------------------------------
+            # LONG-TERM MEMORY CONTEXT
+            # ------------------------------------------------
+
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "LONG-TERM MEMORIES:\n"
+                        + memory_text
+                    )
+                }
             )
 
-            # -------------------------------------------------
+            # ------------------------------------------------
+            # RECENT CONVERSATION
+            # ------------------------------------------------
+
+            for item in conversation_history:
+
+                role = item.get("role")
+
+                content = item.get("content")
+
+                if role in ["user", "assistant"]:
+
+                    messages.append(
+                        {
+                            "role": role,
+                            "content": content
+                        }
+                    )
+
+            # ------------------------------------------------
+            # CURRENT MESSAGE
+            # ------------------------------------------------
+
+            messages.append(
+                {
+                    "role": "user",
+                    "content": message
+                }
+            )
+
+            # ------------------------------------------------
             # ASK GROQ
-            # -------------------------------------------------
+            # ------------------------------------------------
+
+            answer = groq_request(
+                api_key,
+                messages,
+                temperature=0.3
+            )
+
+            # ------------------------------------------------
+            # SAVE ASSISTANT CONVERSATION
+            # ------------------------------------------------
 
             try:
 
-                text = self.groq_request(
-                    api_key,
-                    [
-                        {
-                            "role": "system",
-                            "content": system_prompt
-                        },
-                        {
-                            "role": "user",
-                            "content": message
-                        }
-                    ],
-                    max_tokens=1000
+                conversation_assistant_saved = save_conversation(
+                    user_id,
+                    "assistant",
+                    answer
                 )
-
-            except urllib.error.HTTPError as e:
-
-                error_body = (
-                    e.read()
-                    .decode(
-                        "utf-8",
-                        errors="replace"
-                    )
-                )
-
-                self.send_json(
-                    500,
-                    {
-                        "error": (
-                            "Groq request failed"
-                        ),
-                        "status_code": e.code,
-                        "details": error_body
-                    }
-                )
-
-                return
 
             except Exception as e:
 
-                self.send_json(
-                    500,
-                    {
-                        "error": (
-                            "Groq connection failed"
-                        ),
-                        "details": str(e)
-                    }
-                )
+                if conversation_error:
 
-                return
+                    conversation_error += (
+                        " | " + str(e)
+                    )
 
-            if not text:
+                else:
 
-                self.send_json(
-                    500,
-                    {
-                        "error": (
-                            "Groq returned an empty response."
-                        )
-                    }
-                )
+                    conversation_error = str(e)
 
-                return
-
-            # -------------------------------------------------
-            # SAVE ASSISTANT RESPONSE
-            # -------------------------------------------------
-
-            assistant_save_result = (
-                self.save_conversation(
-                    user_id,
-                    "assistant",
-                    text
-                )
-            )
-
-            # -------------------------------------------------
+            # ------------------------------------------------
             # ANALYZE LONG-TERM MEMORY
-            # -------------------------------------------------
+            # ------------------------------------------------
 
-            memory_analysis = self.analyze_memory(
+            memory_result = analyze_memory(
                 api_key,
                 message
             )
 
             memory_saved = False
-            memory_updated = False
-            memory_semantic_duplicate = False
-            memory_save_error = None
+            memory_action = None
+            memory_id = None
 
-            if memory_analysis[
-                "should_remember"
-            ]:
+            if memory_result.get("remember") is True:
 
-                save_result = self.save_memory(
-                    user_id,
-                    memory_analysis["memory"],
-                    memory_analysis["category"],
-                    memory_analysis["importance"],
-                    memory_analysis["subject"],
-                    api_key
+                memory_text_value = str(
+                    memory_result.get(
+                        "memory",
+                        ""
+                    )
+                ).strip()
+
+                category = str(
+                    memory_result.get(
+                        "category",
+                        "general"
+                    )
+                ).strip()
+
+                subject = str(
+                    memory_result.get(
+                        "subject",
+                        "general"
+                    )
+                ).strip()
+
+                try:
+
+                    importance = int(
+                        memory_result.get(
+                            "importance",
+                            5
+                        )
+                    )
+
+                except Exception:
+
+                    importance = 5
+
+                importance = max(
+                    1,
+                    min(
+                        10,
+                        importance
+                    )
                 )
 
-                memory_saved = save_result[
-                    "saved"
-                ]
+                if memory_text_value:
 
-                memory_updated = save_result[
-                    "updated"
-                ]
+                    save_result = save_memory(
+                        user_id,
+                        memory_text_value,
+                        category,
+                        importance,
+                        subject,
+                        api_key
+                    )
 
-                memory_semantic_duplicate = (
-                    save_result.get(
-                        "semantic_duplicate",
+                    memory_saved = save_result.get(
+                        "saved",
                         False
                     )
-                )
 
-                memory_save_error = (
-                    save_result["error"]
-                )
-
-            # -------------------------------------------------
-            # RETURN RESPONSE
-            # -------------------------------------------------
-
-            self.send_json(
-                200,
-                {
-                    "name": "Dusra Brain",
-                    "response": text,
-
-                    "memory_saved": memory_saved,
-
-                    "memory_updated": (
-                        memory_updated
-                    ),
-
-                    "memory_semantic_duplicate": (
-                        memory_semantic_duplicate
-                    ),
-
-                    "memory_subject": (
-                        memory_analysis["subject"]
-                    ),
-
-                    "memory_category": (
-                        memory_analysis["category"]
-                    ),
-
-                    "memory_importance": (
-                        memory_analysis["importance"]
-                    ),
-
-                    "memory_error": (
-                        memory_analysis.get(
-                            "error"
-                        )
-                    ),
-
-                    "memory_save_error": (
-                        memory_save_error
-                    ),
-
-                    "conversation_user_saved": (
-                        user_save_result["saved"]
-                    ),
-
-                    "conversation_assistant_saved": (
-                        assistant_save_result["saved"]
-                    ),
-
-                    "conversation_error": (
-                        user_save_result.get(
-                            "error"
-                        )
-                        or
-                        assistant_save_result.get(
-                            "error"
-                        )
-                    ),
-
-                    "memories_used": len(
-                        memories
-                    ),
-
-                    "conversation_messages_used": len(
-                        conversation_history
+                    memory_action = save_result.get(
+                        "action"
                     )
+
+                    memory_id = save_result.get(
+                        "id"
+                    )
+
+                    if not memory_saved:
+
+                        memory_error = save_result.get(
+                            "error"
+                        )
+
+            # ------------------------------------------------
+            # RESPONSE
+            # ------------------------------------------------
+
+            send_json(
+                self,
+                {
+                    "reply": answer,
+
+                    "conversation_user_saved":
+                        conversation_user_saved,
+
+                    "conversation_assistant_saved":
+                        conversation_assistant_saved,
+
+                    "conversation_error":
+                        conversation_error,
+
+                    "conversation_messages_used":
+                        len(conversation_history),
+
+                    "memory_saved":
+                        memory_saved,
+
+                    "memory_action":
+                        memory_action,
+
+                    "memory_id":
+                        memory_id,
+
+                    "memory_error":
+                        memory_error
                 }
+            )
+
+        except json.JSONDecodeError:
+
+            send_json(
+                self,
+                {
+                    "error": "Invalid JSON request"
+                },
+                400
             )
 
         except Exception as e:
 
-            self.send_json(
-                500,
+            send_json(
+                self,
                 {
-                    "error": "Server error",
-                    "details": str(e)
-                }
+                    "error": str(e)
+                },
+                500
             )
