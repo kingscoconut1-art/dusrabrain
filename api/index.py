@@ -17,7 +17,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_json(
-            200, 
+            200,
             {
                 "name": "Dusra Brain",
                 "status": "online",
@@ -36,7 +36,9 @@ class handler(BaseHTTPRequestHandler):
             if not message:
                 self.send_json(
                     400,
-                    {"error": "Message is required."}
+                    {
+                        "error": "Message is required."
+                    }
                 )
                 return
 
@@ -45,7 +47,9 @@ class handler(BaseHTTPRequestHandler):
             if not api_key:
                 self.send_json(
                     500,
-                    {"error": "ANTHROPIC_API_KEY is not configured."}
+                    {
+                        "error": "ANTHROPIC_API_KEY is not configured."
+                    }
                 )
                 return
 
@@ -75,8 +79,14 @@ class handler(BaseHTTPRequestHandler):
                 method="POST"
             )
 
-            with urllib.request.urlopen(request, timeout=30) as response:
-                result = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                request,
+                timeout=30
+            ) as response:
+
+                result = json.loads(
+                    response.read().decode("utf-8")
+                )
 
             text = ""
 
