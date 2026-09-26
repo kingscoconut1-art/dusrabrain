@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
@@ -95,14 +96,40 @@ class handler(BaseHTTPRequestHandler):
                 method="POST"
             )
 
-            with urllib.request.urlopen(
-                request,
-                timeout=30
-            ) as response:
+            try:
+                with urllib.request.urlopen(
+                    request,
+                    timeout=30
+                ) as response:
 
-                result = json.loads(
-                    response.read().decode("utf-8")
+                    result = json.loads(
+                        response.read().decode("utf-8")
+                    )
+
+            except urllib.error.HTTPError as e:
+
+                error_body = e.read().decode(
+                    "utf-8",
+                    errors="replace"
                 )
+
+                try:
+                    error_data = json.loads(
+                        error_body
+                    )
+                except Exception:
+                    error_data = {
+                        "raw": error_body
+                    }
+
+                self.send_json(
+                    e.code,
+                    {
+                        "error": "Anthropic API error",
+                        "anthropic_error": error_data
+                    }
+                )
+                return
 
             text = ""
 
@@ -115,6 +142,9 @@ class handler(BaseHTTPRequestHandler):
                         "text",
                         ""
                     )
+
+            if not text:
+                text = "No response received from Anthropic."
 
             self.send_json(
                 200,
@@ -129,6 +159,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(
                 500,
                 {
-                    "error": str(e)
+                    "error": str(e),
+                    "type": type(e).__name__
                 }
             )
