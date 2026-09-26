@@ -96,7 +96,11 @@ class handler(BaseHTTPRequestHandler):
             ""
         ).strip()
 
-    def get_memories(self, user_id):
+    def get_memories(
+        self,
+        user_id,
+        message=""
+    ):
 
         database_url = self.get_database_url()
 
@@ -124,14 +128,14 @@ class handler(BaseHTTPRequestHandler):
                         ORDER BY
                             importance DESC,
                             created_at DESC
-                        LIMIT 30
+                        LIMIT 50
                         """,
                         (user_id,)
                     )
 
                     rows = cursor.fetchall()
 
-                    return [
+                    memories = [
                         {
                             "memory": row[0],
                             "category": row[1],
@@ -140,6 +144,34 @@ class handler(BaseHTTPRequestHandler):
                         }
                         for row in rows
                     ]
+
+                    if not message:
+                        return memories[:30]
+
+                    message_lower = message.lower()
+
+                    subject_matches = []
+                    other_memories = []
+
+                    for item in memories:
+
+                        subject = str(
+                            item["subject"] or ""
+                        ).strip().lower()
+
+                        if (
+                            subject
+                            and subject != "general"
+                            and subject in message_lower
+                        ):
+                            subject_matches.append(item)
+                        else:
+                            other_memories.append(item)
+
+                    return (
+                        subject_matches
+                        + other_memories
+                    )[:30]
 
         except Exception:
             return []
@@ -545,7 +577,10 @@ User message:
 
                 return
 
-            memories = self.get_memories(user_id)
+            memories = self.get_memories(
+                user_id,
+                message
+            )
 
             memory_text = ""
 
