@@ -166,7 +166,73 @@
             color: #111827;
         }
 
-        /* MEMORY */
+        /* =====================================================
+           CONVERSATION SESSIONS
+        ===================================================== */
+
+        .session-panel {
+            background: white;
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 18px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .session-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .session-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .new-session-button {
+            background: #111827;
+            color: white;
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        .session-list {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 3px;
+        }
+
+        .session-button {
+            flex: 0 0 auto;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid transparent;
+            padding: 9px 12px;
+            border-radius: 9px;
+            font-size: 13px;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .session-button.active {
+            background: #111827;
+            color: white;
+        }
+
+        .session-empty {
+            color: #6b7280;
+            font-size: 13px;
+            padding: 4px 0;
+        }
+
+        /* =====================================================
+           MEMORY
+        ===================================================== */
 
         .stats {
             display: grid;
@@ -329,7 +395,9 @@
             color: #991b1b;
         }
 
-        /* CHAT HISTORY */
+        /* =====================================================
+           CHAT HISTORY
+        ===================================================== */
 
         .history-list {
             display: grid;
@@ -404,7 +472,9 @@
             outline: none;
         }
 
-        /* EMPTY / LOADING */
+        /* =====================================================
+           EMPTY / LOADING
+        ===================================================== */
 
         .empty-state {
             background: white;
@@ -420,7 +490,9 @@
             color: #6b7280;
         }
 
-        /* MODAL */
+        /* =====================================================
+           MODAL
+        ===================================================== */
 
         .modal-overlay {
             display: none;
@@ -549,7 +621,9 @@
 
 <body>
 
-    <!-- HEADER -->
+    <!-- =====================================================
+         HEADER
+    ===================================================== -->
 
     <div class="header">
 
@@ -580,15 +654,45 @@
 
     <div class="container">
 
-
-        <!-- ================================================= -->
-        <!-- CHAT VIEW -->
-        <!-- ================================================= -->
+        <!-- =================================================
+             CHAT VIEW
+        ================================================= -->
 
         <div
             id="chatView"
             class="view active"
         >
+
+            <!-- CONVERSATION SESSIONS -->
+
+            <div class="session-panel">
+
+                <div class="session-header">
+
+                    <h3>
+                        💬 My Chats
+                    </h3>
+
+                    <button
+                        class="new-session-button"
+                        id="newSessionButton"
+                    >
+                        + New Chat
+                    </button>
+
+                </div>
+
+                <div
+                    id="sessionList"
+                    class="session-list"
+                >
+                    <div class="session-empty">
+                        Loading chats...
+                    </div>
+                </div>
+
+            </div>
+
 
             <div class="welcome">
 
@@ -638,9 +742,9 @@
         </div>
 
 
-        <!-- ================================================= -->
-        <!-- MEMORY DASHBOARD -->
-        <!-- ================================================= -->
+        <!-- =================================================
+             MEMORY DASHBOARD
+        ================================================= -->
 
         <div
             id="memoryDashboard"
@@ -731,8 +835,6 @@
             </div>
 
 
-            <!-- SEARCH -->
-
             <div class="search-container">
 
                 <div class="search-row">
@@ -763,8 +865,6 @@
 
             </div>
 
-
-            <!-- FILTERS -->
 
             <div class="filter-container">
 
@@ -864,9 +964,9 @@
         </div>
 
 
-        <!-- ================================================= -->
-        <!-- CHAT HISTORY -->
-        <!-- ================================================= -->
+        <!-- =================================================
+             CHAT HISTORY
+        ================================================= -->
 
         <div
             id="historyView"
@@ -926,9 +1026,9 @@
     </div>
 
 
-    <!-- ================================================= -->
-    <!-- EDIT MEMORY MODAL -->
-    <!-- ================================================= -->
+    <!-- =====================================================
+         EDIT MEMORY MODAL
+    ===================================================== -->
 
     <div
         class="modal-overlay"
@@ -1084,9 +1184,15 @@
 
     let loadedConversations = [];
 
+    let loadedSessions = [];
+
     let editingMemoryId = null;
 
     let activeFilter = "all";
+
+    let activeSessionId = "default";
+
+    let activeSessionTitle = "New Chat";
 
 
     // ========================================================
@@ -1160,7 +1266,6 @@
         const message =
             messageInput.value.trim();
 
-
         if (!message) {
             return;
         }
@@ -1183,6 +1288,24 @@
             "Thinking...";
 
 
+        /*
+         * Give a new chat a title based on
+         * the first message.
+         */
+
+        if (
+            activeSessionId !== "default" &&
+            activeSessionTitle === "New Chat"
+        ) {
+
+            activeSessionTitle =
+                message.length > 45
+                    ? message.substring(0, 45) + "..."
+                    : message;
+
+        }
+
+
         try {
 
             const response =
@@ -1202,7 +1325,13 @@
                                 message,
 
                             user_id:
-                                "default_user"
+                                "default_user",
+
+                            session_id:
+                                activeSessionId,
+
+                            title:
+                                activeSessionTitle
 
                         })
 
@@ -1231,6 +1360,9 @@
             );
 
 
+            await loadSessions();
+
+
         } catch (error) {
 
             addMessage(
@@ -1244,7 +1376,6 @@
 
         sendButton.disabled =
             false;
-
 
         sendButton.textContent =
             "Send";
@@ -1278,6 +1409,332 @@
 
         }
     );
+
+
+    // ========================================================
+    // CONVERSATION SESSIONS
+    // ========================================================
+
+    function makeSessionId() {
+
+        return (
+            "session-" +
+            Date.now().toString(36) +
+            "-" +
+            Math.random()
+                .toString(36)
+                .substring(2, 8)
+        );
+
+    }
+
+
+    function clearChatMessages() {
+
+        messages.innerHTML = "";
+
+    }
+
+
+    function showSessionHistory(history) {
+
+        clearChatMessages();
+
+
+        if (
+            !history ||
+            history.length === 0
+        ) {
+
+            addMessage(
+                "assistant",
+                "Hello! I’m Dusra Brain, your personal AI brain and memory assistant. How can I help you today?"
+            );
+
+            return;
+
+        }
+
+
+        history.forEach(
+            function(item) {
+
+                if (
+                    item.role === "user" ||
+                    item.role === "assistant"
+                ) {
+
+                    addMessage(
+                        item.role,
+                        item.message || ""
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+
+    async function loadSessionHistory(
+        sessionId
+    ) {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api?session=true&session_id=" +
+                    encodeURIComponent(
+                        sessionId
+                    )
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Unable to load session"
+                );
+
+            }
+
+
+            showSessionHistory(
+                data.history || []
+            );
+
+
+        } catch (error) {
+
+            clearChatMessages();
+
+            addMessage(
+                "assistant",
+                "Unable to load this chat: " +
+                error.message
+            );
+
+        }
+
+    }
+
+
+    async function loadSessions() {
+
+        const sessionList =
+            document.getElementById(
+                "sessionList"
+            );
+
+
+        sessionList.innerHTML =
+            '<div class="session-empty">Loading chats...</div>';
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api?sessions=true"
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Unable to load chats"
+                );
+
+            }
+
+
+            loadedSessions =
+                data.sessions || [];
+
+
+            renderSessions();
+
+
+        } catch (error) {
+
+            sessionList.innerHTML =
+                '<div class="session-empty">' +
+                escapeHtml(
+                    error.message
+                ) +
+                '</div>';
+
+        }
+
+    }
+
+
+    function renderSessions() {
+
+        const sessionList =
+            document.getElementById(
+                "sessionList"
+            );
+
+
+        sessionList.innerHTML =
+            "";
+
+
+        if (
+            loadedSessions.length ===
+            0
+        ) {
+
+            loadedSessions = [
+                {
+                    session_id:
+                        "default",
+
+                    title:
+                        "New Chat",
+
+                    message_count:
+                        0
+                }
+            ];
+
+        }
+
+
+        loadedSessions.forEach(
+            function(session) {
+
+                const button =
+                    document.createElement(
+                        "button"
+                    );
+
+
+                button.className =
+                    "session-button" +
+                    (
+                        session.session_id ===
+                        activeSessionId
+                            ? " active"
+                            : ""
+                    );
+
+
+                button.textContent =
+                    "💬 " +
+                    (
+                        session.title ||
+                        "New Chat"
+                    );
+
+
+                button.title =
+                    session.title ||
+                    "New Chat";
+
+
+                button.addEventListener(
+                    "click",
+                    function() {
+
+                        switchSession(
+                            session.session_id,
+                            session.title ||
+                                "New Chat"
+                        );
+
+                    }
+                );
+
+
+                sessionList.appendChild(
+                    button
+                );
+
+            }
+        );
+
+    }
+
+
+    async function switchSession(
+        sessionId,
+        title
+    ) {
+
+        activeSessionId =
+            sessionId;
+
+        activeSessionTitle =
+            title ||
+            "New Chat";
+
+
+        renderSessions();
+
+
+        await loadSessionHistory(
+            activeSessionId
+        );
+
+
+        messageInput.focus();
+
+    }
+
+
+    async function createNewSession() {
+
+        activeSessionId =
+            makeSessionId();
+
+        activeSessionTitle =
+            "New Chat";
+
+
+        clearChatMessages();
+
+
+        addMessage(
+            "assistant",
+            "New chat started. What would you like to work on?"
+        );
+
+
+        /*
+         * The session is created in the database
+         * when the first message is sent.
+         */
+
+        renderSessions();
+
+
+        messageInput.focus();
+
+    }
+
+
+    document
+        .getElementById(
+            "newSessionButton"
+        )
+        .addEventListener(
+            "click",
+            createNewSession
+        );
 
 
     // ========================================================
@@ -1761,6 +2218,7 @@
             memoryList.appendChild(
                 empty
             );
+
 
             return;
 
@@ -2532,15 +2990,24 @@
                     }
 
 
-                    return (
-                        String(
+                    const searchableText =
+                        [
                             item.message ||
-                            ""
-                        )
-                        .toLowerCase()
-                        .includes(
-                            query
-                        )
+                                "",
+
+                            item.title ||
+                                "",
+
+                            item.session_id ||
+                                ""
+
+                        ]
+                        .join(" ")
+                        .toLowerCase();
+
+
+                    return searchableText.includes(
+                        query
                     );
 
                 }
@@ -2587,6 +3054,7 @@
             historyList.appendChild(
                 empty
             );
+
 
             return;
 
@@ -2757,6 +3225,21 @@
             );
 
     }
+
+
+    // ========================================================
+    // INITIALIZE
+    // ========================================================
+
+    loadSessions().then(
+        function() {
+
+            loadSessionHistory(
+                activeSessionId
+            );
+
+        }
+    );
 
 
     // ========================================================
