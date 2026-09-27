@@ -2058,6 +2058,231 @@ def explore_brain(
     }
 
 
+
+# ============================================================
+# BRAIN GRAPH EXPLORER
+# ============================================================
+
+def explore_brain_graph(
+    user_id,
+    entity_name,
+    max_depth=3,
+    limit=100,
+):
+
+    entity_name = (entity_name or "").strip()
+
+    if not entity_name:
+        return {
+            "error": "Entity name is required"
+        }
+
+    try:
+        max_depth = int(max_depth)
+    except Exception:
+        max_depth = 3
+
+    max_depth = max(1, min(max_depth, 6))
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 100
+
+    limit = max(1, min(limit, 500))
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            # Find the starting entity using a case-insensitive exact match.
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    entity_type,
+                    name,
+                    description,
+                    importance
+                FROM brain_entities
+                WHERE user_id = %s
+                  AND LOWER(name) = LOWER(%s)
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    entity_name,
+                )
+            )
+
+            start = cur.fetchone()
+
+            if not start:
+                return {
+                    "entity": None,
+                    "entities": [],
+                    "relationships": [],
+                    "depth": max_depth,
+                    "error": "Entity not found"
+                }
+
+            start_entity = {
+                "id": start[0],
+                "entity_type": start[1],
+                "name": start[2],
+                "description": start[3],
+                "importance": start[4],
+                "depth": 0,
+            }
+
+            entities_by_id = {
+                start[0]: start_entity
+            }
+
+            relationships = []
+            seen_relationships = set()
+            frontier = [start[0]]
+            visited = {start[0]}
+
+            for current_depth in range(max_depth):
+
+                if not frontier or len(entities_by_id) >= limit:
+                    break
+
+                next_frontier = []
+
+                for current_id in frontier:
+
+                    cur.execute(
+                        """
+                        SELECT
+                            r.id,
+                            r.from_entity_id,
+                            f.entity_type,
+                            f.name,
+                            r.relationship,
+                            r.to_entity_id,
+                            t.entity_type,
+                            t.name,
+                            r.confidence
+                        FROM brain_relationships r
+                        JOIN brain_entities f
+                            ON f.id = r.from_entity_id
+                        JOIN brain_entities t
+                            ON t.id = r.to_entity_id
+                        WHERE r.user_id = %s
+                          AND (
+                              r.from_entity_id = %s
+                              OR r.to_entity_id = %s
+                          )
+                        ORDER BY r.confidence DESC, r.id ASC
+                        """,
+                        (
+                            user_id,
+                            current_id,
+                            current_id,
+                        )
+                    )
+
+                    rows = cur.fetchall()
+
+                    for row in rows:
+
+                        relationship_id = row[0]
+
+                        if relationship_id in seen_relationships:
+                            continue
+
+                        seen_relationships.add(
+                            relationship_id
+                        )
+
+                        relationships.append({
+                            "id": row[0],
+                            "from_entity_id": row[1],
+                            "from_type": row[2],
+                            "from": row[3],
+                            "relationship": row[4],
+                            "to_entity_id": row[5],
+                            "to_type": row[6],
+                            "to": row[7],
+                            "confidence": row[8],
+                            "depth": current_depth + 1,
+                        })
+
+                        other_id = (
+                            row[5]
+                            if row[1] == current_id
+                            else row[1]
+                        )
+
+                        if (
+                            other_id not in visited
+                            and len(entities_by_id) < limit
+                        ):
+
+                            entity_id = other_id
+
+                            if row[1] == entity_id:
+                                entity_type = row[2]
+                                name = row[3]
+                            else:
+                                entity_type = row[6]
+                                name = row[7]
+
+                            cur.execute(
+                                """
+                                SELECT
+                                    id,
+                                    entity_type,
+                                    name,
+                                    description,
+                                    importance
+                                FROM brain_entities
+                                WHERE user_id = %s
+                                  AND id = %s
+                                LIMIT 1
+                                """,
+                                (
+                                    user_id,
+                                    entity_id,
+                                )
+                            )
+
+                            entity_row = cur.fetchone()
+
+                            if entity_row:
+                                visited.add(entity_id)
+                                entities_by_id[entity_id] = {
+                                    "id": entity_row[0],
+                                    "entity_type": entity_row[1],
+                                    "name": entity_row[2],
+                                    "description": entity_row[3],
+                                    "importance": entity_row[4],
+                                    "depth": current_depth + 1,
+                                }
+                                next_frontier.append(entity_id)
+
+                        if len(relationships) >= limit:
+                            break
+
+                    if len(relationships) >= limit:
+                        break
+
+                frontier = next_frontier
+
+    return {
+        "entity": start_entity,
+        "entities": list(entities_by_id.values()),
+        "relationships": relationships[:limit],
+        "depth": max_depth,
+        "entity_count": len(entities_by_id),
+        "relationship_count": min(
+            len(relationships),
+            limit,
+        ),
+    }
+
 # ============================================================
 # REQUEST HANDLER
 # ============================================================
@@ -2231,6 +2456,57 @@ class handler(
 
             return
 
+
+
+        # ----------------------------------------------------
+        # BRAIN GRAPH EXPLORER
+        # ----------------------------------------------------
+
+        if params.get(
+            "graph"
+        ) == ["true"]:
+
+            entity_name = params.get(
+                "name",
+                [""]
+            )[0]
+
+            depth = params.get(
+                "depth",
+                ["3"]
+            )[0]
+
+            limit = params.get(
+                "limit",
+                ["100"]
+            )[0]
+
+            try:
+
+                result = explore_brain_graph(
+                    user_id,
+                    entity_name,
+                    depth,
+                    limit,
+                )
+
+                send_json(
+                    self,
+                    result
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
 
         # ----------------------------------------------------
         # BRAIN RELATIONSHIPS
