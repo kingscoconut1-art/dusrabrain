@@ -14,6 +14,7 @@ import psycopg
 # ============================================================
 
 def send_json(handler, data, status=200):
+
     body = json.dumps(
         data,
         ensure_ascii=False
@@ -111,9 +112,11 @@ def groq_request(
 
     request = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
+
         data=json.dumps(
             payload
         ).encode("utf-8"),
+
         headers={
             "Content-Type":
                 "application/json",
@@ -124,6 +127,7 @@ def groq_request(
             "User-Agent":
                 "Mozilla/5.0",
         },
+
         method="POST"
     )
 
@@ -453,11 +457,161 @@ def get_memories(
     ]
 
 
+# ============================================================
+# ALL SUBJECTS
+# ============================================================
+
+def get_memory_subjects(
+    user_id
+):
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT DISTINCT subject
+                FROM memories
+                WHERE user_id = %s
+                  AND subject IS NOT NULL
+                  AND subject <> ''
+                ORDER BY subject
+                """,
+                (
+                    user_id,
+                )
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        row[0]
+        for row in rows
+        if row[0]
+    ]
+
+
+# ============================================================
+# SMART SUBJECT DETECTION
+# ============================================================
+
+def detect_subject(
+    user_message,
+    available_subjects
+):
+
+    if not available_subjects:
+        return None
+
+    subjects_text = "\n".join(
+        [
+            "- " + subject
+            for subject in available_subjects
+        ]
+    )
+
+    prompt = f"""
+Identify whether the user's message refers to
+one of the stored subjects below.
+
+USER MESSAGE:
+{user_message}
+
+AVAILABLE SUBJECTS:
+{subjects_text}
+
+Rules:
+
+1. Return the exact subject name if the user is clearly
+asking about or referring to that subject.
+
+2. Match obvious variations and abbreviations.
+
+3. For example:
+"Tell me about Evolve India"
+should match:
+"Evolve India"
+
+"What are we doing with Carbon Mandi?"
+should match:
+"Carbon Mandi"
+
+4. If there is no clear subject match, return null.
+
+Return ONLY JSON:
+
+{{
+  "subject": null
+}}
+
+or:
+
+{{
+  "subject": "Exact Subject Name"
+}}
+"""
+
+    try:
+
+        response = groq_request(
+            [
+                {
+                    "role":
+                        "system",
+
+                    "content":
+                        "You identify subjects from stored personal memory."
+                },
+
+                {
+                    "role":
+                        "user",
+
+                    "content":
+                        prompt
+                }
+            ],
+            temperature=0
+        )
+
+        data = json.loads(
+            clean_json_response(
+                response
+            )
+        )
+
+        detected = data.get(
+            "subject"
+        )
+
+        if not detected:
+            return None
+
+        for subject in available_subjects:
+
+            if subject.lower() == str(
+                detected
+            ).strip().lower():
+
+                return subject
+
+        return None
+
+    except Exception:
+
+        return None
+
+
+# ============================================================
+# SUBJECT MEMORIES
+# ============================================================
+
 def get_subject_memories(
     user_id,
     subject,
     session_id="default",
-    limit=30
+    limit=50
 ):
 
     with get_connection() as conn:
@@ -469,6 +623,7 @@ def get_subject_memories(
                 SELECT
                     id,
                     memory,
+                    created_at,
                     category,
                     importance,
                     subject,
@@ -477,11 +632,6 @@ def get_subject_memories(
                 FROM memories
                 WHERE user_id = %s
                   AND subject = %s
-                  AND
-                  (
-                      session_id = %s
-                      OR session_id = 'default'
-                  )
                 ORDER BY
                     CASE
                         WHEN session_id = %s
@@ -496,7 +646,6 @@ def get_subject_memories(
                     user_id,
                     subject,
                     session_id,
-                    session_id,
                     limit,
                 )
             )
@@ -507,19 +656,134 @@ def get_subject_memories(
         {
             "id": row[0],
             "memory": row[1],
+            "created_at":
+                row[2].isoformat()
+                if row[2]
+                else None,
             "category":
-                row[2] or "general",
+                row[3] or "general",
             "importance":
-                row[3] or 5,
+                row[4] or 5,
             "subject":
-                row[4] or "general",
+                row[5] or "general",
             "memory_key":
-                row[5],
+                row[6],
             "session_id":
-                row[6] or "default",
+                row[7] or "default",
         }
         for row in rows
     ]
+
+
+# ============================================================
+# SMART MEMORY RETRIEVAL
+# ============================================================
+
+def get_relevant_memories(
+    user_id,
+    message,
+    session_id="default",
+    limit=50
+):
+
+    # --------------------------------------------------------
+    # STEP 1:
+    # Get current-session and default memories
+    # --------------------------------------------------------
+
+    base_memories = get_memories(
+        user_id,
+        message=message,
+        session_id=session_id,
+        limit=limit
+    )
+
+
+    # --------------------------------------------------------
+    # STEP 2:
+    # Get all known subjects
+    # --------------------------------------------------------
+
+    subjects = get_memory_subjects(
+        user_id
+    )
+
+
+    # --------------------------------------------------------
+    # STEP 3:
+    # Detect subject from the question
+    # --------------------------------------------------------
+
+    detected_subject = detect_subject(
+        message,
+        subjects
+    )
+
+
+    # --------------------------------------------------------
+    # STEP 4:
+    # If subject found, retrieve ALL memories
+    # for that subject across sessions
+    # --------------------------------------------------------
+
+    if detected_subject:
+
+        subject_memories = get_subject_memories(
+            user_id,
+            detected_subject,
+            session_id=session_id,
+            limit=50
+        )
+
+
+        # ----------------------------------------------------
+        # Merge without duplicates
+        # ----------------------------------------------------
+
+        combined = []
+
+        seen_ids = set()
+
+
+        # Current relevant subject memories first
+
+        for item in subject_memories:
+
+            if item["id"] not in seen_ids:
+
+                combined.append(
+                    item
+                )
+
+                seen_ids.add(
+                    item["id"]
+                )
+
+
+        # Then current/default memories
+
+        for item in base_memories:
+
+            if item["id"] not in seen_ids:
+
+                combined.append(
+                    item
+                )
+
+                seen_ids.add(
+                    item["id"]
+                )
+
+
+        return combined[:limit]
+
+
+    # --------------------------------------------------------
+    # No subject detected:
+    # use normal session-aware retrieval
+    # --------------------------------------------------------
+
+    return base_memories
 
 
 # ============================================================
@@ -554,7 +818,9 @@ def make_memory_key(
 # JSON CLEANING
 # ============================================================
 
-def clean_json_response(text):
+def clean_json_response(
+    text
+):
 
     text = text.strip()
 
@@ -632,6 +898,7 @@ is substantially the same.
                 "content":
                     "You are a precise memory deduplication system."
             },
+
             {
                 "role":
                     "user",
@@ -828,20 +1095,29 @@ def save_memory(
         conn.commit()
 
     return {
-        "id": row[0],
-        "memory": row[1],
+        "id":
+            row[0],
+
+        "memory":
+            row[1],
+
         "created_at":
             row[2].isoformat()
             if row[2]
             else None,
+
         "category":
             row[3],
+
         "importance":
             row[4],
+
         "subject":
             row[5],
+
         "memory_key":
             row[6],
+
         "session_id":
             row[7] or "default",
     }
@@ -910,6 +1186,7 @@ Only extract information explicitly stated by the user.
                 "content":
                     "You are a personal memory extraction system. Never invent user facts."
             },
+
             {
                 "role":
                     "user",
@@ -932,7 +1209,8 @@ Only extract information explicitly stated by the user.
     except Exception:
 
         return {
-            "remember": False
+            "remember":
+                False
         }
 
 
@@ -971,7 +1249,9 @@ class handler(
 
     def do_OPTIONS(self):
 
-        self.send_response(204)
+        self.send_response(
+            204
+        )
 
         self.send_header(
             "Access-Control-Allow-Origin",
@@ -1307,16 +1587,20 @@ class handler(
 
 
             # ------------------------------------------------
-            # MEMORIES
+            # SMART MEMORY RETRIEVAL
             # ------------------------------------------------
 
-            memories = get_memories(
+            memories = get_relevant_memories(
                 user_id,
-                message=message,
+                message,
                 session_id=session_id,
                 limit=50
             )
 
+
+            # ------------------------------------------------
+            # MEMORY TEXT
+            # ------------------------------------------------
 
             if memories:
 
@@ -1388,17 +1672,22 @@ MEMORY RULES:
 
 2. Never invent personal facts.
 
-3. Prefer memories from the current session.
+3. Prefer memories from the current session when available.
 
-4. Default-session memories can be used when relevant.
+4. If a question clearly refers to a known subject,
+use ALL relevant memories for that subject, even if
+those memories were created in another conversation.
 
-5. Use the current conversation history.
+5. Do not mix unrelated project or business memories.
 
-6. Do not claim to remember something that is not available.
+6. Use the current conversation history.
 
-7. If information is missing, say you do not have enough stored information.
+7. Do not claim to remember something that is not available.
 
-8. Keep answers natural and useful.
+8. If information is missing, say you do not have enough
+stored information.
+
+9. Keep answers natural and useful.
 
 STORED MEMORIES:
 
@@ -1411,7 +1700,7 @@ CURRENT CONVERSATION:
 
 
             # ------------------------------------------------
-            # GROQ
+            # GROQ RESPONSE
             # ------------------------------------------------
 
             response = groq_request(
@@ -1423,6 +1712,7 @@ CURRENT CONVERSATION:
                         "content":
                             system_prompt
                     },
+
                     {
                         "role":
                             "user",
@@ -1495,17 +1785,31 @@ CURRENT CONVERSATION:
 
                         save_memory(
                             user_id=user_id,
-                            memory=memory_value,
-                            category=category,
-                            importance=importance,
-                            subject=subject,
-                            session_id=session_id
+
+                            memory=
+                                memory_value,
+
+                            category=
+                                category,
+
+                            importance=
+                                importance,
+
+                            subject=
+                                subject,
+
+                            session_id=
+                                session_id
                         )
 
             except Exception:
 
                 pass
 
+
+            # ------------------------------------------------
+            # RESPONSE
+            # ------------------------------------------------
 
             send_json(
                 self,
