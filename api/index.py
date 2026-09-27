@@ -169,6 +169,32 @@ def groq_request(
 
 
 # ============================================================
+# JSON CLEANING
+# ============================================================
+
+def clean_json_response(text):
+
+    text = text.strip()
+
+    if text.startswith("```"):
+
+        text = re.sub(
+            r"^```(?:json)?",
+            "",
+            text,
+            flags=re.IGNORECASE
+        )
+
+        text = re.sub(
+            r"```$",
+            "",
+            text
+        )
+
+    return text.strip()
+
+
+# ============================================================
 # CONVERSATIONS
 # ============================================================
 
@@ -457,13 +483,65 @@ def get_memories(
     ]
 
 
-# ============================================================
-# ALL SUBJECTS
-# ============================================================
-
-def get_memory_subjects(
-    user_id
+def get_all_user_memories(
+    user_id,
+    limit=500
 ):
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    memory,
+                    created_at,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id
+                FROM memories
+                WHERE user_id = %s
+                ORDER BY
+                    importance DESC,
+                    created_at DESC
+                LIMIT %s
+                """,
+                (
+                    user_id,
+                    limit,
+                )
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "memory": row[1],
+            "created_at":
+                row[2].isoformat()
+                if row[2]
+                else None,
+            "category":
+                row[3] or "general",
+            "importance":
+                row[4] or 5,
+            "subject":
+                row[5] or "general",
+            "memory_key":
+                row[6],
+            "session_id":
+                row[7] or "default",
+        }
+        for row in rows
+    ]
+
+
+def get_memory_subjects(user_id):
 
     with get_connection() as conn:
 
@@ -493,7 +571,7 @@ def get_memory_subjects(
 
 
 # ============================================================
-# SMART SUBJECT DETECTION
+# SUBJECT DETECTION
 # ============================================================
 
 def detect_subject(
@@ -528,16 +606,7 @@ asking about or referring to that subject.
 
 2. Match obvious variations and abbreviations.
 
-3. For example:
-"Tell me about Evolve India"
-should match:
-"Evolve India"
-
-"What are we doing with Carbon Mandi?"
-should match:
-"Carbon Mandi"
-
-4. If there is no clear subject match, return null.
+3. If there is no clear subject match, return null.
 
 Return ONLY JSON:
 
@@ -602,10 +671,6 @@ or:
 
         return None
 
-
-# ============================================================
-# SUBJECT MEMORIES
-# ============================================================
 
 def get_subject_memories(
     user_id,
@@ -675,21 +740,12 @@ def get_subject_memories(
     ]
 
 
-# ============================================================
-# SMART MEMORY RETRIEVAL
-# ============================================================
-
 def get_relevant_memories(
     user_id,
     message,
     session_id="default",
     limit=50
 ):
-
-    # --------------------------------------------------------
-    # STEP 1:
-    # Get current-session and default memories
-    # --------------------------------------------------------
 
     base_memories = get_memories(
         user_id,
@@ -698,33 +754,14 @@ def get_relevant_memories(
         limit=limit
     )
 
-
-    # --------------------------------------------------------
-    # STEP 2:
-    # Get all known subjects
-    # --------------------------------------------------------
-
     subjects = get_memory_subjects(
         user_id
     )
-
-
-    # --------------------------------------------------------
-    # STEP 3:
-    # Detect subject from the question
-    # --------------------------------------------------------
 
     detected_subject = detect_subject(
         message,
         subjects
     )
-
-
-    # --------------------------------------------------------
-    # STEP 4:
-    # If subject found, retrieve ALL memories
-    # for that subject across sessions
-    # --------------------------------------------------------
 
     if detected_subject:
 
@@ -735,53 +772,31 @@ def get_relevant_memories(
             limit=50
         )
 
-
-        # ----------------------------------------------------
-        # Merge without duplicates
-        # ----------------------------------------------------
-
         combined = []
 
         seen_ids = set()
-
-
-        # Current relevant subject memories first
 
         for item in subject_memories:
 
             if item["id"] not in seen_ids:
 
-                combined.append(
-                    item
-                )
+                combined.append(item)
 
                 seen_ids.add(
                     item["id"]
                 )
-
-
-        # Then current/default memories
 
         for item in base_memories:
 
             if item["id"] not in seen_ids:
 
-                combined.append(
-                    item
-                )
+                combined.append(item)
 
                 seen_ids.add(
                     item["id"]
                 )
 
-
         return combined[:limit]
-
-
-    # --------------------------------------------------------
-    # No subject detected:
-    # use normal session-aware retrieval
-    # --------------------------------------------------------
 
     return base_memories
 
@@ -812,34 +827,6 @@ def make_memory_key(
     )
 
     return raw[:1000]
-
-
-# ============================================================
-# JSON CLEANING
-# ============================================================
-
-def clean_json_response(
-    text
-):
-
-    text = text.strip()
-
-    if text.startswith("```"):
-
-        text = re.sub(
-            r"^```(?:json)?",
-            "",
-            text,
-            flags=re.IGNORECASE
-        )
-
-        text = re.sub(
-            r"```$",
-            "",
-            text
-        )
-
-    return text.strip()
 
 
 # ============================================================
@@ -889,28 +876,28 @@ Only mark a memory as duplicate when the meaning
 is substantially the same.
 """
 
-    response = groq_request(
-        [
-            {
-                "role":
-                    "system",
-
-                "content":
-                    "You are a precise memory deduplication system."
-            },
-
-            {
-                "role":
-                    "user",
-
-                "content":
-                    prompt
-            }
-        ],
-        temperature=0
-    )
-
     try:
+
+        response = groq_request(
+            [
+                {
+                    "role":
+                        "system",
+
+                    "content":
+                        "You are a precise memory deduplication system."
+                },
+
+                {
+                    "role":
+                        "user",
+
+                    "content":
+                        prompt
+                }
+            ],
+            temperature=0
+        )
 
         data = json.loads(
             clean_json_response(
@@ -1095,29 +1082,16 @@ def save_memory(
         conn.commit()
 
     return {
-        "id":
-            row[0],
-
-        "memory":
-            row[1],
-
+        "id": row[0],
+        "memory": row[1],
         "created_at":
             row[2].isoformat()
             if row[2]
             else None,
-
-        "category":
-            row[3],
-
-        "importance":
-            row[4],
-
-        "subject":
-            row[5],
-
-        "memory_key":
-            row[6],
-
+        "category": row[3],
+        "importance": row[4],
+        "subject": row[5],
+        "memory_key": row[6],
         "session_id":
             row[7] or "default",
     }
@@ -1177,28 +1151,28 @@ Never invent facts.
 Only extract information explicitly stated by the user.
 """
 
-    response = groq_request(
-        [
-            {
-                "role":
-                    "system",
-
-                "content":
-                    "You are a personal memory extraction system. Never invent user facts."
-            },
-
-            {
-                "role":
-                    "user",
-
-                "content":
-                    prompt
-            }
-        ],
-        temperature=0
-    )
-
     try:
+
+        response = groq_request(
+            [
+                {
+                    "role":
+                        "system",
+
+                    "content":
+                        "You are a personal memory extraction system. Never invent user facts."
+                },
+
+                {
+                    "role":
+                        "user",
+
+                    "content":
+                        prompt
+                }
+            ],
+            temperature=0
+        )
 
         return json.loads(
             clean_json_response(
@@ -1214,13 +1188,7 @@ Only extract information explicitly stated by the user.
         }
 
 
-# ============================================================
-# SUBJECT
-# ============================================================
-
-def normalize_subject(
-    subject
-):
+def normalize_subject(subject):
 
     if not subject:
         return "general"
@@ -1233,6 +1201,746 @@ def normalize_subject(
         return "general"
 
     return subject[:200]
+
+
+# ============================================================
+# BRAIN ENTITIES
+# ============================================================
+
+def extract_brain_structure(
+    user_message,
+    current_subject="general"
+):
+
+    prompt = f"""
+You are the structured knowledge extraction engine
+for a personal AI brain called Dusra Brain.
+
+Extract ONLY facts explicitly stated by the user.
+
+USER MESSAGE:
+{user_message}
+
+CURRENT SUBJECT:
+{current_subject}
+
+Identify important entities.
+
+Allowed entity types:
+- person
+- company
+- project
+- product
+- organization
+- location
+- goal
+- decision
+- preference
+- other
+
+For every entity provide:
+
+name
+type
+description
+importance
+
+Then identify relationships between entities.
+
+A relationship must connect two entities from the
+entities list.
+
+Examples:
+
+Evolve India -> brings -> Evolve Lubricants
+Evolve Lubricants -> originates_from -> USA
+Evolve India -> operates_in -> India
+
+Do NOT invent relationships.
+
+Return ONLY JSON in this format:
+
+{{
+  "entities": [
+    {{
+      "name": "Evolve India",
+      "type": "project",
+      "description": "Project explicitly mentioned by the user",
+      "importance": 8
+    }}
+  ],
+  "relationships": [
+    {{
+      "from": "Evolve India",
+      "relationship": "brings",
+      "to": "Evolve Lubricants",
+      "confidence": 8
+    }}
+  ]
+}}
+
+If nothing meaningful can be extracted:
+
+{{
+  "entities": [],
+  "relationships": []
+}}
+"""
+
+    try:
+
+        response = groq_request(
+            [
+                {
+                    "role":
+                        "system",
+
+                    "content":
+                        "You extract structured personal knowledge. Never invent facts."
+                },
+
+                {
+                    "role":
+                        "user",
+
+                    "content":
+                        prompt
+                }
+            ],
+            temperature=0
+        )
+
+        data = json.loads(
+            clean_json_response(
+                response
+            )
+        )
+
+        if not isinstance(data, dict):
+            return {
+                "entities": [],
+                "relationships": []
+            }
+
+        return data
+
+    except Exception:
+
+        return {
+            "entities": [],
+            "relationships": []
+        }
+
+
+def normalize_entity_type(entity_type):
+
+    allowed = {
+        "person",
+        "company",
+        "project",
+        "product",
+        "organization",
+        "location",
+        "goal",
+        "decision",
+        "preference",
+        "other",
+    }
+
+    value = str(
+        entity_type or "other"
+    ).strip().lower()
+
+    if value not in allowed:
+        return "other"
+
+    return value
+
+
+def save_brain_entity(
+    user_id,
+    entity_type,
+    name,
+    description="",
+    importance=5
+):
+
+    entity_type = normalize_entity_type(
+        entity_type
+    )
+
+    name = str(
+        name or ""
+    ).strip()
+
+    description = str(
+        description or ""
+    ).strip()
+
+    try:
+        importance = int(
+            importance
+        )
+    except Exception:
+        importance = 5
+
+    importance = max(
+        1,
+        min(
+            10,
+            importance
+        )
+    )
+
+    if not name:
+        return None
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                INSERT INTO brain_entities
+                (
+                    user_id,
+                    entity_type,
+                    name,
+                    description,
+                    importance,
+                    updated_at
+                )
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    CURRENT_TIMESTAMP
+                )
+                ON CONFLICT
+                (
+                    user_id,
+                    entity_type,
+                    name
+                )
+                DO UPDATE SET
+                    description =
+                        CASE
+                            WHEN EXCLUDED.description <> ''
+                            THEN EXCLUDED.description
+                            ELSE brain_entities.description
+                        END,
+                    importance =
+                        GREATEST(
+                            brain_entities.importance,
+                            EXCLUDED.importance
+                        ),
+                    updated_at =
+                        CURRENT_TIMESTAMP
+                RETURNING
+                    id,
+                    user_id,
+                    entity_type,
+                    name,
+                    description,
+                    importance,
+                    created_at,
+                    updated_at
+                """,
+                (
+                    user_id,
+                    entity_type,
+                    name,
+                    description,
+                    importance,
+                )
+            )
+
+            row = cur.fetchone()
+
+        conn.commit()
+
+    return {
+        "id": row[0],
+        "user_id": row[1],
+        "entity_type": row[2],
+        "name": row[3],
+        "description": row[4],
+        "importance": row[5],
+        "created_at":
+            row[6].isoformat()
+            if row[6]
+            else None,
+        "updated_at":
+            row[7].isoformat()
+            if row[7]
+            else None,
+    }
+
+
+def save_brain_relationship(
+    user_id,
+    from_entity_id,
+    relationship,
+    to_entity_id,
+    confidence=5
+):
+
+    relationship = str(
+        relationship or ""
+    ).strip()
+
+    if not relationship:
+        return None
+
+    try:
+        confidence = int(
+            confidence
+        )
+    except Exception:
+        confidence = 5
+
+    confidence = max(
+        1,
+        min(
+            10,
+            confidence
+        )
+    )
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    confidence
+                FROM brain_relationships
+                WHERE user_id = %s
+                  AND from_entity_id = %s
+                  AND relationship = %s
+                  AND to_entity_id = %s
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    from_entity_id,
+                    relationship,
+                    to_entity_id,
+                )
+            )
+
+            existing = cur.fetchone()
+
+            if existing:
+
+                cur.execute(
+                    """
+                    UPDATE brain_relationships
+                    SET
+                        confidence = GREATEST(
+                            confidence,
+                            %s
+                        )
+                    WHERE id = %s
+                    RETURNING id
+                    """,
+                    (
+                        confidence,
+                        existing[0],
+                    )
+                )
+
+            else:
+
+                cur.execute(
+                    """
+                    INSERT INTO brain_relationships
+                    (
+                        user_id,
+                        from_entity_id,
+                        relationship,
+                        to_entity_id,
+                        confidence
+                    )
+                    VALUES
+                    (
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        user_id,
+                        from_entity_id,
+                        relationship,
+                        to_entity_id,
+                        confidence,
+                    )
+                )
+
+            row = cur.fetchone()
+
+        conn.commit()
+
+    return row[0] if row else None
+
+
+def save_brain_structure(
+    user_id,
+    user_message,
+    current_subject="general"
+):
+
+    structure = extract_brain_structure(
+        user_message,
+        current_subject
+    )
+
+    entities = structure.get(
+        "entities",
+        []
+    )
+
+    relationships = structure.get(
+        "relationships",
+        []
+    )
+
+    entity_map = {}
+
+    saved_entities = []
+
+    for entity in entities:
+
+        if not isinstance(
+            entity,
+            dict
+        ):
+            continue
+
+        saved = save_brain_entity(
+            user_id=user_id,
+
+            entity_type=entity.get(
+                "type",
+                "other"
+            ),
+
+            name=entity.get(
+                "name",
+                ""
+            ),
+
+            description=entity.get(
+                "description",
+                ""
+            ),
+
+            importance=entity.get(
+                "importance",
+                5
+            )
+        )
+
+        if saved:
+
+            key = saved["name"].strip().lower()
+
+            entity_map[key] = saved
+
+            saved_entities.append(
+                saved
+            )
+
+    saved_relationships = []
+
+    for relation in relationships:
+
+        if not isinstance(
+            relation,
+            dict
+        ):
+            continue
+
+        from_name = str(
+            relation.get(
+                "from",
+                ""
+            )
+        ).strip().lower()
+
+        to_name = str(
+            relation.get(
+                "to",
+                ""
+            )
+        ).strip().lower()
+
+        if not from_name or not to_name:
+            continue
+
+        from_entity = entity_map.get(
+            from_name
+        )
+
+        to_entity = entity_map.get(
+            to_name
+        )
+
+        if not from_entity:
+
+            with get_connection() as conn:
+
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        """
+                        SELECT
+                            id,
+                            user_id,
+                            entity_type,
+                            name,
+                            description,
+                            importance
+                        FROM brain_entities
+                        WHERE user_id = %s
+                          AND LOWER(name) = %s
+                        ORDER BY importance DESC
+                        LIMIT 1
+                        """,
+                        (
+                            user_id,
+                            from_name,
+                        )
+                    )
+
+                    row = cur.fetchone()
+
+            if row:
+
+                from_entity = {
+                    "id": row[0],
+                    "user_id": row[1],
+                    "entity_type": row[2],
+                    "name": row[3],
+                    "description": row[4],
+                    "importance": row[5],
+                }
+
+        if not to_entity:
+
+            with get_connection() as conn:
+
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        """
+                        SELECT
+                            id,
+                            user_id,
+                            entity_type,
+                            name,
+                            description,
+                            importance
+                        FROM brain_entities
+                        WHERE user_id = %s
+                          AND LOWER(name) = %s
+                        ORDER BY importance DESC
+                        LIMIT 1
+                        """,
+                        (
+                            user_id,
+                            to_name,
+                        )
+                    )
+
+                    row = cur.fetchone()
+
+            if row:
+
+                to_entity = {
+                    "id": row[0],
+                    "user_id": row[1],
+                    "entity_type": row[2],
+                    "name": row[3],
+                    "description": row[4],
+                    "importance": row[5],
+                }
+
+        if not from_entity or not to_entity:
+            continue
+
+        relation_id = save_brain_relationship(
+            user_id=user_id,
+            from_entity_id=from_entity["id"],
+            relationship=relation.get(
+                "relationship",
+                "related_to"
+            ),
+            to_entity_id=to_entity["id"],
+            confidence=relation.get(
+                "confidence",
+                5
+            )
+        )
+
+        if relation_id:
+
+            saved_relationships.append(
+                {
+                    "id":
+                        relation_id,
+
+                    "from":
+                        from_entity["name"],
+
+                    "relationship":
+                        relation.get(
+                            "relationship",
+                            "related_to"
+                        ),
+
+                    "to":
+                        to_entity["name"],
+                }
+            )
+
+    return {
+        "entities":
+            saved_entities,
+
+        "relationships":
+            saved_relationships,
+    }
+
+
+# ============================================================
+# BRAIN READ
+# ============================================================
+
+def get_brain_entities(
+    user_id,
+    limit=500
+):
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    user_id,
+                    entity_type,
+                    name,
+                    description,
+                    importance,
+                    created_at,
+                    updated_at
+                FROM brain_entities
+                WHERE user_id = %s
+                ORDER BY
+                    importance DESC,
+                    updated_at DESC
+                LIMIT %s
+                """,
+                (
+                    user_id,
+                    limit,
+                )
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "user_id": row[1],
+            "entity_type": row[2],
+            "name": row[3],
+            "description": row[4],
+            "importance": row[5],
+            "created_at":
+                row[6].isoformat()
+                if row[6]
+                else None,
+            "updated_at":
+                row[7].isoformat()
+                if row[7]
+                else None,
+        }
+        for row in rows
+    ]
+
+
+def get_brain_relationships(
+    user_id,
+    limit=500
+):
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    r.id,
+                    r.from_entity_id,
+                    f.name,
+                    r.relationship,
+                    r.to_entity_id,
+                    t.name,
+                    r.confidence,
+                    r.created_at
+                FROM brain_relationships r
+                JOIN brain_entities f
+                    ON f.id = r.from_entity_id
+                JOIN brain_entities t
+                    ON t.id = r.to_entity_id
+                WHERE r.user_id = %s
+                ORDER BY
+                    r.confidence DESC,
+                    r.created_at DESC
+                LIMIT %s
+                """,
+                (
+                    user_id,
+                    limit,
+                )
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "from_entity_id": row[1],
+            "from":
+                row[2],
+            "relationship":
+                row[3],
+            "to_entity_id": row[4],
+            "to":
+                row[5],
+            "confidence":
+                row[6],
+            "created_at":
+                row[7].isoformat()
+                if row[7]
+                else None,
+        }
+        for row in rows
+    ]
 
 
 # ============================================================
@@ -1292,7 +2000,7 @@ class handler(
 
 
         # ----------------------------------------------------
-        # MEMORIES
+        # ALL MEMORIES
         # ----------------------------------------------------
 
         if params.get(
@@ -1301,65 +2009,10 @@ class handler(
 
             try:
 
-                with get_connection() as conn:
-
-                    with conn.cursor() as cur:
-
-                        cur.execute(
-                            """
-                            SELECT
-                                id,
-                                memory,
-                                created_at,
-                                category,
-                                importance,
-                                subject,
-                                memory_key,
-                                session_id
-                            FROM memories
-                            WHERE user_id = %s
-                            ORDER BY
-                                importance DESC,
-                                created_at DESC
-                            LIMIT 500
-                            """,
-                            (
-                                user_id,
-                            )
-                        )
-
-                        rows = cur.fetchall()
-
-                memories = [
-                    {
-                        "id":
-                            row[0],
-
-                        "memory":
-                            row[1],
-
-                        "created_at":
-                            row[2].isoformat()
-                            if row[2]
-                            else None,
-
-                        "category":
-                            row[3] or "general",
-
-                        "importance":
-                            row[4] or 5,
-
-                        "subject":
-                            row[5] or "general",
-
-                        "memory_key":
-                            row[6],
-
-                        "session_id":
-                            row[7] or "default",
-                    }
-                    for row in rows
-                ]
+                memories = get_all_user_memories(
+                    user_id,
+                    limit=500
+                )
 
                 send_json(
                     self,
@@ -1369,6 +2022,84 @@ class handler(
 
                         "count":
                             len(memories),
+                    }
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # BRAIN ENTITIES
+        # ----------------------------------------------------
+
+        if params.get(
+            "entities"
+        ) == ["true"]:
+
+            try:
+
+                entities = get_brain_entities(
+                    user_id
+                )
+
+                send_json(
+                    self,
+                    {
+                        "entities":
+                            entities,
+
+                        "count":
+                            len(entities),
+                    }
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # BRAIN RELATIONSHIPS
+        # ----------------------------------------------------
+
+        if params.get(
+            "relationships"
+        ) == ["true"]:
+
+            try:
+
+                relationships = get_brain_relationships(
+                    user_id
+                )
+
+                send_json(
+                    self,
+                    {
+                        "relationships":
+                            relationships,
+
+                        "count":
+                            len(relationships),
                     }
                 )
 
@@ -1681,6 +2412,77 @@ class handler(
 
 
             # ------------------------------------------------
+            # BRAIN CONTEXT
+            # ------------------------------------------------
+
+            try:
+
+                brain_entities = get_brain_entities(
+                    user_id,
+                    limit=100
+                )
+
+                brain_relationships = get_brain_relationships(
+                    user_id,
+                    limit=100
+                )
+
+            except Exception:
+
+                brain_entities = []
+
+                brain_relationships = []
+
+
+            if brain_entities:
+
+                entity_text = "\n".join(
+                    [
+                        (
+                            "- "
+                            + item["name"]
+                            + " | type: "
+                            + item["entity_type"]
+                            + " | description: "
+                            + str(
+                                item["description"] or ""
+                            )
+                        )
+                        for item in brain_entities
+                    ]
+                )
+
+            else:
+
+                entity_text = (
+                    "No structured entities available."
+                )
+
+
+            if brain_relationships:
+
+                relationship_text = "\n".join(
+                    [
+                        (
+                            "- "
+                            + item["from"]
+                            + " -> "
+                            + item["relationship"]
+                            + " -> "
+                            + item["to"]
+                        )
+                        for item in brain_relationships
+                    ]
+                )
+
+            else:
+
+                relationship_text = (
+                    "No structured relationships available."
+                )
+
+
+            # ------------------------------------------------
             # HISTORY TEXT
             # ------------------------------------------------
 
@@ -1731,16 +2533,27 @@ those memories were created in another conversation.
 
 6. Use the current conversation history.
 
-7. Do not claim to remember something that is not available.
+7. Use structured entities and relationships when they
+are relevant to the user's question.
 
-8. If information is missing, say you do not have enough
+8. Do not claim to remember something that is not available.
+
+9. If information is missing, say you do not have enough
 stored information.
 
-9. Keep answers natural and useful.
+10. Keep answers natural and useful.
 
 STORED MEMORIES:
 
 {memory_text}
+
+STRUCTURED ENTITIES:
+
+{entity_text}
+
+STRUCTURED RELATIONSHIPS:
+
+{relationship_text}
 
 CURRENT CONVERSATION:
 
@@ -1850,6 +2663,23 @@ CURRENT CONVERSATION:
                             session_id=
                                 session_id
                         )
+
+            except Exception:
+
+                pass
+
+
+            # ------------------------------------------------
+            # STRUCTURED BRAIN EXTRACTION
+            # ------------------------------------------------
+
+            try:
+
+                save_brain_structure(
+                    user_id=user_id,
+                    user_message=message,
+                    current_subject=title
+                )
 
             except Exception:
 
