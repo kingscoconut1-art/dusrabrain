@@ -696,6 +696,88 @@
             color: #6b7280;
         }
 
+        .brain-timeline-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .brain-timeline-title {
+            font-size: 19px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 16px;
+        }
+
+        .brain-timeline {
+            position: relative;
+            margin-left: 8px;
+            padding-left: 26px;
+        }
+
+        .brain-timeline::before {
+            content: "";
+            position: absolute;
+            left: 6px;
+            top: 6px;
+            bottom: 6px;
+            width: 2px;
+            background: #dbe2f0;
+        }
+
+        .brain-timeline-item {
+            position: relative;
+            padding: 0 0 18px 0;
+        }
+
+        .brain-timeline-item:last-child {
+            padding-bottom: 0;
+        }
+
+        .brain-timeline-dot {
+            position: absolute;
+            left: -25px;
+            top: 5px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #6366f1;
+            border: 3px solid white;
+            box-shadow: 0 0 0 1px #c7d2fe;
+        }
+
+        .brain-timeline-date {
+            font-size: 12px;
+            font-weight: 800;
+            color: #64748b;
+            margin-bottom: 5px;
+        }
+
+        .brain-timeline-memory {
+            color: #1f2937;
+            font-size: 15px;
+            line-height: 1.55;
+        }
+
+        .brain-timeline-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 7px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        .brain-timeline-pill {
+            background: #eef2ff;
+            color: #4338ca;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-weight: 700;
+        }
+
         .brain-evidence-section {
             margin-top: 18px;
             background: white;
@@ -2874,6 +2956,147 @@
     }
 
 
+    function renderBrainTimeline(
+        memories,
+        entityName
+    ) {
+
+        let html =
+            '<div class="brain-timeline-section">' +
+                '<div class="brain-timeline-title">' +
+                    '🕒 Brain Timeline' +
+                '</div>';
+
+        if (
+            !memories ||
+            !memories.length
+        ) {
+
+            html +=
+                '<div class="brain-empty">' +
+                    'No timeline events are available for ' +
+                    '<strong>' +
+                        brainText(
+                            entityName ||
+                            ""
+                        ) +
+                    '</strong> yet.' +
+                '</div>' +
+            '</div>';
+
+            return html;
+
+        }
+
+        const sorted =
+            memories
+                .slice()
+                .sort(
+                    function(a, b) {
+
+                        return String(
+                            a.created_at ||
+                            ""
+                        ).localeCompare(
+                            String(
+                                b.created_at ||
+                                ""
+                            )
+                        );
+
+                    }
+                );
+
+        html +=
+            '<div class="brain-timeline">';
+
+        sorted.forEach(
+            function(item) {
+
+                let dateText =
+                    "Date unavailable";
+
+                if (
+                    item.created_at
+                ) {
+
+                    const date =
+                        new Date(
+                            item.created_at
+                        );
+
+                    if (
+                        !Number.isNaN(
+                            date.getTime()
+                        )
+                    ) {
+
+                        dateText =
+                            date.toLocaleString();
+
+                    }
+
+                }
+
+                html +=
+                    '<div class="brain-timeline-item">' +
+                        '<span class="brain-timeline-dot"></span>' +
+                        '<div class="brain-timeline-date">' +
+                            brainText(
+                                dateText
+                            ) +
+                        '</div>' +
+                        '<div class="brain-timeline-memory">' +
+                            brainText(
+                                item.memory ||
+                                ""
+                            ) +
+                        '</div>' +
+                        '<div class="brain-timeline-meta">' +
+                            (
+                                item.subject
+                                    ? '<span class="brain-timeline-pill">' +
+                                        brainText(
+                                            item.subject
+                                        ) +
+                                      '</span>'
+                                    : ""
+                            ) +
+                            (
+                                item.category
+                                    ? '<span>' +
+                                        brainText(
+                                            item.category
+                                        ) +
+                                      '</span>'
+                                    : ""
+                            ) +
+                            (
+                                item.importance
+                                    ? '<span>Importance ' +
+                                        brainText(
+                                            String(
+                                                item.importance
+                                            )
+                                        ) +
+                                      '/10</span>'
+                                    : ""
+                            ) +
+                        '</div>' +
+                    '</div>';
+
+            }
+        );
+
+        html +=
+            '</div>' +
+            '</div>';
+
+        return html;
+
+    }
+
+
     async function exploreBrainEntity(entityName) {
 
         const input =
@@ -3082,6 +3305,13 @@
 
             html +=
                 renderBrainEvidence(
+                    evidence,
+                    rootEntity.name ||
+                    entityName
+                );
+
+            html +=
+                renderBrainTimeline(
                     evidence,
                     rootEntity.name ||
                     entityName
