@@ -576,6 +576,141 @@
             color: white;
         }
 
+
+        /* =====================================================
+           BRAIN EXPLORER
+        ===================================================== */
+
+        .brain-search {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        }
+
+        .brain-search-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        #brainSearch {
+            flex: 1;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 9px;
+            font-size: 15px;
+            outline: none;
+        }
+
+        #brainSearch:focus {
+            border-color: #111827;
+        }
+
+        #brainExploreButton {
+            background: #111827;
+            color: white;
+            min-width: 110px;
+        }
+
+        .brain-result {
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .brain-entity-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+
+        .brain-entity-name {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .brain-entity-type {
+            display: inline-block;
+            background: #eef2ff;
+            color: #3730a3;
+            padding: 5px 9px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        .brain-entity-description {
+            color: #4b5563;
+            line-height: 1.5;
+        }
+
+        .brain-connections-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin: 20px 0 12px;
+        }
+
+        .brain-connection {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 14px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .brain-node {
+            font-weight: 700;
+        }
+
+        .brain-node-type {
+            font-size: 11px;
+            color: #6b7280;
+            margin-left: 4px;
+        }
+
+        .brain-relation {
+            font-size: 13px;
+            color: #4f46e5;
+            font-weight: 600;
+        }
+
+        .brain-confidence {
+            font-size: 11px;
+            color: #6b7280;
+            margin-left: auto;
+        }
+
+        .brain-empty {
+            background: white;
+            padding: 40px;
+            text-align: center;
+            border-radius: 12px;
+            color: #6b7280;
+        }
+
+        @media (max-width: 700px) {
+            .brain-search-row {
+                flex-direction: column;
+            }
+
+            #brainExploreButton {
+                width: 100%;
+            }
+
+            .brain-confidence {
+                margin-left: 0;
+                width: 100%;
+            }
+        }
+
         @media (max-width: 700px) {
 
             .header {
@@ -645,6 +780,13 @@
                 id="historyButton"
             >
                 💬 Chat History
+            </button>
+
+            <button
+                class="header-button"
+                id="brainButton"
+            >
+                🕸️ Brain Explorer
             </button>
 
         </div>
@@ -1026,6 +1168,63 @@
     </div>
 
 
+        <!-- =================================================
+             BRAIN EXPLORER
+        ================================================= -->
+
+        <div
+            id="brainExplorerView"
+            class="view"
+        >
+
+            <div class="dashboard-header">
+
+                <h2>
+                    🕸️ Brain Explorer
+                </h2>
+
+                <button
+                    class="back-button"
+                    id="brainBackButton"
+                >
+                    ← Back to Chat
+                </button>
+
+            </div>
+
+            <div class="brain-search">
+
+                <div class="brain-search-row">
+
+                    <input
+                        type="text"
+                        id="brainSearch"
+                        placeholder="🔎 Search your brain... e.g. Evolve India"
+                        autocomplete="off"
+                    >
+
+                    <button id="brainExploreButton">
+                        Explore
+                    </button>
+
+                </div>
+
+            </div>
+
+            <div
+                id="brainResult"
+                class="brain-result"
+            >
+
+                <div class="brain-empty">
+                    Search for a project, product, person, place or other entity to explore its connections.
+                </div>
+
+            </div>
+
+        </div>
+
+
     <!-- =====================================================
          EDIT MEMORY MODAL
     ===================================================== -->
@@ -1194,6 +1393,8 @@
 
     let activeSessionTitle = "New Chat";
 
+    let loadedBrainResult = null;
+
 
     // ========================================================
     // ELEMENTS
@@ -1207,6 +1408,9 @@
 
     const historyView =
         document.getElementById("historyView");
+
+    const brainExplorerView =
+        document.getElementById("brainExplorerView");
 
 
     // ========================================================
@@ -1757,6 +1961,10 @@
             "active"
         );
 
+        brainExplorerView.classList.remove(
+            "active"
+        );
+
 
         view.classList.add(
             "active"
@@ -1828,6 +2036,278 @@
                 showView(
                     chatView
                 );
+
+            }
+        );
+
+
+
+    // ========================================================
+    // BRAIN EXPLORER
+    // ========================================================
+
+    document
+        .getElementById("brainButton")
+        .addEventListener(
+            "click",
+            function() {
+
+                showView(
+                    brainExplorerView
+                );
+
+                document
+                    .getElementById("brainSearch")
+                    .focus();
+
+            }
+        );
+
+
+    document
+        .getElementById("brainBackButton")
+        .addEventListener(
+            "click",
+            function() {
+
+                showView(
+                    chatView
+                );
+
+            }
+        );
+
+
+    async function exploreBrain() {
+
+        const input =
+            document
+                .getElementById("brainSearch");
+
+        const result =
+            document
+                .getElementById("brainResult");
+
+        const entityName =
+            input.value.trim();
+
+        if (!entityName) {
+
+            result.innerHTML =
+                '<div class="brain-empty">Enter an entity name to explore.</div>';
+
+            input.focus();
+
+            return;
+
+        }
+
+        result.innerHTML =
+            '<div class="loading">Exploring your brain...</div>';
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api?explore=true&name=" +
+                    encodeURIComponent(entityName)
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Unable to explore brain"
+                );
+
+            }
+
+            loadedBrainResult =
+                data;
+
+            renderBrainResult(
+                data
+            );
+
+        } catch (error) {
+
+            result.innerHTML =
+                '<div class="brain-empty">' +
+                escapeHtml(
+                    error.message
+                ) +
+                '</div>';
+
+        }
+
+    }
+
+
+    function renderBrainResult(
+        data
+    ) {
+
+        const result =
+            document.getElementById(
+                "brainResult"
+            );
+
+        if (
+            !data ||
+            !data.entity
+        ) {
+
+            result.innerHTML =
+                '<div class="brain-empty">No matching entity found in your brain.</div>';
+
+            return;
+
+        }
+
+        const entity =
+            data.entity;
+
+        const connections =
+            data.connections ||
+            [];
+
+        let html =
+            '<div class="brain-entity-card">' +
+                '<div class="brain-entity-name">' +
+                    escapeHtml(
+                        entity.name ||
+                        ""
+                    ) +
+                '</div>' +
+                '<div class="brain-entity-type">' +
+                    escapeHtml(
+                        entity.entity_type ||
+                        "entity"
+                    ) +
+                '</div>' +
+                '<div class="brain-entity-description">' +
+                    escapeHtml(
+                        entity.description ||
+                        "No description available."
+                    ) +
+                '</div>' +
+            '</div>';
+
+        html +=
+            '<div class="brain-connections-title">' +
+                '🔗 Connections (' +
+                connections.length +
+                ')' +
+            '</div>';
+
+        if (
+            connections.length ===
+            0
+        ) {
+
+            html +=
+                '<div class="brain-empty">' +
+                    'No direct connections found for this entity.' +
+                '</div>';
+
+        } else {
+
+            connections.forEach(
+                function(connection) {
+
+                    html +=
+                        '<div class="brain-connection">' +
+
+                            '<span class="brain-node">' +
+                                escapeHtml(
+                                    connection.from ||
+                                    ""
+                                ) +
+                                '<span class="brain-node-type">' +
+                                    '(' +
+                                    escapeHtml(
+                                        connection.from_type ||
+                                        "entity"
+                                    ) +
+                                    ')' +
+                                '</span>' +
+                            '</span>' +
+
+                            '<span class="brain-relation">' +
+                                '→ ' +
+                                escapeHtml(
+                                    connection.relationship ||
+                                    "related_to"
+                                ) +
+                                ' →' +
+                            '</span>' +
+
+                            '<span class="brain-node">' +
+                                escapeHtml(
+                                    connection.to ||
+                                    ""
+                                ) +
+                                '<span class="brain-node-type">' +
+                                    '(' +
+                                    escapeHtml(
+                                        connection.to_type ||
+                                        "entity"
+                                    ) +
+                                    ')' +
+                                '</span>' +
+                            '</span>' +
+
+                            '<span class="brain-confidence">' +
+                                'Confidence: ' +
+                                escapeHtml(
+                                    String(
+                                        connection.confidence ||
+                                        0
+                                    )
+                                ) +
+                                '/10' +
+                            '</span>' +
+
+                        '</div>';
+
+                }
+            );
+
+        }
+
+        result.innerHTML =
+            html;
+
+    }
+
+
+    document
+        .getElementById("brainExploreButton")
+        .addEventListener(
+            "click",
+            exploreBrain
+        );
+
+
+    document
+        .getElementById("brainSearch")
+        .addEventListener(
+            "keydown",
+            function(event) {
+
+                if (
+                    event.key ===
+                    "Enter"
+                ) {
+
+                    event.preventDefault();
+
+                    exploreBrain();
+
+                }
 
             }
         );
