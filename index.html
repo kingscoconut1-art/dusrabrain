@@ -734,6 +734,20 @@
             fill: #475569;
         }
 
+        .brain-graph-clickable {
+            cursor: pointer;
+            outline: none;
+        }
+
+        .brain-graph-clickable:hover .brain-graph-node-box {
+            filter: brightness(0.97);
+            stroke-width: 2.5;
+        }
+
+        .brain-graph-clickable:focus .brain-graph-node-box {
+            stroke-width: 3;
+        }
+
         .brain-graph-node-box {
             fill: #ffffff;
             stroke: #cbd5e1;
@@ -2439,7 +2453,15 @@
                         : "";
 
                 nodes +=
-                    '<g>' +
+                    '<g class="brain-graph-clickable" ' +
+                        'data-entity-name="' +
+                            brainText(entity.name || "") +
+                        '" ' +
+                        'onclick="exploreBrainEntity(this.dataset.entityName)" ' +
+                        'role="button" ' +
+                        'tabindex="0" ' +
+                        'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();exploreBrainEntity(this.dataset.entityName);}"' +
+                    '>' +
                         '<title>' +
                             brainText(
                                 entity.name || ""
@@ -2570,6 +2592,23 @@
             '</div>';
 
         return html;
+
+    }
+
+
+    async function exploreBrainEntity(entityName) {
+
+        const input =
+            document.getElementById("brainSearch");
+
+        if (!input) {
+            return;
+        }
+
+        input.value =
+            entityName || "";
+
+        await exploreBrain();
 
     }
 
