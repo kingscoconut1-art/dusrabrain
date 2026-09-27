@@ -1944,6 +1944,121 @@ def get_brain_relationships(
 
 
 # ============================================================
+# BRAIN EXPLORER
+# ============================================================
+
+def explore_brain(
+    user_id,
+    entity_name,
+    limit=100
+):
+
+    entity_name = str(
+        entity_name or ""
+    ).strip()
+
+    if not entity_name:
+        return {
+            "entity": None,
+            "connections": []
+        }
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    entity_type,
+                    name,
+                    description,
+                    importance
+                FROM brain_entities
+                WHERE user_id = %s
+                  AND LOWER(name) = LOWER(%s)
+                ORDER BY importance DESC
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    entity_name,
+                )
+            )
+
+            entity = cur.fetchone()
+
+            if not entity:
+                return {
+                    "entity": None,
+                    "connections": []
+                }
+
+            entity_data = {
+                "id": entity[0],
+                "entity_type": entity[1],
+                "name": entity[2],
+                "description": entity[3],
+                "importance": entity[4],
+            }
+
+            cur.execute(
+                """
+                SELECT
+                    r.id,
+                    f.name,
+                    f.entity_type,
+                    r.relationship,
+                    t.name,
+                    t.entity_type,
+                    r.confidence
+                FROM brain_relationships r
+                JOIN brain_entities f
+                    ON f.id = r.from_entity_id
+                JOIN brain_entities t
+                    ON t.id = r.to_entity_id
+                WHERE r.user_id = %s
+                  AND (
+                      r.from_entity_id = %s
+                      OR r.to_entity_id = %s
+                  )
+                ORDER BY r.confidence DESC
+                LIMIT %s
+                """,
+                (
+                    user_id,
+                    entity[0],
+                    entity[0],
+                    limit,
+                )
+            )
+
+            rows = cur.fetchall()
+
+    connections = []
+
+    for row in rows:
+
+        connections.append(
+            {
+                "id": row[0],
+                "from": row[1],
+                "from_type": row[2],
+                "relationship": row[3],
+                "to": row[4],
+                "to_type": row[5],
+                "confidence": row[6],
+            }
+        )
+
+    return {
+        "entity": entity_data,
+        "connections": connections,
+    }
+
+
+# ============================================================
 # REQUEST HANDLER
 # ============================================================
 
@@ -2062,6 +2177,45 @@ class handler(
                         "count":
                             len(entities),
                     }
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # BRAIN EXPLORER
+        # ----------------------------------------------------
+
+        if params.get(
+            "explore"
+        ) == ["true"]:
+
+            entity_name = params.get(
+                "name",
+                [""]
+            )[0]
+
+            try:
+
+                result = explore_brain(
+                    user_id,
+                    entity_name
+                )
+
+                send_json(
+                    self,
+                    result
                 )
 
             except Exception as error:
