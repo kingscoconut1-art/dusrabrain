@@ -578,7 +578,7 @@
 
 
         /* =====================================================
-           BRAIN EXPLORER
+           BRAIN EXPLORER — MULTI-LEVEL GRAPH
         ===================================================== */
 
         .brain-search {
@@ -613,11 +613,31 @@
             min-width: 110px;
         }
 
+        #brainExploreButton:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .brain-result {
             background: white;
             border-radius: 14px;
             padding: 22px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .brain-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .brain-summary-tag {
+            background: #f3f4f6;
+            color: #374151;
+            padding: 7px 10px;
+            border-radius: 20px;
+            font-size: 12px;
         }
 
         .brain-entity-card {
@@ -646,6 +666,66 @@
         .brain-entity-description {
             color: #4b5563;
             line-height: 1.5;
+        }
+
+        .brain-graph-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin: 20px 0 12px;
+        }
+
+        .brain-graph-wrap {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            background: #f9fafb;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 10px;
+        }
+
+        .brain-graph {
+            display: block;
+            min-width: 760px;
+            width: 100%;
+            height: 440px;
+        }
+
+        .brain-edge {
+            stroke: #9ca3af;
+            stroke-width: 2;
+        }
+
+        .brain-edge-label {
+            font-size: 12px;
+            font-weight: 600;
+            fill: #4f46e5;
+        }
+
+        .brain-svg-node {
+            fill: white;
+            stroke: #d1d5db;
+            stroke-width: 2;
+        }
+
+        .brain-svg-node.root {
+            stroke: #111827;
+            stroke-width: 3;
+        }
+
+        .brain-svg-name {
+            font-size: 15px;
+            font-weight: 700;
+            fill: #111827;
+        }
+
+        .brain-svg-type {
+            font-size: 11px;
+            fill: #6b7280;
+        }
+
+        .brain-svg-depth {
+            font-size: 10px;
+            fill: #9ca3af;
         }
 
         .brain-connections-title {
@@ -708,6 +788,10 @@
             .brain-confidence {
                 margin-left: 0;
                 width: 100%;
+            }
+
+            .brain-result {
+                padding: 14px;
             }
         }
 
@@ -2081,12 +2165,13 @@
     async function exploreBrain() {
 
         const input =
-            document
-                .getElementById("brainSearch");
+            document.getElementById("brainSearch");
 
         const result =
-            document
-                .getElementById("brainResult");
+            document.getElementById("brainResult");
+
+        const button =
+            document.getElementById("brainExploreButton");
 
         const entityName =
             input.value.trim();
@@ -2099,18 +2184,21 @@
             input.focus();
 
             return;
-
         }
 
         result.innerHTML =
-            '<div class="loading">Exploring your brain...</div>';
+            '<div class="loading">Mapping your brain...</div>';
+
+        button.disabled = true;
+        button.textContent = "Mapping...";
 
         try {
 
             const response =
                 await fetch(
-                    "/api?explore=true&name=" +
-                    encodeURIComponent(entityName)
+                    "/api?graph=true&name=" +
+                    encodeURIComponent(entityName) +
+                    "&depth=3"
                 );
 
             const data =
@@ -2122,7 +2210,6 @@
                     data.error ||
                     "Unable to explore brain"
                 );
-
             }
 
             loadedBrainResult =
@@ -2141,8 +2228,11 @@
                 ) +
                 '</div>';
 
-        }
+        } finally {
 
+            button.disabled = false;
+            button.textContent = "Explore";
+        }
     }
 
 
@@ -2161,115 +2251,494 @@
         ) {
 
             result.innerHTML =
-                '<div class="brain-empty">No matching entity found in your brain.</div>';
+                '<div class="brain-empty">' +
+                'No matching entity found in your brain.' +
+                '</div>';
 
             return;
-
         }
 
         const entity =
             data.entity;
 
-        const connections =
-            data.connections ||
+        const entities =
+            data.entities ||
             [];
+
+        const relationships =
+            data.relationships ||
+            [];
+
+        const entityMap = {};
+
+        entities.forEach(
+            function(item) {
+
+                entityMap[item.id] =
+                    item;
+
+            }
+        );
+
+        const depths = {};
+
+        entities.forEach(
+            function(item) {
+
+                const depth =
+                    Number(
+                        item.depth || 0
+                    );
+
+                if (!depths[depth]) {
+                    depths[depth] = [];
+                }
+
+                depths[depth].push(item);
+
+            }
+        );
+
+        const depthKeys =
+            Object.keys(depths)
+                .map(Number)
+                .sort(
+                    function(a, b) {
+                        return a - b;
+                    }
+                );
+
+        const nodeWidth = 200;
+        const nodeHeight = 72;
+        const columnGap = 270;
+        const topPadding = 55;
+        const rowGap = 28;
+
+        let maxNodes = 1;
+
+        depthKeys.forEach(
+            function(depth) {
+
+                maxNodes =
+                    Math.max(
+                        maxNodes,
+                        depths[depth].length
+                    );
+
+            }
+        );
+
+        const graphHeight =
+            Math.max(
+                360,
+                topPadding +
+                (
+                    maxNodes *
+                    (nodeHeight + rowGap)
+                ) +
+                50
+            );
+
+        const graphWidth =
+            Math.max(
+                760,
+                100 +
+                (
+                    depthKeys.length *
+                    columnGap
+                )
+            );
+
+        const positions = {};
+
+        depthKeys.forEach(
+            function(depth, depthIndex) {
+
+                const nodes =
+                    depths[depth];
+
+                nodes.forEach(
+                    function(node, nodeIndex) {
+
+                        positions[node.id] = {
+                            x:
+                                40 +
+                                depthIndex *
+                                columnGap,
+                            y:
+                                topPadding +
+                                nodeIndex *
+                                (
+                                    nodeHeight +
+                                    rowGap
+                                )
+                        };
+
+                    }
+                );
+
+            }
+        );
+
+        let svg =
+            '<svg class="brain-graph" ' +
+            'viewBox="0 0 ' +
+            graphWidth +
+            ' ' +
+            graphHeight +
+            '" ' +
+            'preserveAspectRatio="xMinYMin meet">' +
+
+            '<defs>' +
+            '<marker id="brainArrow" ' +
+            'viewBox="0 0 10 10" ' +
+            'refX="9" refY="5" ' +
+            'markerWidth="7" markerHeight="7" ' +
+            'orient="auto-start-reverse">' +
+            '<path d="M 0 0 L 10 5 L 0 10 z" ' +
+            'fill="#9ca3af"></path>' +
+            '</marker>' +
+            '</defs>';
+
+        relationships.forEach(
+            function(rel) {
+
+                const from =
+                    positions[
+                        rel.from_entity_id
+                    ];
+
+                const to =
+                    positions[
+                        rel.to_entity_id
+                    ];
+
+                if (!from || !to) {
+                    return;
+                }
+
+                let x1 =
+                    from.x +
+                    nodeWidth;
+
+                let y1 =
+                    from.y +
+                    nodeHeight / 2;
+
+                let x2 =
+                    to.x;
+
+                let y2 =
+                    to.y +
+                    nodeHeight / 2;
+
+                if (
+                    from.x === to.x
+                ) {
+
+                    x1 =
+                        from.x +
+                        nodeWidth / 2;
+
+                    y1 =
+                        from.y +
+                        nodeHeight;
+
+                    x2 =
+                        to.x +
+                        nodeWidth / 2;
+
+                    y2 =
+                        to.y;
+
+                }
+
+                const labelX =
+                    (
+                        x1 +
+                        x2
+                    ) / 2;
+
+                const labelY =
+                    (
+                        y1 +
+                        y2
+                    ) / 2 -
+                    7;
+
+                svg +=
+                    '<line ' +
+                    'class="brain-edge" ' +
+                    'x1="' + x1 + '" ' +
+                    'y1="' + y1 + '" ' +
+                    'x2="' + x2 + '" ' +
+                    'y2="' + y2 + '" ' +
+                    'marker-end="url(#brainArrow)"></line>';
+
+                svg +=
+                    '<text ' +
+                    'class="brain-edge-label" ' +
+                    'x="' + labelX + '" ' +
+                    'y="' + labelY + '" ' +
+                    'text-anchor="middle">' +
+                    escapeHtml(
+                        rel.relationship ||
+                        "related_to"
+                    ) +
+                    '</text>';
+
+            }
+        );
+
+        entities.forEach(
+            function(node) {
+
+                const position =
+                    positions[node.id];
+
+                if (!position) {
+                    return;
+                }
+
+                const isRoot =
+                    node.id === entity.id;
+
+                const name =
+                    String(
+                        node.name ||
+                        "Entity"
+                    );
+
+                const shortName =
+                    name.length > 22
+                        ? name.substring(0, 22) + "…"
+                        : name;
+
+                svg +=
+                    '<g>' +
+
+                    '<rect ' +
+                    'class="brain-svg-node' +
+                    (
+                        isRoot
+                            ? ' root'
+                            : ''
+                    ) +
+                    '" ' +
+                    'x="' +
+                    position.x +
+                    '" ' +
+                    'y="' +
+                    position.y +
+                    '" ' +
+                    'rx="12" ' +
+                    'width="' +
+                    nodeWidth +
+                    '" ' +
+                    'height="' +
+                    nodeHeight +
+                    '"></rect>' +
+
+                    '<text ' +
+                    'class="brain-svg-name" ' +
+                    'x="' +
+                    (
+                        position.x +
+                        nodeWidth / 2
+                    ) +
+                    '" ' +
+                    'y="' +
+                    (
+                        position.y + 28
+                    ) +
+                    '" ' +
+                    'text-anchor="middle">' +
+                    escapeHtml(
+                        shortName
+                    ) +
+                    '</text>' +
+
+                    '<text ' +
+                    'class="brain-svg-type" ' +
+                    'x="' +
+                    (
+                        position.x +
+                        nodeWidth / 2
+                    ) +
+                    '" ' +
+                    'y="' +
+                    (
+                        position.y + 47
+                    ) +
+                    '" ' +
+                    'text-anchor="middle">' +
+                    escapeHtml(
+                        node.entity_type ||
+                        "entity"
+                    ) +
+                    '</text>' +
+
+                    '<text ' +
+                    'class="brain-svg-depth" ' +
+                    'x="' +
+                    (
+                        position.x + 10
+                    ) +
+                    '" ' +
+                    'y="' +
+                    (
+                        position.y + 63
+                    ) +
+                    '">' +
+                    'Depth ' +
+                    String(
+                        node.depth || 0
+                    ) +
+                    '</text>' +
+
+                    '</g>';
+
+            }
+        );
+
+        svg +=
+            '</svg>';
 
         let html =
             '<div class="brain-entity-card">' +
-                '<div class="brain-entity-name">' +
-                    escapeHtml(
-                        entity.name ||
-                        ""
-                    ) +
-                '</div>' +
-                '<div class="brain-entity-type">' +
-                    escapeHtml(
-                        entity.entity_type ||
-                        "entity"
-                    ) +
-                '</div>' +
-                '<div class="brain-entity-description">' +
-                    escapeHtml(
-                        entity.description ||
-                        "No description available."
-                    ) +
-                '</div>' +
+
+            '<div class="brain-entity-name">' +
+            escapeHtml(
+                entity.name ||
+                ""
+            ) +
+            '</div>' +
+
+            '<div class="brain-entity-type">' +
+            escapeHtml(
+                entity.entity_type ||
+                "entity"
+            ) +
+            '</div>' +
+
+            '<div class="brain-entity-description">' +
+            escapeHtml(
+                entity.description ||
+                "No description available."
+            ) +
+            '</div>' +
+
+            '</div>';
+
+        html +=
+            '<div class="brain-summary">' +
+
+            '<span class="brain-summary-tag">' +
+            '🧠 ' +
+            entities.length +
+            ' entities' +
+            '</span>' +
+
+            '<span class="brain-summary-tag">' +
+            '🔗 ' +
+            relationships.length +
+            ' relationships' +
+            '</span>' +
+
+            '<span class="brain-summary-tag">' +
+            '🌐 Depth ' +
+            escapeHtml(
+                String(
+                    data.depth ||
+                    0
+                )
+            ) +
+            '</span>' +
+
+            '</div>';
+
+        html +=
+            '<div class="brain-graph-title">' +
+            '🕸️ Connected Brain Map' +
+            '</div>' +
+
+            '<div class="brain-graph-wrap">' +
+            svg +
             '</div>';
 
         html +=
             '<div class="brain-connections-title">' +
-                '🔗 Connections (' +
-                connections.length +
-                ')' +
+            '🔗 Relationship Details (' +
+            relationships.length +
+            ')' +
             '</div>';
 
         if (
-            connections.length ===
-            0
+            relationships.length === 0
         ) {
 
             html +=
                 '<div class="brain-empty">' +
-                    'No direct connections found for this entity.' +
+                'No relationships found for this entity.' +
                 '</div>';
 
         } else {
 
-            connections.forEach(
-                function(connection) {
+            relationships.forEach(
+                function(rel) {
 
                     html +=
                         '<div class="brain-connection">' +
 
-                            '<span class="brain-node">' +
-                                escapeHtml(
-                                    connection.from ||
-                                    ""
-                                ) +
-                                '<span class="brain-node-type">' +
-                                    '(' +
-                                    escapeHtml(
-                                        connection.from_type ||
-                                        "entity"
-                                    ) +
-                                    ')' +
-                                '</span>' +
-                            '</span>' +
+                        '<span class="brain-node">' +
+                        escapeHtml(
+                            rel.from ||
+                            ""
+                        ) +
+                        '<span class="brain-node-type">' +
+                        '(' +
+                        escapeHtml(
+                            rel.from_type ||
+                            "entity"
+                        ) +
+                        ')' +
+                        '</span>' +
+                        '</span>' +
 
-                            '<span class="brain-relation">' +
-                                '→ ' +
-                                escapeHtml(
-                                    connection.relationship ||
-                                    "related_to"
-                                ) +
-                                ' →' +
-                            '</span>' +
+                        '<span class="brain-relation">' +
+                        '→ ' +
+                        escapeHtml(
+                            rel.relationship ||
+                            "related_to"
+                        ) +
+                        ' →' +
+                        '</span>' +
 
-                            '<span class="brain-node">' +
-                                escapeHtml(
-                                    connection.to ||
-                                    ""
-                                ) +
-                                '<span class="brain-node-type">' +
-                                    '(' +
-                                    escapeHtml(
-                                        connection.to_type ||
-                                        "entity"
-                                    ) +
-                                    ')' +
-                                '</span>' +
-                            '</span>' +
+                        '<span class="brain-node">' +
+                        escapeHtml(
+                            rel.to ||
+                            ""
+                        ) +
+                        '<span class="brain-node-type">' +
+                        '(' +
+                        escapeHtml(
+                            rel.to_type ||
+                            "entity"
+                        ) +
+                        ')' +
+                        '</span>' +
+                        '</span>' +
 
-                            '<span class="brain-confidence">' +
-                                'Confidence: ' +
-                                escapeHtml(
-                                    String(
-                                        connection.confidence ||
-                                        0
-                                    )
-                                ) +
-                                '/10' +
-                            '</span>' +
+                        '<span class="brain-confidence">' +
+                        'Confidence: ' +
+                        escapeHtml(
+                            String(
+                                rel.confidence ||
+                                0
+                            )
+                        ) +
+                        '/10' +
+                        '</span>' +
 
                         '</div>';
 
@@ -2280,37 +2749,7 @@
 
         result.innerHTML =
             html;
-
     }
-
-
-    document
-        .getElementById("brainExploreButton")
-        .addEventListener(
-            "click",
-            exploreBrain
-        );
-
-
-    document
-        .getElementById("brainSearch")
-        .addEventListener(
-            "keydown",
-            function(event) {
-
-                if (
-                    event.key ===
-                    "Enter"
-                ) {
-
-                    event.preventDefault();
-
-                    exploreBrain();
-
-                }
-
-            }
-        );
 
 
     // ========================================================
