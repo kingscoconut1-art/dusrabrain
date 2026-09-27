@@ -10,24 +10,49 @@ import psycopg
 
 
 # ============================================================
-# BASIC HELPERS
+# RESPONSE
 # ============================================================
 
 def send_json(handler, data, status=200):
-    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    body = json.dumps(
+        data,
+        ensure_ascii=False
+    ).encode("utf-8")
 
     handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Access-Control-Allow-Origin", "*")
-    handler.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    handler.send_header(
+        "Content-Type",
+        "application/json; charset=utf-8"
+    )
+
+    handler.send_header(
+        "Access-Control-Allow-Origin",
+        "*"
+    )
+
+    handler.send_header(
+        "Access-Control-Allow-Methods",
+        "GET,POST,PUT,DELETE,OPTIONS"
+    )
+
+    handler.send_header(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    )
+
     handler.end_headers()
 
     handler.wfile.write(body)
 
 
+# ============================================================
+# DATABASE
+# ============================================================
+
 def get_database_url():
-    possible_names = [
+
+    names = [
         "DATABASE_URL",
         "POSTGRES_URL",
         "POSTGRES_PRISMA_URL",
@@ -36,7 +61,8 @@ def get_database_url():
         "STORAGE_DATABASE_URL",
     ]
 
-    for name in possible_names:
+    for name in names:
+
         value = os.environ.get(name)
 
         if value:
@@ -46,24 +72,36 @@ def get_database_url():
 
 
 def get_connection():
+
     database_url = get_database_url()
 
     if not database_url:
-        raise Exception("Database connection string not found")
+        raise Exception(
+            "Database connection string not found"
+        )
 
-    return psycopg.connect(database_url)
+    return psycopg.connect(
+        database_url
+    )
 
 
 # ============================================================
 # GROQ
 # ============================================================
 
-def groq_request(messages, temperature=0.2):
+def groq_request(
+    messages,
+    temperature=0.2
+):
 
-    api_key = os.environ.get("GROQ_API_KEY")
+    api_key = os.environ.get(
+        "GROQ_API_KEY"
+    )
 
     if not api_key:
-        raise Exception("GROQ_API_KEY is missing")
+        raise Exception(
+            "GROQ_API_KEY is missing"
+        )
 
     payload = {
         "model": "openai/gpt-oss-120b",
@@ -73,36 +111,56 @@ def groq_request(messages, temperature=0.2):
 
     request = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
+        data=json.dumps(
+            payload
+        ).encode("utf-8"),
         headers={
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + api_key,
-            "User-Agent": "Mozilla/5.0",
+            "Content-Type":
+                "application/json",
+
+            "Authorization":
+                "Bearer " + api_key,
+
+            "User-Agent":
+                "Mozilla/5.0",
         },
-        method="POST",
+        method="POST"
     )
 
     try:
+
         with urllib.request.urlopen(
             request,
             timeout=60
         ) as response:
 
-            raw = response.read().decode("utf-8")
+            raw = response.read().decode(
+                "utf-8"
+            )
 
-            data = json.loads(raw)
+            data = json.loads(
+                raw
+            )
 
-            return data["choices"][0]["message"]["content"]
+            return data[
+                "choices"
+            ][0][
+                "message"
+            ][
+                "content"
+            ]
 
     except urllib.error.HTTPError as error:
 
-        details = error.read().decode("utf-8")
+        details = error.read().decode(
+            "utf-8"
+        )
 
         raise Exception(
-            "Groq API error " +
-            str(error.code) +
-            ": " +
-            details
+            "Groq API error "
+            + str(error.code)
+            + ": "
+            + details
         )
 
 
@@ -132,7 +190,14 @@ def save_conversation(
                     session_id,
                     title
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s
+                )
                 """,
                 (
                     user_id,
@@ -177,15 +242,14 @@ def get_conversation_history(
 
             rows = cur.fetchall()
 
-
     rows.reverse()
-
 
     return [
         {
             "role": row[0],
             "message": row[1],
-            "created_at": row[2].isoformat()
+            "created_at":
+                row[2].isoformat()
                 if row[2]
                 else None,
         }
@@ -224,17 +288,19 @@ def get_all_conversations(
 
             rows = cur.fetchall()
 
-
     return [
         {
             "id": row[0],
             "role": row[1],
             "message": row[2],
-            "created_at": row[3].isoformat()
+            "created_at":
+                row[3].isoformat()
                 if row[3]
                 else None,
-            "session_id": row[4] or "default",
-            "title": row[5] or "New Chat",
+            "session_id":
+                row[4] or "default",
+            "title":
+                row[5] or "New Chat",
         }
         for row in rows
     ]
@@ -261,11 +327,12 @@ def get_sessions(user_id):
                 GROUP BY session_id
                 ORDER BY MAX(created_at) DESC
                 """,
-                (user_id,)
+                (
+                    user_id,
+                )
             )
 
             rows = cur.fetchall()
-
 
     sessions = []
 
@@ -273,28 +340,39 @@ def get_sessions(user_id):
 
         sessions.append(
             {
-                "session_id": row[0] or "default",
-                "title": row[1] or "New Chat",
+                "session_id":
+                    row[0] or "default",
+
+                "title":
+                    row[1] or "New Chat",
+
                 "last_message_at":
                     row[2].isoformat()
                     if row[2]
                     else None,
-                "message_count": row[3],
+
+                "message_count":
+                    row[3],
             }
         )
-
 
     if not sessions:
 
         sessions.append(
             {
-                "session_id": "default",
-                "title": "New Chat",
-                "last_message_at": None,
-                "message_count": 0,
+                "session_id":
+                    "default",
+
+                "title":
+                    "New Chat",
+
+                "last_message_at":
+                    None,
+
+                "message_count":
+                    0,
             }
         )
-
 
     return sessions
 
@@ -327,13 +405,15 @@ def get_memories(
                     session_id
                 FROM memories
                 WHERE user_id = %s
-                  AND (
-                        session_id = %s
-                        OR session_id = 'default'
+                  AND
+                  (
+                      session_id = %s
+                      OR session_id = 'default'
                   )
                 ORDER BY
                     CASE
-                        WHEN session_id = %s THEN 0
+                        WHEN session_id = %s
+                        THEN 0
                         ELSE 1
                     END,
                     importance DESC,
@@ -350,19 +430,24 @@ def get_memories(
 
             rows = cur.fetchall()
 
-
     return [
         {
             "id": row[0],
             "memory": row[1],
-            "created_at": row[2].isoformat()
+            "created_at":
+                row[2].isoformat()
                 if row[2]
                 else None,
-            "category": row[3] or "general",
-            "importance": row[4] or 5,
-            "subject": row[5] or "general",
-            "memory_key": row[6],
-            "session_id": row[7] or "default",
+            "category":
+                row[3] or "general",
+            "importance":
+                row[4] or 5,
+            "subject":
+                row[5] or "general",
+            "memory_key":
+                row[6],
+            "session_id":
+                row[7] or "default",
         }
         for row in rows
     ]
@@ -392,13 +477,15 @@ def get_subject_memories(
                 FROM memories
                 WHERE user_id = %s
                   AND subject = %s
-                  AND (
-                        session_id = %s
-                        OR session_id = 'default'
+                  AND
+                  (
+                      session_id = %s
+                      OR session_id = 'default'
                   )
                 ORDER BY
                     CASE
-                        WHEN session_id = %s THEN 0
+                        WHEN session_id = %s
+                        THEN 0
                         ELSE 1
                     END,
                     importance DESC,
@@ -416,16 +503,20 @@ def get_subject_memories(
 
             rows = cur.fetchall()
 
-
     return [
         {
             "id": row[0],
             "memory": row[1],
-            "category": row[2] or "general",
-            "importance": row[3] or 5,
-            "subject": row[4] or "general",
-            "memory_key": row[5],
-            "session_id": row[6] or "default",
+            "category":
+                row[2] or "general",
+            "importance":
+                row[3] or 5,
+            "subject":
+                row[4] or "general",
+            "memory_key":
+                row[5],
+            "session_id":
+                row[6] or "default",
         }
         for row in rows
     ]
@@ -497,14 +588,12 @@ def find_semantic_duplicate(
     if not existing_memories:
         return None
 
-
     existing_text = "\n".join(
         [
             f"{item['id']}: {item['memory']}"
             for item in existing_memories
         ]
     )
-
 
     prompt = f"""
 You are checking whether a new personal memory
@@ -516,49 +605,51 @@ NEW MEMORY:
 EXISTING MEMORIES:
 {existing_text}
 
-Return ONLY JSON:
+Return ONLY JSON.
 
-{{
-  "duplicate_id": null
-}}
-
-OR:
+If duplicate:
 
 {{
   "duplicate_id": 123
 }}
 
-Use duplicate_id only when the meaning is substantially
-the same. Do not mark memories as duplicates just because
-they are about the same project.
+If not duplicate:
+
+{{
+  "duplicate_id": null
+}}
+
+Only mark a memory as duplicate when the meaning
+is substantially the same.
 """
 
+    response = groq_request(
+        [
+            {
+                "role":
+                    "system",
 
-    response =
-        groq_request(
-            [
-                {
-                    "role": "system",
-                    "content":
-                        "You are a precise memory deduplication system."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0
-        )
+                "content":
+                    "You are a precise memory deduplication system."
+            },
+            {
+                "role":
+                    "user",
 
+                "content":
+                    prompt
+            }
+        ],
+        temperature=0
+    )
 
     try:
 
-        data =
-            json.loads(
-                clean_json_response(
-                    response
-                )
+        data = json.loads(
+            clean_json_response(
+                response
             )
+        )
 
         return data.get(
             "duplicate_id"
@@ -582,28 +673,22 @@ def save_memory(
     session_id="default"
 ):
 
-    memory_key =
-        make_memory_key(
-            subject,
-            category,
-            memory
-        )
+    memory_key = make_memory_key(
+        subject,
+        category,
+        memory
+    )
 
+    existing_memories = get_subject_memories(
+        user_id,
+        subject,
+        session_id=session_id
+    )
 
-    existing_memories =
-        get_subject_memories(
-            user_id,
-            subject,
-            session_id=session_id
-        )
-
-
-    duplicate_id =
-        find_semantic_duplicate(
-            memory,
-            existing_memories
-        )
-
+    duplicate_id = find_semantic_duplicate(
+        memory,
+        existing_memories
+    )
 
     with get_connection() as conn:
 
@@ -659,9 +744,7 @@ def save_memory(
                     )
                 )
 
-                exact =
-                    cur.fetchone()
-
+                exact = cur.fetchone()
 
                 if exact:
 
@@ -740,13 +823,9 @@ def save_memory(
                         )
                     )
 
-
-            row =
-                cur.fetchone()
-
+            row = cur.fetchone()
 
         conn.commit()
-
 
     return {
         "id": row[0],
@@ -755,11 +834,16 @@ def save_memory(
             row[2].isoformat()
             if row[2]
             else None,
-        "category": row[3],
-        "importance": row[4],
-        "subject": row[5],
-        "memory_key": row[6],
-        "session_id": row[7] or "default",
+        "category":
+            row[3],
+        "importance":
+            row[4],
+        "subject":
+            row[5],
+        "memory_key":
+            row[6],
+        "session_id":
+            row[7] or "default",
     }
 
 
@@ -813,27 +897,29 @@ Importance:
 7-8 = high
 9-10 = critical
 
-Do not invent facts.
+Never invent facts.
 Only extract information explicitly stated by the user.
 """
 
+    response = groq_request(
+        [
+            {
+                "role":
+                    "system",
 
-    response =
-        groq_request(
-            [
-                {
-                    "role": "system",
-                    "content":
-                        "You are a personal memory extraction system. Never invent user facts."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0
-        )
+                "content":
+                    "You are a personal memory extraction system. Never invent user facts."
+            },
+            {
+                "role":
+                    "user",
 
+                "content":
+                    prompt
+            }
+        ],
+        temperature=0
+    )
 
     try:
 
@@ -851,7 +937,7 @@ Only extract information explicitly stated by the user.
 
 
 # ============================================================
-# SUBJECT NORMALIZATION
+# SUBJECT
 # ============================================================
 
 def normalize_subject(
@@ -861,14 +947,12 @@ def normalize_subject(
     if not subject:
         return "general"
 
-
-    subject =
-        str(subject).strip()
-
+    subject = str(
+        subject
+    ).strip()
 
     if not subject:
         return "general"
-
 
     return subject[:200]
 
@@ -913,53 +997,47 @@ class handler(
 
     def do_GET(self):
 
-        parsed =
-            urlparse(
-                self.path
-            )
+        parsed = urlparse(
+            self.path
+        )
 
+        params = parse_qs(
+            parsed.query
+        )
 
-        params =
-            parse_qs(
-                parsed.query
-            )
-
-
-        user_id =
-            params.get(
-                "user_id",
-                ["default_user"]
-            )[0]
+        user_id = params.get(
+            "user_id",
+            ["default_user"]
+        )[0]
 
 
         # ----------------------------------------------------
         # MEMORIES
         # ----------------------------------------------------
 
-        if params.get("memories") == ["true"]:
+        if params.get(
+            "memories"
+        ) == ["true"]:
 
-            session_id =
-                params.get(
-                    "session_id",
-                    ["default"]
-                )[0]
-
+            session_id = params.get(
+                "session_id",
+                ["default"]
+            )[0]
 
             try:
 
-                memories =
-                    get_memories(
-                        user_id,
-                        session_id=session_id,
-                        limit=200
-                    )
-
+                memories = get_memories(
+                    user_id,
+                    session_id=session_id,
+                    limit=200
+                )
 
                 send_json(
                     self,
                     {
                         "memories":
                             memories,
+
                         "count":
                             len(memories),
                     }
@@ -976,29 +1054,29 @@ class handler(
                     500
                 )
 
-
             return
 
 
         # ----------------------------------------------------
-        # ALL CONVERSATIONS
+        # CONVERSATIONS
         # ----------------------------------------------------
 
-        if params.get("conversations") == ["true"]:
+        if params.get(
+            "conversations"
+        ) == ["true"]:
 
             try:
 
-                conversations =
-                    get_all_conversations(
-                        user_id
-                    )
-
+                conversations = get_all_conversations(
+                    user_id
+                )
 
                 send_json(
                     self,
                     {
                         "conversations":
                             conversations,
+
                         "count":
                             len(conversations),
                     }
@@ -1015,7 +1093,6 @@ class handler(
                     500
                 )
 
-
             return
 
 
@@ -1023,21 +1100,22 @@ class handler(
         # SESSIONS
         # ----------------------------------------------------
 
-        if params.get("sessions") == ["true"]:
+        if params.get(
+            "sessions"
+        ) == ["true"]:
 
             try:
 
-                sessions =
-                    get_sessions(
-                        user_id
-                    )
-
+                sessions = get_sessions(
+                    user_id
+                )
 
                 send_json(
                     self,
                     {
                         "sessions":
                             sessions,
+
                         "count":
                             len(sessions),
                     }
@@ -1054,7 +1132,6 @@ class handler(
                     500
                 )
 
-
             return
 
 
@@ -1062,24 +1139,22 @@ class handler(
         # SINGLE SESSION
         # ----------------------------------------------------
 
-        if params.get("session") == ["true"]:
+        if params.get(
+            "session"
+        ) == ["true"]:
 
-            session_id =
-                params.get(
-                    "session_id",
-                    ["default"]
-                )[0]
-
+            session_id = params.get(
+                "session_id",
+                ["default"]
+            )[0]
 
             try:
 
-                history =
-                    get_conversation_history(
-                        user_id,
-                        session_id=session_id,
-                        limit=100
-                    )
-
+                history = get_conversation_history(
+                    user_id,
+                    session_id=session_id,
+                    limit=100
+                )
 
                 send_json(
                     self,
@@ -1105,7 +1180,6 @@ class handler(
                     },
                     500
                 )
-
 
             return
 
@@ -1146,69 +1220,52 @@ class handler(
 
         try:
 
-            content_length =
-                int(
-                    self.headers.get(
-                        "Content-Length",
-                        0
-                    )
+            content_length = int(
+                self.headers.get(
+                    "Content-Length",
+                    0
                 )
+            )
 
+            raw_body = self.rfile.read(
+                content_length
+            )
 
-            raw_body =
-                self.rfile.read(
-                    content_length
+            body = json.loads(
+                raw_body.decode(
+                    "utf-8"
                 )
+            )
 
-
-            body =
-                json.loads(
-                    raw_body.decode(
-                        "utf-8"
-                    )
-                )
-
-
-            message =
-                str(
-                    body.get(
-                        "message",
-                        ""
-                    )
-                ).strip()
-
-
-            user_id =
+            message = str(
                 body.get(
-                    "user_id",
-                    "default_user"
+                    "message",
+                    ""
                 )
+            ).strip()
 
+            user_id = body.get(
+                "user_id",
+                "default_user"
+            )
 
-            session_id =
-                body.get(
-                    "session_id",
-                    "default"
-                )
+            session_id = body.get(
+                "session_id",
+                "default"
+            )
 
+            title = body.get(
+                "title",
+                "New Chat"
+            )
 
-            title =
-                body.get(
-                    "title",
-                    "New Chat"
-                )
+            session_id = str(
+                session_id or "default"
+            )
 
-
-            session_id =
-                str(
-                    session_id or "default"
-                )
-
-
-            title =
-                str(
-                    title or "New Chat"
-                )
+            title = str(
+                title or "New Chat"
+            )
 
 
             if not message:
@@ -1239,148 +1296,147 @@ class handler(
 
 
             # ------------------------------------------------
-            # LOAD SESSION HISTORY
+            # SESSION HISTORY
             # ------------------------------------------------
 
-            history =
-                get_conversation_history(
-                    user_id,
-                    session_id=session_id,
-                    limit=20
-                )
+            history = get_conversation_history(
+                user_id,
+                session_id=session_id,
+                limit=20
+            )
 
 
             # ------------------------------------------------
-            # LOAD RELEVANT MEMORIES
+            # MEMORIES
             # ------------------------------------------------
 
-            memories =
-                get_memories(
-                    user_id,
-                    message=message,
-                    session_id=session_id,
-                    limit=50
-                )
+            memories = get_memories(
+                user_id,
+                message=message,
+                session_id=session_id,
+                limit=50
+            )
 
 
-            memory_text =
-                "\n".join(
+            if memories:
+
+                memory_text = "\n".join(
                     [
                         (
-                            f"- {item['memory']} "
-                            f"(subject: {item['subject']}, "
-                            f"category: {item['category']}, "
-                            f"importance: {item['importance']}, "
-                            f"session: {item['session_id']})"
+                            "- "
+                            + item["memory"]
+                            + " | subject: "
+                            + item["subject"]
+                            + " | category: "
+                            + item["category"]
+                            + " | importance: "
+                            + str(
+                                item["importance"]
+                            )
+                            + " | session: "
+                            + item["session_id"]
                         )
                         for item in memories
                     ]
                 )
 
+            else:
 
-            if not memory_text:
-
-                memory_text =
+                memory_text = (
                     "No stored memories available."
+                )
 
 
             # ------------------------------------------------
-            # CONVERSATION HISTORY
+            # HISTORY TEXT
             # ------------------------------------------------
 
-            history_text =
-                "\n".join(
+            if history:
+
+                history_text = "\n".join(
                     [
-                        f"{item['role']}: {item['message']}"
+                        item["role"]
+                        + ": "
+                        + item["message"]
                         for item in history
                     ]
                 )
 
+            else:
 
-            if not history_text:
-
-                history_text =
+                history_text = (
                     "No previous conversation."
+                )
 
 
             # ------------------------------------------------
-            # AI SYSTEM
+            # SYSTEM PROMPT
             # ------------------------------------------------
 
             system_prompt = f"""
 You are Dusra Brain, a personal AI brain and memory assistant.
 
-You are currently working inside this conversation session:
-
-Session ID:
+Current session:
 {session_id}
 
-Session title:
+Current session title:
 {title}
 
-IMPORTANT MEMORY RULES:
+MEMORY RULES:
 
-1. Stored memories are actual facts explicitly provided by the user.
+1. Stored memories are facts explicitly provided by the user.
 
 2. Never invent personal facts.
 
-3. Do not assume something about the user just because it
-sounds plausible.
+3. Prefer memories from the current session.
 
-4. For personal, business, project, work, preference, or goal
-questions, use stored memories and the current conversation.
+4. Default-session memories can be used when relevant.
 
-5. Prefer memories from the current session.
+5. Use the current conversation history.
 
-6. Default-session memories may also be used when relevant.
+6. Do not claim to remember something that is not available.
 
-7. If the available memories do not contain the answer,
-say that you do not have enough stored information.
+7. If information is missing, say you do not have enough stored information.
 
-8. Do not claim to remember something that is not in memory
-or conversation history.
-
-9. Keep answers natural and useful.
+8. Keep answers natural and useful.
 
 STORED MEMORIES:
 
 {memory_text}
 
-CURRENT CONVERSATION HISTORY:
+CURRENT CONVERSATION:
 
 {history_text}
 """
 
 
             # ------------------------------------------------
-            # GROQ RESPONSE
+            # GROQ
             # ------------------------------------------------
 
-            response =
-                groq_request(
-                    [
-                        {
-                            "role":
-                                "system",
+            response = groq_request(
+                [
+                    {
+                        "role":
+                            "system",
 
-                            "content":
-                                system_prompt
-                        },
+                        "content":
+                            system_prompt
+                    },
+                    {
+                        "role":
+                            "user",
 
-                        {
-                            "role":
-                                "user",
-
-                            "content":
-                                message
-                        }
-                    ],
-                    temperature=0.2
-                )
+                        "content":
+                            message
+                    }
+                ],
+                temperature=0.2
+            )
 
 
             # ------------------------------------------------
-            # SAVE ASSISTANT RESPONSE
+            # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
             save_conversation(
@@ -1398,72 +1454,52 @@ CURRENT CONVERSATION HISTORY:
 
             try:
 
-                analysis =
-                    analyze_memory(
-                        message,
-                        current_subject=title
-                    )
-
+                analysis = analyze_memory(
+                    message,
+                    current_subject=title
+                )
 
                 if analysis.get(
                     "remember"
                 ):
 
-                    memory_text_value =
-                        str(
-                            analysis.get(
-                                "memory",
-                                ""
-                            )
-                        ).strip()
-
-
-                    category =
-                        str(
-                            analysis.get(
-                                "category",
-                                "general"
-                            )
-                        ).strip()
-
-
-                    importance =
-                        int(
-                            analysis.get(
-                                "importance",
-                                5
-                            )
+                    memory_value = str(
+                        analysis.get(
+                            "memory",
+                            ""
                         )
+                    ).strip()
 
-
-                    subject =
-                        normalize_subject(
-                            analysis.get(
-                                "subject",
-                                title
-                            )
+                    category = str(
+                        analysis.get(
+                            "category",
+                            "general"
                         )
+                    ).strip()
 
+                    importance = int(
+                        analysis.get(
+                            "importance",
+                            5
+                        )
+                    )
 
-                    if memory_text_value:
+                    subject = normalize_subject(
+                        analysis.get(
+                            "subject",
+                            title
+                        )
+                    )
+
+                    if memory_value:
 
                         save_memory(
                             user_id=user_id,
-
-                            memory=
-                                memory_text_value,
-
-                            category=
-                                category,
-
-                            importance=
-                                importance,
-
-                            subject=
-                                subject,
-
-                            session_id=
-                                session_id
+                            memory=memory_value,
+                            category=category,
+                            importance=importance,
+                            subject=subject,
+                            session_id=session_id
                         )
 
             except Exception:
@@ -1506,69 +1542,54 @@ CURRENT CONVERSATION HISTORY:
 
         try:
 
-            content_length =
-                int(
-                    self.headers.get(
-                        "Content-Length",
-                        0
-                    )
+            content_length = int(
+                self.headers.get(
+                    "Content-Length",
+                    0
                 )
+            )
 
+            raw_body = self.rfile.read(
+                content_length
+            )
 
-            raw_body =
-                self.rfile.read(
-                    content_length
+            body = json.loads(
+                raw_body.decode(
+                    "utf-8"
                 )
+            )
 
+            memory_id = body.get(
+                "id"
+            )
 
-            body =
-                json.loads(
-                    raw_body.decode(
-                        "utf-8"
-                    )
-                )
-
-
-            memory_id =
+            memory = str(
                 body.get(
-                    "id"
+                    "memory",
+                    ""
                 )
+            ).strip()
 
-
-            memory =
-                str(
-                    body.get(
-                        "memory",
-                        ""
-                    )
-                ).strip()
-
-
-            category =
-                str(
-                    body.get(
-                        "category",
-                        "general"
-                    )
-                ).strip()
-
-
-            importance =
-                int(
-                    body.get(
-                        "importance",
-                        5
-                    )
+            category = str(
+                body.get(
+                    "category",
+                    "general"
                 )
+            ).strip()
 
-
-            subject =
-                normalize_subject(
-                    body.get(
-                        "subject",
-                        "general"
-                    )
+            importance = int(
+                body.get(
+                    "importance",
+                    5
                 )
+            )
+
+            subject = normalize_subject(
+                body.get(
+                    "subject",
+                    "general"
+                )
+            )
 
 
             if not memory_id:
@@ -1599,12 +1620,11 @@ CURRENT CONVERSATION HISTORY:
                 return
 
 
-            memory_key =
-                make_memory_key(
-                    subject,
-                    category,
-                    memory
-                )
+            memory_key = make_memory_key(
+                subject,
+                category,
+                memory
+            )
 
 
             with get_connection() as conn:
@@ -1641,10 +1661,7 @@ CURRENT CONVERSATION HISTORY:
                         )
                     )
 
-
-                    row =
-                        cur.fetchone()
-
+                    row = cur.fetchone()
 
                 conn.commit()
 
@@ -1664,17 +1681,31 @@ CURRENT CONVERSATION HISTORY:
 
 
             result = {
-                "id": row[0],
-                "memory": row[1],
+                "id":
+                    row[0],
+
+                "memory":
+                    row[1],
+
                 "created_at":
                     row[2].isoformat()
                     if row[2]
                     else None,
-                "category": row[3],
-                "importance": row[4],
-                "subject": row[5],
-                "memory_key": row[6],
-                "session_id": row[7] or "default",
+
+                "category":
+                    row[3],
+
+                "importance":
+                    row[4],
+
+                "subject":
+                    row[5],
+
+                "memory_key":
+                    row[6],
+
+                "session_id":
+                    row[7] or "default",
             }
 
 
@@ -1707,23 +1738,18 @@ CURRENT CONVERSATION HISTORY:
 
         try:
 
-            parsed =
-                urlparse(
-                    self.path
-                )
+            parsed = urlparse(
+                self.path
+            )
 
+            params = parse_qs(
+                parsed.query
+            )
 
-            params =
-                parse_qs(
-                    parsed.query
-                )
-
-
-            memory_id =
-                params.get(
-                    "memory_id",
-                    [None]
-                )[0]
+            memory_id = params.get(
+                "memory_id",
+                [None]
+            )[0]
 
 
             if not memory_id:
@@ -1755,10 +1781,7 @@ CURRENT CONVERSATION HISTORY:
                         )
                     )
 
-
-                    deleted =
-                        cur.fetchone()
-
+                    deleted = cur.fetchone()
 
                 conn.commit()
 
@@ -1784,7 +1807,7 @@ CURRENT CONVERSATION HISTORY:
                         True,
 
                     "deleted_id":
-                        deleted[0]
+                        deleted[0],
                 }
             )
 
