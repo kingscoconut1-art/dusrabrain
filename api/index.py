@@ -1299,18 +1299,67 @@ class handler(
             "memories"
         ) == ["true"]:
 
-            session_id = params.get(
-                "session_id",
-                ["default"]
-            )[0]
-
             try:
 
-                memories = get_memories(
-                    user_id,
-                    session_id=session_id,
-                    limit=200
-                )
+                with get_connection() as conn:
+
+                    with conn.cursor() as cur:
+
+                        cur.execute(
+                            """
+                            SELECT
+                                id,
+                                memory,
+                                created_at,
+                                category,
+                                importance,
+                                subject,
+                                memory_key,
+                                session_id
+                            FROM memories
+                            WHERE user_id = %s
+                            ORDER BY
+                                importance DESC,
+                                created_at DESC
+                            LIMIT 500
+                            """,
+                            (
+                                user_id,
+                            )
+                        )
+
+                        rows = cur.fetchall()
+
+                memories = [
+                    {
+                        "id":
+                            row[0],
+
+                        "memory":
+                            row[1],
+
+                        "created_at":
+                            row[2].isoformat()
+                            if row[2]
+                            else None,
+
+                        "category":
+                            row[3] or "general",
+
+                        "importance":
+                            row[4] or 5,
+
+                        "subject":
+                            row[5] or "general",
+
+                        "memory_key":
+                            row[6],
+
+                        "session_id":
+                            row[7] or "default",
+                    }
+                    for row in rows
+                ]
 
                 send_json(
                     self,
