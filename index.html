@@ -696,6 +696,52 @@
             color: #6b7280;
         }
 
+        .brain-evidence-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .brain-evidence-title {
+            font-size: 19px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 14px;
+        }
+
+        .brain-evidence-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 11px;
+            padding: 14px 16px;
+            margin-top: 10px;
+            background: #fafafa;
+        }
+
+        .brain-evidence-memory {
+            color: #1f2937;
+            font-size: 15px;
+            line-height: 1.55;
+        }
+
+        .brain-evidence-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 9px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        .brain-evidence-pill {
+            background: #eef2ff;
+            color: #4338ca;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-weight: 700;
+        }
+
         .brain-graph-section {
             margin-top: 8px;
             margin-bottom: 22px;
@@ -2596,6 +2642,238 @@
     }
 
 
+    async function loadBrainEvidence(entityName) {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api?memories=true&_=" +
+                    Date.now(),
+                    {
+                        method: "GET",
+                        cache: "no-store",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                return [];
+            }
+
+            const memories =
+                Array.isArray(data.memories)
+                    ? data.memories
+                    : [];
+
+            const target =
+                String(
+                    entityName || ""
+                )
+                    .trim()
+                    .toLowerCase();
+
+            if (!target) {
+                return [];
+            }
+
+            const matches =
+                memories.filter(
+                    function(item) {
+
+                        const subject =
+                            String(
+                                item.subject || ""
+                            )
+                                .trim()
+                                .toLowerCase();
+
+                        const memory =
+                            String(
+                                item.memory || ""
+                            )
+                                .trim()
+                                .toLowerCase();
+
+                        return (
+                            subject === target ||
+                            memory.indexOf(target) !== -1
+                        );
+
+                    }
+                );
+
+            matches.sort(
+                function(a, b) {
+
+                    const importanceA =
+                        Number(
+                            a.importance || 0
+                        );
+
+                    const importanceB =
+                        Number(
+                            b.importance || 0
+                        );
+
+                    if (
+                        importanceA !==
+                        importanceB
+                    ) {
+                        return (
+                            importanceB -
+                            importanceA
+                        );
+                    }
+
+                    return String(
+                        b.created_at || ""
+                    ).localeCompare(
+                        String(
+                            a.created_at || ""
+                        )
+                    );
+
+                }
+            );
+
+            return matches.slice(0, 20);
+
+        } catch (error) {
+
+            return [];
+
+        }
+
+    }
+
+
+    function renderBrainEvidence(
+        memories,
+        entityName
+    ) {
+
+        let html =
+            '<div class="brain-evidence-section">' +
+                '<div class="brain-evidence-title">' +
+                    '🧠 Memory Evidence (' +
+                    memories.length +
+                    ')' +
+                '</div>';
+
+        if (!memories.length) {
+
+            html +=
+                '<div class="brain-empty">' +
+                    'No stored memory directly supports <strong>' +
+                    brainText(entityName) +
+                    '</strong> yet.' +
+                '</div>' +
+            '</div>';
+
+            return html;
+
+        }
+
+        memories.forEach(
+            function(item) {
+
+                let dateText =
+                    "";
+
+                if (item.created_at) {
+
+                    const date =
+                        new Date(
+                            item.created_at
+                        );
+
+                    if (
+                        !Number.isNaN(
+                            date.getTime()
+                        )
+                    ) {
+
+                        dateText =
+                            date.toLocaleString(
+                                undefined,
+                                {
+                                    dateStyle:
+                                        "medium",
+                                    timeStyle:
+                                        "short"
+                                }
+                            );
+
+                    }
+
+                }
+
+                html +=
+                    '<div class="brain-evidence-card">' +
+                        '<div class="brain-evidence-memory">' +
+                            brainText(
+                                item.memory || ""
+                            ) +
+                        '</div>' +
+                        '<div class="brain-evidence-meta">' +
+                            (
+                                item.subject
+                                    ? '<span class="brain-evidence-pill">' +
+                                        brainText(
+                                            item.subject
+                                        ) +
+                                      '</span>'
+                                    : ""
+                            ) +
+                            (
+                                item.category
+                                    ? '<span>' +
+                                        brainText(
+                                            item.category
+                                        ) +
+                                      '</span>'
+                                    : ""
+                            ) +
+                            (
+                                item.importance
+                                    ? '<span>Importance ' +
+                                        brainText(
+                                            String(
+                                                item.importance
+                                            )
+                                        ) +
+                                      '/10</span>'
+                                    : ""
+                            ) +
+                            (
+                                dateText
+                                    ? '<span>' +
+                                        brainText(
+                                            dateText
+                                        ) +
+                                      '</span>'
+                                    : ""
+                            ) +
+                        '</div>' +
+                    '</div>';
+
+            }
+        );
+
+        html +=
+            '</div>';
+
+        return html;
+
+    }
+
+
     async function exploreBrainEntity(entityName) {
 
         const input =
@@ -2795,6 +3073,19 @@
                 );
 
             }
+
+            const evidence =
+                await loadBrainEvidence(
+                    rootEntity.name ||
+                    entityName
+                );
+
+            html +=
+                renderBrainEvidence(
+                    evidence,
+                    rootEntity.name ||
+                    entityName
+                );
 
             result.innerHTML = html;
 
