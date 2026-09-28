@@ -4275,6 +4275,10 @@
                 result
             );
 
+            appendMemoryConsolidationReviewHistoryLauncher(
+                result
+            );
+
             appendMemoryVersionHistoryLauncher(
                 result,
                 rootEntity.name || entityName
@@ -7192,6 +7196,120 @@
             });
         }
     };
+
+    // ========================================================
+    // PHASE 6 — STEP 2F — MEMORY CONSOLIDATION REVIEW HISTORY
+    // ========================================================
+
+    async function loadMemoryConsolidationReviewHistory(statusFilter) {
+        try {
+            const query =
+                "/api?memory_consolidation_reviews=true" +
+                "&status=" + encodeURIComponent(statusFilter || "") +
+                "&_=" + Date.now();
+
+            const response = await fetch(query, {
+                method: "GET",
+                cache: "no-store",
+                headers: { "Accept": "application/json" }
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "Unable to load consolidation review history.");
+            }
+            return data;
+        } catch (error) {
+            return {
+                reviews: [],
+                count: 0,
+                summary: { total: 0, approved: 0, rejected: 0, canonical_memories: 0 },
+                error: error && error.message ? error.message : "Unable to load consolidation review history."
+            };
+        }
+    }
+
+    function renderMemoryConsolidationReviewHistory(data) {
+        const reviews = data && Array.isArray(data.reviews) ? data.reviews : [];
+        const summary = data && data.summary ? data.summary : {};
+
+        let html =
+            '<div class="memory-consolidation-section">' +
+                '<div class="memory-consolidation-title">📋 Consolidation Review History</div>' +
+                '<div class="memory-consolidation-subtitle">' +
+                    'Read-only record of consolidation decisions. <strong>No memories are changed from this history view.</strong>' +
+                '</div>';
+
+        if (data && data.error) {
+            return html + '<div class="brain-empty">' + brainText(data.error) + '</div></div>';
+        }
+
+        html +=
+            '<div class="memory-consolidation-meta">' +
+                'Total: ' + brainText(String(summary.total || 0)) +
+                ' · Approved: ' + brainText(String(summary.approved || 0)) +
+                ' · Rejected: ' + brainText(String(summary.rejected || 0)) +
+                ' · Canonical memories: ' + brainText(String(summary.canonical_memories || 0)) +
+            '</div>';
+
+        if (!reviews.length) {
+            return html + '<div class="memory-version-empty">No consolidation review decisions have been recorded yet.</div></div>';
+        }
+
+        html += '<div class="memory-consolidation-list">';
+        reviews.forEach(function(review) {
+            const approved = review.status === "approved";
+            const ids = Array.isArray(review.source_memory_ids) ? review.source_memory_ids : [];
+
+            html +=
+                '<div class="memory-consolidation-card">' +
+                    '<div class="memory-consolidation-subject">' +
+                        (approved ? '✓ Approved' : '✕ Rejected') + ' · ' +
+                        brainText(review.subject || "General") +
+                    '</div>' +
+                    '<div class="memory-consolidation-canonical">' +
+                        '<div class="memory-consolidation-label">Canonical memory</div>' +
+                        '<div class="memory-consolidation-text">' + brainText(review.canonical_memory || "") + '</div>' +
+                    '</div>' +
+                    '<div class="memory-consolidation-meta">' +
+                        '<strong>Source memories:</strong> ' + brainText(ids.length ? ids.join(", ") : "None") +
+                        '<br><strong>Category:</strong> ' + brainText(review.category || "general") +
+                        ' · <strong>Confidence:</strong> ' + brainText(String(review.confidence || 0)) + '/10' +
+                        (review.reviewed_at ? ' · <strong>Reviewed:</strong> ' + brainText(new Date(review.reviewed_at).toLocaleString()) : '') +
+                    '</div>' +
+                    (review.reason ? '<div class="memory-consolidation-meta"><strong>Reason:</strong> ' + brainText(review.reason) + '</div>' : '') +
+                    (review.canonical_memory_id ? '<div class="memory-consolidation-meta"><strong>Canonical memory ID:</strong> ' + brainText(String(review.canonical_memory_id)) + '</div>' : '') +
+                '</div>';
+        });
+
+        return html + '</div></div>';
+    }
+
+    async function appendMemoryConsolidationReviewHistoryLauncher(result) {
+        const placeholder = document.createElement("div");
+        placeholder.innerHTML =
+            '<div class="memory-consolidation-section">' +
+                '<div class="memory-consolidation-title">📋 Consolidation Review History</div>' +
+                '<div class="memory-consolidation-subtitle">See approved and rejected consolidation decisions without changing any memory.</div>' +
+                '<button type="button" class="memory-consolidation-review" id="runMemoryConsolidationHistoryButton">📋 View Review History</button>' +
+                '<div class="memory-consolidation-status" id="memoryConsolidationHistoryLauncherStatus"></div>' +
+            '</div>';
+
+        result.appendChild(placeholder.firstElementChild);
+        const button = result.querySelector("#runMemoryConsolidationHistoryButton");
+        if (!button) return;
+
+        button.addEventListener("click", async function() {
+            button.disabled = true;
+            button.style.opacity = "0.6";
+            const status = result.querySelector("#memoryConsolidationHistoryLauncherStatus");
+            if (status) status.textContent = "Loading consolidation review history...";
+            const data = await loadMemoryConsolidationReviewHistory("");
+            const section = result.querySelector("#runMemoryConsolidationHistoryButton").closest(".memory-consolidation-section");
+            if (section) section.outerHTML = renderMemoryConsolidationReviewHistory(data);
+        });
+    }
+
 
     // ========================================================
     // INITIALIZE
