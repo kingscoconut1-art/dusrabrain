@@ -2382,6 +2382,163 @@ Rules:
 
 
 # ============================================================
+# CROSS-MEMORY INTELLIGENCE
+# ============================================================
+
+def generate_cross_memory_intelligence(
+    user_id,
+    entity_name="",
+):
+    """Find evidence-grounded connections across the user's stored brain."""
+
+    target_name = str(entity_name or "").strip()
+
+    entities = get_brain_entities(user_id)
+    relationships = get_brain_relationships(user_id)
+    memories = get_all_user_memories(user_id, limit=500)
+
+    target = None
+    if target_name:
+        for entity in entities:
+            if str(entity.get("name") or "").lower() == target_name.lower():
+                target = entity
+                break
+
+        if target is None:
+            return {
+                "entity": None,
+                "connections": [],
+                "confidence": 1,
+                "evidence_count": len(memories),
+                "entity_count": len(entities),
+                "relationship_count": len(relationships),
+                "error": "Entity not found",
+            }
+
+    source_payload = {
+        "target_entity": target,
+        "entities": entities[:200],
+        "relationships": relationships[:300],
+        "memories": memories[:300],
+    }
+
+    system_prompt = """
+You are the Cross-Memory Intelligence layer of Dusra Brain.
+
+Your job is to find meaningful connections between separately stored
+entities, projects, products, people, organizations, locations, goals,
+decisions, or other subjects in the supplied evidence.
+
+Use ONLY the supplied stored evidence. Do not invent relationships, shared
+ownership, partnerships, funding, causation, strategy, timelines, or intent.
+A connection is valid only when it is explicitly supported by:
+1. a stored memory that mentions both relevant concepts/entities, OR
+2. one or more explicit stored brain relationships that create a clear chain.
+
+Do not treat two entities as connected merely because they both mention India,
+the same generic category, or a common word. Shared words alone are not proof.
+
+If a target entity is supplied, prioritize connections involving that entity.
+If no target entity is supplied, return only the strongest cross-entity
+connections across the user's stored brain.
+
+Return valid JSON only with exactly these keys:
+{
+  "connections": [
+    {
+      "type": "cross_entity|shared_evidence|relationship_chain",
+      "title": "short factual title",
+      "from_entity": "entity name",
+      "to_entity": "entity name",
+      "connection": "brief factual explanation",
+      "evidence": ["memory 1", "relationship id 2"]
+    }
+  ],
+  "suggested_followups": ["optional suggestion"],
+  "confidence": 1
+}
+
+Rules:
+- Return 0-8 connections.
+- Never manufacture a connection to fill the list.
+- Prefer direct evidence over long inferred chains.
+- Every connection must include at least one evidence reference.
+- Evidence references must use the exact form "memory N" or
+  "relationship id N" when possible.
+- suggested_followups are suggestions only, never facts.
+- confidence is 1-10 and represents how strongly the supplied evidence
+  supports the returned cross-memory connections.
+"""
+
+    user_prompt = (
+        "Find evidence-grounded cross-memory connections in Dusra Brain.\n\n"
+        + json.dumps(
+            source_payload,
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+
+    raw = groq_request(
+        [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
+            },
+        ],
+        temperature=0.1,
+    )
+
+    cleaned = clean_json_response(raw)
+
+    try:
+        result = json.loads(cleaned)
+    except Exception:
+        result = {
+            "connections": [],
+            "suggested_followups": [],
+            "confidence": 1,
+        }
+
+    if not isinstance(result, dict):
+        result = {
+            "connections": [],
+            "suggested_followups": [],
+            "confidence": 1,
+        }
+
+    enriched_connections = []
+
+    for item in result.get("connections", []):
+        if not isinstance(item, dict):
+            continue
+
+        evidence = item.get("evidence", [])
+        item = dict(item)
+        item["evidence_details"] = resolve_insight_evidence(
+            user_id,
+            evidence,
+        )
+        enriched_connections.append(item)
+
+    return {
+        "entity": target,
+        "connections": enriched_connections,
+        "suggested_followups": result.get(
+            "suggested_followups", []
+        ),
+        "confidence": result.get("confidence", 1),
+        "evidence_count": len(memories),
+        "entity_count": len(entities),
+        "relationship_count": len(relationships),
+    }
+
+
+# ============================================================
 # BRAIN EXPLORER
 # ============================================================
 
@@ -2890,6 +3047,45 @@ class handler(
                             str(error)
                     },
                     500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # CROSS-MEMORY INTELLIGENCE
+        # ----------------------------------------------------
+
+        if params.get(
+            "cross_memory"
+        ) == ["true"]:
+
+            entity_name = params.get(
+                "name",
+                [""],
+            )[0]
+
+            try:
+
+                result = generate_cross_memory_intelligence(
+                    user_id,
+                    entity_name,
+                )
+
+                send_json(
+                    self,
+                    result,
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error),
+                    },
+                    500,
                 )
 
             return
