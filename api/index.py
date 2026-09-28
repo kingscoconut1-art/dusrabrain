@@ -1244,6 +1244,243 @@ def seed_existing_memory_versions(user_id=None):
     }
 
 
+
+def update_memory_with_version(
+    user_id,
+    memory_id,
+    memory=None,
+    category=None,
+    importance=None,
+    subject=None,
+    session_id=None,
+    change_reason="memory_updated"
+):
+
+    """Explicitly update one memory while preserving its previous state.
+
+    This is the controlled Version 1 -> Version 2 pathway.
+    The previous state is written to memory_versions before the live
+    memory row is changed. No memory is deleted.
+    """
+
+    ensure_memory_versions_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    user_id,
+                    memory,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id
+                FROM memories
+                WHERE id = %s
+                  AND user_id = %s
+                FOR UPDATE
+                """,
+                (
+                    int(memory_id),
+                    user_id,
+                )
+            )
+
+            current = cur.fetchone()
+
+            if not current:
+
+                return {
+                    "updated": False,
+                    "error":
+                        "Memory not found."
+                }
+
+            current_memory = str(
+                current[2] or ""
+            )
+            current_category = (
+                current[3]
+                or "general"
+            )
+            current_importance = int(
+                current[4]
+                or 5
+            )
+            current_subject = (
+                current[5]
+                or "general"
+            )
+            current_memory_key = current[6]
+            current_session_id = (
+                current[7]
+                or "default"
+            )
+
+            new_memory = (
+                current_memory
+                if memory is None
+                else str(memory).strip()
+            )
+
+            new_category = (
+                current_category
+                if category is None
+                else str(category).strip()
+            )
+
+            new_importance = (
+                current_importance
+                if importance is None
+                else int(importance)
+            )
+
+            new_subject = (
+                current_subject
+                if subject is None
+                else str(subject).strip()
+            )
+
+            new_session_id = (
+                current_session_id
+                if session_id is None
+                else str(session_id).strip()
+            )
+
+            new_memory_key = make_memory_key(
+                new_subject,
+                new_category,
+                new_memory
+            )
+
+            changed = any(
+                [
+                    current_memory != new_memory,
+                    current_category != new_category,
+                    current_importance != new_importance,
+                    current_subject != new_subject,
+                    current_memory_key != new_memory_key,
+                    current_session_id != new_session_id,
+                ]
+            )
+
+            if not changed:
+
+                conn.commit()
+
+                return {
+                    "updated": False,
+                    "changed": False,
+                    "memory_id": int(memory_id),
+                    "message":
+                        "No changes detected.",
+                    "current_version":
+                        get_memory_versions(
+                            user_id,
+                            memory_id=int(memory_id)
+                        )[0]
+                        if get_memory_versions(
+                            user_id,
+                            memory_id=int(memory_id)
+                        )
+                        else None,
+                }
+
+            # Preserve the exact previous state first.
+            previous_version = record_memory_version(
+                cur,
+                int(memory_id),
+                user_id,
+                memory=current_memory,
+                category=current_category,
+                importance=current_importance,
+                subject=current_subject,
+                memory_key=current_memory_key,
+                session_id=current_session_id,
+                change_type="previous",
+                change_reason=change_reason,
+            )
+
+            cur.execute(
+                """
+                UPDATE memories
+                SET
+                    memory = %s,
+                    category = %s,
+                    importance = %s,
+                    subject = %s,
+                    memory_key = %s,
+                    session_id = %s
+                WHERE id = %s
+                  AND user_id = %s
+                RETURNING
+                    id,
+                    memory,
+                    created_at,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id
+                """,
+                (
+                    new_memory,
+                    new_category,
+                    new_importance,
+                    new_subject,
+                    new_memory_key,
+                    new_session_id,
+                    int(memory_id),
+                    user_id,
+                )
+            )
+
+            updated_row = cur.fetchone()
+
+            current_version = record_memory_version(
+                cur,
+                int(memory_id),
+                user_id,
+                memory=new_memory,
+                category=new_category,
+                importance=new_importance,
+                subject=new_subject,
+                memory_key=new_memory_key,
+                session_id=new_session_id,
+                change_type="updated",
+                change_reason=change_reason,
+            )
+
+        conn.commit()
+
+    return {
+        "updated": True,
+        "changed": True,
+        "memory_id": int(memory_id),
+        "previous_version": previous_version,
+        "current_version": current_version,
+        "memory": {
+            "id": updated_row[0],
+            "memory": updated_row[1],
+            "created_at":
+                updated_row[2].isoformat()
+                if updated_row[2]
+                else None,
+            "category": updated_row[3],
+            "importance": updated_row[4],
+            "subject": updated_row[5],
+            "memory_key": updated_row[6],
+            "session_id": updated_row[7],
+        },
+        "memory_deleted": False,
+    }
+
+
 def get_memory_versions(
     user_id,
     memory_id=None,
@@ -5617,6 +5854,9 @@ class handler(
 
                 "memory_versioning":
                     True,
+
+                "versioned_memory_updates":
+                    True,
             }
         )
 
@@ -5674,6 +5914,85 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            if action == "update_memory_version":
+
+                memory_id = body.get(
+                    "memory_id"
+                )
+
+                if memory_id is None:
+
+                    send_json(
+                        self,
+                        {
+                            "updated": False,
+                            "error":
+                                "memory_id is required."
+                        },
+                        400
+                    )
+
+                    return
+
+                try:
+
+                    result = update_memory_with_version(
+                        user_id=user_id,
+                        memory_id=int(
+                            memory_id
+                        ),
+                        memory=body.get(
+                            "memory"
+                        ),
+                        category=body.get(
+                            "category"
+                        ),
+                        importance=body.get(
+                            "importance"
+                        ),
+                        subject=body.get(
+                            "subject"
+                        ),
+                        session_id=body.get(
+                            "session_id"
+                        ),
+                        change_reason=str(
+                            body.get(
+                                "change_reason",
+                                "memory_updated"
+                            )
+                            or "memory_updated"
+                        ),
+                    )
+
+                    send_json(
+                        self,
+                        result,
+                        200
+                        if result.get(
+                            "updated"
+                        )
+                        or result.get(
+                            "changed"
+                        ) is False
+                        else 400
+                    )
+
+                except Exception as error:
+
+                    send_json(
+                        self,
+                        {
+                            "updated": False,
+                            "error":
+                                str(error)
+                        },
+                        500
+                    )
+
+                return
+
 
             if action in [
                 "approve_brain_learning",
