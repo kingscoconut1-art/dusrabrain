@@ -1138,6 +1138,112 @@ def record_memory_version(
     }
 
 
+
+def seed_existing_memory_versions(user_id=None):
+    """Create Version 1 baselines for memories that predate versioning.
+
+    This copies existing memory state into memory_versions only.
+    It never changes or deletes rows in memories.
+    """
+    ensure_memory_versions_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            if user_id:
+
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key,
+                        session_id
+                    FROM memories
+                    WHERE user_id = %s
+                    ORDER BY id
+                    """,
+                    (
+                        user_id,
+                    )
+                )
+
+            else:
+
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key,
+                        session_id
+                    FROM memories
+                    ORDER BY id
+                    """
+                )
+
+            rows = cur.fetchall()
+
+            seeded = 0
+
+            for row in rows:
+
+                memory_id = int(
+                    row[0]
+                )
+
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM memory_versions
+                    WHERE memory_id = %s
+                    LIMIT 1
+                    """,
+                    (
+                        memory_id,
+                    )
+                )
+
+                if cur.fetchone():
+                    continue
+
+                record_memory_version(
+                    cur,
+                    memory_id,
+                    row[1],
+                    memory=str(
+                        row[2] or ""
+                    ),
+                    category=row[3] or "general",
+                    importance=int(
+                        row[4] or 5
+                    ),
+                    subject=row[5] or "general",
+                    memory_key=row[6],
+                    session_id=row[7] or "default",
+                    change_type="created",
+                    change_reason="initial_version_baseline",
+                )
+
+                seeded += 1
+
+        conn.commit()
+
+    return {
+        "seeded": seeded,
+        "user_id": user_id,
+    }
+
+
 def get_memory_versions(
     user_id,
     memory_id=None,
@@ -1145,6 +1251,9 @@ def get_memory_versions(
 ):
 
     ensure_memory_versions_table()
+    seed_existing_memory_versions(
+        user_id=user_id
+    )
 
     with get_connection() as conn:
 
@@ -4863,6 +4972,47 @@ class handler(
 
 
         # ----------------------------------------------------
+        # PHASE 6 — INITIAL MEMORY VERSION BASELINE
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_versions_seed"
+        ) == ["true"]:
+
+            try:
+
+                result = seed_existing_memory_versions(
+                    user_id=user_id
+                )
+
+                send_json(
+                    self,
+                    {
+                        "status": "ok",
+                        "message":
+                            "Existing memories were preserved and "
+                            "baseline versions were created.",
+                        **result,
+                        "memory_rows_modified": 0,
+                        "memory_rows_deleted": 0,
+                    }
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 6 — MEMORY VERSION HISTORY
         # ----------------------------------------------------
 
@@ -4907,6 +5057,7 @@ class handler(
                             get_memory_version_summary(
                                 user_id
                             ),
+                        "baseline_seeded": True,
                         "proposal_only": False,
                         "automatic_deletion": False,
                     }
