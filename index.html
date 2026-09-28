@@ -1435,6 +1435,18 @@
         }
 
     </style>
+
+<style>
+.memory-consolidation-source-meta {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #64748b;
+}
+.memory-consolidation-original-text {
+    line-height: 1.55;
+}
+</style>
+
 </head>
 
 <body>
@@ -6344,8 +6356,8 @@
             '<div class="memory-consolidation-section">' +
                 '<div class="memory-consolidation-title">🧠 Memory Consolidation</div>' +
                 '<div class="memory-consolidation-subtitle">' +
-                    'Dusra Brain can identify repetitive memories and propose a cleaner canonical memory. ' +
-                    '<strong>Nothing is changed or deleted automatically.</strong>' +
+                    'Dusra Brain can identify repetitive memories and propose an information-preserving canonical memory. ' +
+                    '<strong>Original memories remain untouched until a future approval layer.</strong>' +
                 '</div>' +
                 '<div class="brain-learning-quality-gate">🛡️ Proposal only · Original memories remain untouched</div>';
 
@@ -6395,17 +6407,47 @@
                     '<div class="memory-consolidation-originals">' +
                         '<div class="memory-consolidation-label">Original memories / evidence</div>';
 
-            ids.forEach(function(id) {
-                html +=
-                    '<div class="memory-consolidation-original">' +
-                        '<div class="memory-consolidation-original-id">Memory #' +
-                            brainText(String(id)) +
-                        '</div>' +
-                        '<div class="memory-consolidation-original-text">' +
-                            'Original memory #' + brainText(String(id)) +
-                        '</div>' +
-                    '</div>';
-            });
+            const sourceMemories = Array.isArray(proposal.source_memories)
+                ? proposal.source_memories
+                : [];
+
+            if (sourceMemories.length) {
+                sourceMemories.forEach(function(source) {
+                    html +=
+                        '<div class="memory-consolidation-original">' +
+                            '<div class="memory-consolidation-original-id">Memory #' +
+                                brainText(String(source.id)) +
+                            '</div>' +
+                            '<div class="memory-consolidation-original-text">' +
+                                brainText(source.memory || "No memory text available.") +
+                            '</div>' +
+                            '<div class="memory-consolidation-source-meta">' +
+                                'Subject: ' +
+                                brainText(source.subject || "general") +
+                                ' · Category: ' +
+                                brainText(source.category || "general") +
+                                ' · Importance: ' +
+                                brainText(String(source.importance || 0)) +
+                                '/10' +
+                                (source.created_at
+                                    ? ' · Created: ' + brainText(new Date(source.created_at).toLocaleString())
+                                    : '') +
+                            '</div>' +
+                        '</div>';
+                });
+            } else {
+                ids.forEach(function(id) {
+                    html +=
+                        '<div class="memory-consolidation-original">' +
+                            '<div class="memory-consolidation-original-id">Memory #' +
+                                brainText(String(id)) +
+                            '</div>' +
+                            '<div class="memory-consolidation-original-text">' +
+                                'Memory text is unavailable in this proposal.' +
+                            '</div>' +
+                        '</div>';
+                });
+            }
 
             html +=
                     '</div>' +
