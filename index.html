@@ -1192,6 +1192,18 @@
             margin-bottom: 15px;
         }
 
+        .brain-learning-quality-gate {
+            display: inline-block;
+            margin-bottom: 14px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #ecfdf5;
+            color: #047857;
+            font-size: 11px;
+            font-weight: 800;
+            border: 1px solid #a7f3d0;
+        }
+
         .brain-learning-list {
             display: grid;
             gap: 11px;
@@ -4087,7 +4099,10 @@
                 '<div class="brain-learning-title">🧠 Brain Learning</div>' +
                 '<div class="brain-learning-subtitle">' +
                     'Dusra Brain can propose new relationships from existing evidence. ' +
-                    '<strong>Nothing is saved automatically.</strong>' +
+                    '<strong>Strict evidence quality is required. Nothing is saved automatically.</strong>' +
+                '</div>' +
+                '<div class="brain-learning-quality-gate">' +
+                    '🛡️ Evidence Quality Gate: direct evidence only' +
                 '</div>';
 
         if (!proposals.length) {
@@ -4163,6 +4178,12 @@
                             'Proposal confidence: ' +
                             brainText(String(proposalConfidence)) +
                             '/10' +
+                            (
+                                proposal && proposal.evidence_quality
+                                    ? ' · Evidence quality: ' +
+                                      brainText(String(proposal.evidence_quality))
+                                    : ''
+                            ) +
                         '</div>' +
 
                         '<div class="brain-learning-actions">' +
