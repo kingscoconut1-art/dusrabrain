@@ -1531,6 +1531,128 @@
             color: #64748b;
         }
 
+
+        /* =====================================================
+           BRAIN LEARNING REVIEW HISTORY
+        ===================================================== */
+
+        .brain-learning-history-section {
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .brain-learning-history-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin: 16px 0 20px;
+        }
+
+        .brain-learning-history-card {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 11px;
+            padding: 14px;
+        }
+
+        .brain-learning-history-number {
+            font-size: 24px;
+            font-weight: 800;
+        }
+
+        .brain-learning-history-label {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .brain-learning-history-filters {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+
+        .brain-learning-history-filter {
+            background: #f3f4f6;
+            color: #374151;
+            border-radius: 20px;
+            padding: 8px 13px;
+        }
+
+        .brain-learning-history-filter.active {
+            background: #111827;
+            color: white;
+        }
+
+        .brain-learning-history-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .brain-learning-history-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            background: #fff;
+        }
+
+        .brain-learning-history-route {
+            font-size: 16px;
+            font-weight: 800;
+            color: #1f2937;
+        }
+
+        .brain-learning-history-relation {
+            margin-top: 5px;
+            color: #4f46e5;
+            font-weight: 700;
+        }
+
+        .brain-learning-history-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        .brain-learning-history-status {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .brain-learning-history-status.approved {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .brain-learning-history-status.rejected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .brain-learning-history-evidence,
+        .brain-learning-history-reason {
+            margin-top: 10px;
+            color: #475569;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 800px) {
+            .brain-learning-history-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
     </style>
 
 <style>
@@ -1579,6 +1701,13 @@
                 id="brainButton"
             >
                 🕸️ Brain Explorer
+            </button>
+
+            <button
+                class="header-button"
+                id="brainLearningHistoryButton"
+            >
+                🧾 Learning History
             </button>
 
         </div>
@@ -2020,6 +2149,29 @@
         </div>
 
 
+        <!-- =================================================
+             BRAIN LEARNING REVIEW HISTORY
+        ================================================= -->
+
+        <div
+            id="brainLearningHistoryView"
+            class="view"
+        >
+
+            <div class="dashboard-header">
+                <h2>🧾 Brain Learning Review History</h2>
+                <button class="back-button" id="brainLearningHistoryBackButton">
+                    ← Back to Chat
+                </button>
+            </div>
+
+            <div id="brainLearningHistoryResult" class="brain-learning-history-section">
+                <div class="loading">Loading review history...</div>
+            </div>
+
+        </div>
+
+
     <!-- =====================================================
          EDIT MEMORY MODAL
     ===================================================== -->
@@ -2206,6 +2358,9 @@
 
     const brainExplorerView =
         document.getElementById("brainExplorerView");
+
+    const brainLearningHistoryView =
+        document.getElementById("brainLearningHistoryView");
 
 
     // ========================================================
@@ -2760,6 +2915,10 @@
             "active"
         );
 
+        brainLearningHistoryView.classList.remove(
+            "active"
+        );
+
 
         view.classList.add(
             "active"
@@ -2835,6 +2994,117 @@
             }
         );
 
+
+
+
+    // ========================================================
+    // STEP 22B — BRAIN LEARNING REVIEW HISTORY
+    // ========================================================
+
+    let brainLearningHistoryStatus = "";
+
+    function renderBrainLearningHistory(payload) {
+
+        const summary = payload && payload.summary ? payload.summary : {};
+        const reviews = payload && Array.isArray(payload.reviews) ? payload.reviews : [];
+
+        let html =
+            '<div class="brain-learning-history-section">' +
+                '<div class="brain-learning-history-title"><strong>🧾 Brain Learning Review History</strong></div>' +
+                '<div class="brain-learning-history-summary">' +
+                    historyCard(summary.total || 0, "Total Reviews") +
+                    historyCard(summary.approved || 0, "Approved") +
+                    historyCard(summary.rejected || 0, "Rejected") +
+                    historyCard(summary.saved_relationships || summary.approved || 0, "Saved Relationships") +
+                '</div>' +
+                '<div class="brain-learning-history-filters">' +
+                    historyFilter("", "All") +
+                    historyFilter("approved", "Approved") +
+                    historyFilter("rejected", "Rejected") +
+                '</div>' +
+                '<div class="brain-learning-history-list">';
+
+        if (!reviews.length) {
+            html += '<div class="brain-empty">No Brain Learning reviews found for this filter.</div>';
+        } else {
+            reviews.forEach(function(review) {
+                const status = String(review.status || "").toLowerCase();
+                const evidence = Array.isArray(review.evidence) ? review.evidence.join(" · ") : (review.evidence || "No evidence recorded");
+                html +=
+                    '<div class="brain-learning-history-item">' +
+                        '<div class="brain-learning-history-route">' +
+                            brainText(review.from || ("Entity #" + review.from_entity_id)) +
+                            ' → ' +
+                            brainText(review.to || ("Entity #" + review.to_entity_id)) +
+                        '</div>' +
+                        '<div class="brain-learning-history-relation">' + brainText(review.relationship || "") + '</div>' +
+                        '<div class="brain-learning-history-meta">' +
+                            '<span class="brain-learning-history-status ' + brainText(status) + '">' + brainText(status) + '</span>' +
+                            '<span>Confidence: ' + brainText(String(review.confidence || 0)) + '/10</span>' +
+                            '<span>Reviewed: ' + brainText(formatHistoryDate(review.reviewed_at)) + '</span>' +
+                            '<span>Review #' + brainText(String(review.id || "")) + '</span>' +
+                        '</div>' +
+                        '<div class="brain-learning-history-reason"><strong>Reason:</strong> ' + brainText(review.reason || "No reason recorded") + '</div>' +
+                        '<div class="brain-learning-history-evidence"><strong>Evidence:</strong> ' + brainText(evidence) + '</div>' +
+                    '</div>';
+            });
+        }
+
+        html += '</div></div>';
+        return html;
+    }
+
+    function historyCard(number, label) {
+        return '<div class="brain-learning-history-card"><div class="brain-learning-history-number">' + brainText(String(number)) + '</div><div class="brain-learning-history-label">' + brainText(label) + '</div></div>';
+    }
+
+    function historyFilter(value, label) {
+        const active = brainLearningHistoryStatus === value ? " active" : "";
+        return '<button type="button" class="brain-learning-history-filter' + active + '" data-learning-history-status="' + brainText(value) + '">' + brainText(label) + '</button>';
+    }
+
+    function formatHistoryDate(value) {
+        if (!value) return "—";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+    }
+
+    async function loadBrainLearningHistory(status) {
+        brainLearningHistoryStatus = status || "";
+        const result = document.getElementById("brainLearningHistoryResult");
+        if (!result) return;
+        result.innerHTML = '<div class="loading">Loading review history...</div>';
+
+        try {
+            const query = '/api?brain_learning_reviews=true' +
+                (brainLearningHistoryStatus ? '&status=' + encodeURIComponent(brainLearningHistoryStatus) : '') +
+                '&limit=100&_=' + Date.now();
+            const response = await fetch(query, {
+                method: 'GET',
+                cache: 'no-store',
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Unable to load Brain Learning review history.');
+            result.innerHTML = renderBrainLearningHistory(data);
+            result.querySelectorAll('[data-learning-history-status]').forEach(function(button) {
+                button.addEventListener('click', function() {
+                    loadBrainLearningHistory(button.getAttribute('data-learning-history-status') || '');
+                });
+            });
+        } catch (error) {
+            result.innerHTML = '<div class="brain-empty"><strong>Review history error:</strong><br>' + brainText(error && error.message ? error.message : 'Unable to load review history.') + '</div>';
+        }
+    }
+
+    document.getElementById("brainLearningHistoryButton").addEventListener("click", function() {
+        showView(brainLearningHistoryView);
+        loadBrainLearningHistory("");
+    });
+
+    document.getElementById("brainLearningHistoryBackButton").addEventListener("click", function() {
+        showView(chatView);
+    });
 
 
     // ========================================================
@@ -4272,10 +4542,6 @@
             );
 
             appendMemoryConsolidationLauncher(
-                result
-            );
-
-            appendMemoryConsolidationReviewHistoryLauncher(
                 result
             );
 
@@ -7107,13 +7373,10 @@
         });
     }
 
-    window.reviewMemoryConsolidation = async function(index, approved) {
+    window.reviewMemoryConsolidation = function(index, approved) {
         const proposal = memoryConsolidationProposals[index];
         const status = document.getElementById(
             "memoryConsolidationStatus" + String(index)
-        );
-        const card = document.querySelector(
-            '[data-consolidation-index="' + String(index) + '"]'
         );
 
         if (!proposal) {
@@ -7121,195 +7384,30 @@
             return;
         }
 
-        const buttons = card
-            ? card.querySelectorAll("button")
-            : [];
-
-        buttons.forEach(function(button) {
-            button.disabled = true;
-            button.style.opacity = "0.6";
-        });
-
-        if (status) {
-            status.textContent = approved
-                ? "Saving approved consolidation..."
-                : "Saving rejection...";
-        }
-
-        try {
-            const response = await fetch("/api", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                },
-                body: JSON.stringify({
-                    action: approved
-                        ? "approve_memory_consolidation"
-                        : "reject_memory_consolidation",
-                    user_id: "default_user",
-                    proposal: proposal
-                })
-            });
-
-            let data = {};
-
-            try {
-                data = await response.json();
-            } catch (jsonError) {
-                data = {};
-            }
-
-            if (!response.ok || (approved ? !data.approved : !data.rejected)) {
-                throw new Error(
-                    data.error ||
-                    "Memory consolidation review could not be saved."
-                );
-            }
-
-            if (status) {
-                status.textContent = approved
-                    ? (data.already_approved
-                        ? "✓ Already approved — canonical memory already exists."
-                        : "✓ Approved — canonical memory created. Original memories preserved.")
-                    : "✓ Rejected — no memory was changed.";
-            }
-
-            if (card) {
-                card.setAttribute(
-                    "data-consolidation-reviewed",
-                    approved ? "approved" : "rejected"
-                );
-            }
-        } catch (error) {
+        if (approved) {
             if (status) {
                 status.textContent =
-                    "✗ " +
-                    (error && error.message
-                        ? error.message
-                        : "Memory consolidation review failed.");
+                    "✓ Approved for review — database consolidation will be added in the next approval layer.";
             }
+        } else {
+            if (status) {
+                status.textContent =
+                    "✓ Rejected — this consolidation proposal will not be saved.";
+            }
+        }
 
+        const card = document.querySelector(
+            '[data-consolidation-index="' + String(index) + '"]'
+        );
+
+        if (card) {
+            const buttons = card.querySelectorAll("button");
             buttons.forEach(function(button) {
-                button.disabled = false;
-                button.style.opacity = "1";
+                button.disabled = true;
+                button.style.opacity = "0.6";
             });
         }
     };
-
-    // ========================================================
-    // PHASE 6 — STEP 2F — MEMORY CONSOLIDATION REVIEW HISTORY
-    // ========================================================
-
-    async function loadMemoryConsolidationReviewHistory(statusFilter) {
-        try {
-            const query =
-                "/api?memory_consolidation_reviews=true" +
-                "&status=" + encodeURIComponent(statusFilter || "") +
-                "&_=" + Date.now();
-
-            const response = await fetch(query, {
-                method: "GET",
-                cache: "no-store",
-                headers: { "Accept": "application/json" }
-            });
-
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || "Unable to load consolidation review history.");
-            }
-            return data;
-        } catch (error) {
-            return {
-                reviews: [],
-                count: 0,
-                summary: { total: 0, approved: 0, rejected: 0, canonical_memories: 0 },
-                error: error && error.message ? error.message : "Unable to load consolidation review history."
-            };
-        }
-    }
-
-    function renderMemoryConsolidationReviewHistory(data) {
-        const reviews = data && Array.isArray(data.reviews) ? data.reviews : [];
-        const summary = data && data.summary ? data.summary : {};
-
-        let html =
-            '<div class="memory-consolidation-section">' +
-                '<div class="memory-consolidation-title">📋 Consolidation Review History</div>' +
-                '<div class="memory-consolidation-subtitle">' +
-                    'Read-only record of consolidation decisions. <strong>No memories are changed from this history view.</strong>' +
-                '</div>';
-
-        if (data && data.error) {
-            return html + '<div class="brain-empty">' + brainText(data.error) + '</div></div>';
-        }
-
-        html +=
-            '<div class="memory-consolidation-meta">' +
-                'Total: ' + brainText(String(summary.total || 0)) +
-                ' · Approved: ' + brainText(String(summary.approved || 0)) +
-                ' · Rejected: ' + brainText(String(summary.rejected || 0)) +
-                ' · Canonical memories: ' + brainText(String(summary.canonical_memories || 0)) +
-            '</div>';
-
-        if (!reviews.length) {
-            return html + '<div class="memory-version-empty">No consolidation review decisions have been recorded yet.</div></div>';
-        }
-
-        html += '<div class="memory-consolidation-list">';
-        reviews.forEach(function(review) {
-            const approved = review.status === "approved";
-            const ids = Array.isArray(review.source_memory_ids) ? review.source_memory_ids : [];
-
-            html +=
-                '<div class="memory-consolidation-card">' +
-                    '<div class="memory-consolidation-subject">' +
-                        (approved ? '✓ Approved' : '✕ Rejected') + ' · ' +
-                        brainText(review.subject || "General") +
-                    '</div>' +
-                    '<div class="memory-consolidation-canonical">' +
-                        '<div class="memory-consolidation-label">Canonical memory</div>' +
-                        '<div class="memory-consolidation-text">' + brainText(review.canonical_memory || "") + '</div>' +
-                    '</div>' +
-                    '<div class="memory-consolidation-meta">' +
-                        '<strong>Source memories:</strong> ' + brainText(ids.length ? ids.join(", ") : "None") +
-                        '<br><strong>Category:</strong> ' + brainText(review.category || "general") +
-                        ' · <strong>Confidence:</strong> ' + brainText(String(review.confidence || 0)) + '/10' +
-                        (review.reviewed_at ? ' · <strong>Reviewed:</strong> ' + brainText(new Date(review.reviewed_at).toLocaleString()) : '') +
-                    '</div>' +
-                    (review.reason ? '<div class="memory-consolidation-meta"><strong>Reason:</strong> ' + brainText(review.reason) + '</div>' : '') +
-                    (review.canonical_memory_id ? '<div class="memory-consolidation-meta"><strong>Canonical memory ID:</strong> ' + brainText(String(review.canonical_memory_id)) + '</div>' : '') +
-                '</div>';
-        });
-
-        return html + '</div></div>';
-    }
-
-    async function appendMemoryConsolidationReviewHistoryLauncher(result) {
-        const placeholder = document.createElement("div");
-        placeholder.innerHTML =
-            '<div class="memory-consolidation-section">' +
-                '<div class="memory-consolidation-title">📋 Consolidation Review History</div>' +
-                '<div class="memory-consolidation-subtitle">See approved and rejected consolidation decisions without changing any memory.</div>' +
-                '<button type="button" class="memory-consolidation-review" id="runMemoryConsolidationHistoryButton">📋 View Review History</button>' +
-                '<div class="memory-consolidation-status" id="memoryConsolidationHistoryLauncherStatus"></div>' +
-            '</div>';
-
-        result.appendChild(placeholder.firstElementChild);
-        const button = result.querySelector("#runMemoryConsolidationHistoryButton");
-        if (!button) return;
-
-        button.addEventListener("click", async function() {
-            button.disabled = true;
-            button.style.opacity = "0.6";
-            const status = result.querySelector("#memoryConsolidationHistoryLauncherStatus");
-            if (status) status.textContent = "Loading consolidation review history...";
-            const data = await loadMemoryConsolidationReviewHistory("");
-            const section = result.querySelector("#runMemoryConsolidationHistoryButton").closest(".memory-consolidation-section");
-            if (section) section.outerHTML = renderMemoryConsolidationReviewHistory(data);
-        });
-    }
-
 
     // ========================================================
     // INITIALIZE
