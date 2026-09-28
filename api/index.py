@@ -2613,6 +2613,51 @@ Rules:
             }
         )
 
+    reviewed_signatures = get_reviewed_relationship_signatures(
+        user_id
+    )
+
+    entity_by_name = {
+        str(entity.get("name") or "").strip().lower(): entity
+        for entity in entities
+    }
+
+    filtered_proposals = []
+
+    for proposal in safe_proposals:
+
+        from_entity = entity_by_name.get(
+            str(
+                proposal.get("from_entity") or ""
+            ).strip().lower()
+        )
+
+        to_entity = entity_by_name.get(
+            str(
+                proposal.get("to_entity") or ""
+            ).strip().lower()
+        )
+
+        if not from_entity or not to_entity:
+            continue
+
+        signature = (
+            int(from_entity["id"]),
+            str(
+                proposal.get("relationship") or ""
+            ).strip().lower(),
+            int(to_entity["id"]),
+        )
+
+        if signature in reviewed_signatures:
+            continue
+
+        filtered_proposals.append(
+            proposal
+        )
+
+    safe_proposals = filtered_proposals[:20]
+
     return {
         "proposals": safe_proposals,
         "suggested_followups": (
@@ -3195,6 +3240,500 @@ def explore_brain_graph(
             limit,
         ),
     }
+
+
+# ============================================================
+# STEP 21 — BRAIN LEARNING APPROVAL LAYER
+# ============================================================
+
+def ensure_brain_learning_reviews_table():
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS brain_learning_reviews
+                (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    from_entity_id INTEGER NOT NULL,
+                    relationship TEXT NOT NULL,
+                    to_entity_id INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    evidence JSONB,
+                    reason TEXT,
+                    confidence INTEGER DEFAULT 5,
+                    reviewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE
+                    (
+                        user_id,
+                        from_entity_id,
+                        relationship,
+                        to_entity_id
+                    )
+                )
+                """
+            )
+
+        conn.commit()
+
+
+def get_reviewed_relationship_signatures(user_id):
+
+    ensure_brain_learning_reviews_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    from_entity_id,
+                    LOWER(relationship),
+                    to_entity_id,
+                    status
+                FROM brain_learning_reviews
+                WHERE user_id = %s
+                """,
+                (user_id,)
+            )
+
+            rows = cur.fetchall()
+
+    return {
+        (
+            int(row[0]),
+            str(row[1]).strip().lower(),
+            int(row[2]),
+        ): str(row[3]).strip().lower()
+        for row in rows
+    }
+
+
+def find_brain_entity_by_name(user_id, name):
+
+    name = str(name or "").strip()
+
+    if not name:
+        return None
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    user_id,
+                    entity_type,
+                    name,
+                    description,
+                    importance
+                FROM brain_entities
+                WHERE user_id = %s
+                  AND LOWER(name) = LOWER(%s)
+                ORDER BY importance DESC
+                LIMIT 1
+                """,
+                (user_id, name)
+            )
+
+            row = cur.fetchone()
+
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "user_id": row[1],
+        "entity_type": row[2],
+        "name": row[3],
+        "description": row[4],
+        "importance": row[5],
+    }
+
+
+def verify_brain_learning_evidence(user_id, evidence):
+
+    if not isinstance(evidence, list):
+        return []
+
+    verified = []
+
+    for item in evidence:
+
+        reference = str(item or "").strip()
+
+        memory_match = re.match(
+            r"^memory\s+(\d+)$",
+            reference,
+            re.IGNORECASE
+        )
+
+        if memory_match:
+
+            memory_id = int(memory_match.group(1))
+
+            with get_connection() as conn:
+
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM memories
+                        WHERE id = %s
+                          AND user_id = %s
+                        LIMIT 1
+                        """,
+                        (memory_id, user_id)
+                    )
+
+                    if cur.fetchone():
+
+                        verified.append(
+                            "memory " + str(memory_id)
+                        )
+
+                        continue
+
+        relationship_match = re.match(
+            r"^relationship\s+id\s+(\d+)$",
+            reference,
+            re.IGNORECASE
+        )
+
+        if relationship_match:
+
+            relationship_id = int(
+                relationship_match.group(1)
+            )
+
+            with get_connection() as conn:
+
+                with conn.cursor() as cur:
+
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM brain_relationships
+                        WHERE id = %s
+                          AND user_id = %s
+                        LIMIT 1
+                        """,
+                        (relationship_id, user_id)
+                    )
+
+                    if cur.fetchone():
+
+                        verified.append(
+                            "relationship id " +
+                            str(relationship_id)
+                        )
+
+                        continue
+
+    return verified
+
+
+def approve_brain_learning_proposal(user_id, proposal):
+
+    if not isinstance(proposal, dict):
+        return {
+            "approved": False,
+            "error": "Invalid proposal."
+        }
+
+    from_name = str(
+        proposal.get("from_entity", "")
+    ).strip()
+
+    to_name = str(
+        proposal.get("to_entity", "")
+    ).strip()
+
+    relationship = str(
+        proposal.get("relationship", "")
+    ).strip()
+
+    reason = str(
+        proposal.get("reason", "")
+    ).strip()
+
+    evidence = proposal.get("evidence", [])
+
+    try:
+        confidence = int(
+            proposal.get("confidence", 5)
+        )
+    except Exception:
+        confidence = 5
+
+    confidence = max(1, min(10, confidence))
+
+    if not from_name or not to_name or not relationship:
+        return {
+            "approved": False,
+            "error": "Proposal is missing an entity or relationship."
+        }
+
+    from_entity = find_brain_entity_by_name(
+        user_id,
+        from_name
+    )
+
+    to_entity = find_brain_entity_by_name(
+        user_id,
+        to_name
+    )
+
+    if not from_entity or not to_entity:
+        return {
+            "approved": False,
+            "error": "Both entities must already exist in the structured Brain."
+        }
+
+    verified_evidence = verify_brain_learning_evidence(
+        user_id,
+        evidence
+    )
+
+    if not verified_evidence:
+        return {
+            "approved": False,
+            "error": "The proposal has no verifiable stored evidence."
+        }
+
+    ensure_brain_learning_reviews_table()
+
+    reviews = get_reviewed_relationship_signatures(user_id)
+
+    signature = (
+        int(from_entity["id"]),
+        relationship.lower(),
+        int(to_entity["id"]),
+    )
+
+    if reviews.get(signature) == "approved":
+        return {
+            "approved": True,
+            "already_approved": True,
+            "relationship_id": None,
+            "from": from_entity["name"],
+            "relationship": relationship,
+            "to": to_entity["name"],
+        }
+
+    if reviews.get(signature) == "rejected":
+        return {
+            "approved": False,
+            "error": "This proposal was previously rejected."
+        }
+
+    relation_id = save_brain_relationship(
+        user_id=user_id,
+        from_entity_id=from_entity["id"],
+        relationship=relationship,
+        to_entity_id=to_entity["id"],
+        confidence=confidence
+    )
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                INSERT INTO brain_learning_reviews
+                (
+                    user_id,
+                    from_entity_id,
+                    relationship,
+                    to_entity_id,
+                    status,
+                    evidence,
+                    reason,
+                    confidence
+                )
+                VALUES
+                (
+                    %s, %s, %s, %s,
+                    'approved',
+                    %s::jsonb,
+                    %s,
+                    %s
+                )
+                ON CONFLICT
+                (
+                    user_id,
+                    from_entity_id,
+                    relationship,
+                    to_entity_id
+                )
+                DO UPDATE SET
+                    status = 'approved',
+                    evidence = EXCLUDED.evidence,
+                    reason = EXCLUDED.reason,
+                    confidence = EXCLUDED.confidence,
+                    reviewed_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    user_id,
+                    from_entity["id"],
+                    relationship,
+                    to_entity["id"],
+                    json.dumps(verified_evidence),
+                    reason,
+                    confidence,
+                )
+            )
+
+        conn.commit()
+
+    return {
+        "approved": True,
+        "already_approved": False,
+        "relationship_id": relation_id,
+        "from": from_entity["name"],
+        "relationship": relationship,
+        "to": to_entity["name"],
+        "confidence": confidence,
+        "evidence": verified_evidence,
+    }
+
+
+def reject_brain_learning_proposal(user_id, proposal):
+
+    if not isinstance(proposal, dict):
+        return {
+            "rejected": False,
+            "error": "Invalid proposal."
+        }
+
+    from_name = str(
+        proposal.get("from_entity", "")
+    ).strip()
+
+    to_name = str(
+        proposal.get("to_entity", "")
+    ).strip()
+
+    relationship = str(
+        proposal.get("relationship", "")
+    ).strip()
+
+    if not from_name or not to_name or not relationship:
+        return {
+            "rejected": False,
+            "error": "Proposal is missing an entity or relationship."
+        }
+
+    from_entity = find_brain_entity_by_name(
+        user_id,
+        from_name
+    )
+
+    to_entity = find_brain_entity_by_name(
+        user_id,
+        to_name
+    )
+
+    if not from_entity or not to_entity:
+        return {
+            "rejected": False,
+            "error": "Both entities must already exist in the structured Brain."
+        }
+
+    ensure_brain_learning_reviews_table()
+
+    signature = (
+        int(from_entity["id"]),
+        relationship.lower(),
+        int(to_entity["id"]),
+    )
+
+    reviews = get_reviewed_relationship_signatures(user_id)
+
+    if reviews.get(signature) == "approved":
+        return {
+            "rejected": False,
+            "error": "This relationship is already approved and saved."
+        }
+
+    try:
+        confidence = int(
+            proposal.get("confidence", 5)
+        )
+    except Exception:
+        confidence = 5
+
+    confidence = max(1, min(10, confidence))
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                INSERT INTO brain_learning_reviews
+                (
+                    user_id,
+                    from_entity_id,
+                    relationship,
+                    to_entity_id,
+                    status,
+                    evidence,
+                    reason,
+                    confidence
+                )
+                VALUES
+                (
+                    %s, %s, %s, %s,
+                    'rejected',
+                    %s::jsonb,
+                    %s,
+                    %s
+                )
+                ON CONFLICT
+                (
+                    user_id,
+                    from_entity_id,
+                    relationship,
+                    to_entity_id
+                )
+                DO UPDATE SET
+                    status = 'rejected',
+                    reviewed_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    user_id,
+                    from_entity["id"],
+                    relationship,
+                    to_entity["id"],
+                    json.dumps(
+                        proposal.get("evidence", [])
+                    ),
+                    str(
+                        proposal.get("reason", "")
+                    ),
+                    confidence,
+                )
+            )
+
+        conn.commit()
+
+    return {
+        "rejected": True,
+        "from": from_entity["name"],
+        "relationship": relationship,
+        "to": to_entity["name"],
+    }
+
+
 
 # ============================================================
 # REQUEST HANDLER
@@ -3811,6 +4350,51 @@ class handler(
                 "title",
                 "New Chat"
             )
+
+            action = str(
+                body.get(
+                    "action",
+                    ""
+                )
+            ).strip().lower()
+
+            if action in [
+                "approve_brain_learning",
+                "reject_brain_learning",
+            ]:
+
+                proposal = body.get(
+                    "proposal",
+                    {}
+                )
+
+                if action == "approve_brain_learning":
+
+                    result = approve_brain_learning_proposal(
+                        user_id,
+                        proposal
+                    )
+
+                    send_json(
+                        self,
+                        result,
+                        200 if result.get("approved") else 400
+                    )
+
+                    return
+
+                result = reject_brain_learning_proposal(
+                    user_id,
+                    proposal
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200 if result.get("rejected") else 400
+                )
+
+                return
 
             session_id = str(
                 session_id or "default"
