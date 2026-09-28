@@ -842,6 +842,82 @@
             }
         }
 
+        .brain-insights-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .brain-insights-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .brain-insights-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .brain-insight-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 11px;
+            padding: 14px;
+            background: #fff;
+        }
+
+        .brain-insight-item-title {
+            font-weight: 800;
+            color: #374151;
+            margin-bottom: 5px;
+        }
+
+        .brain-insight-item-type {
+            display: inline-block;
+            margin-bottom: 7px;
+            background: #eef2ff;
+            color: #4338ca;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .brain-insight-item-text {
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .brain-insight-evidence {
+            margin-top: 8px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        .brain-insights-focus {
+            margin-top: 16px;
+            border-radius: 11px;
+            background: #f8fafc;
+            padding: 15px;
+        }
+
+        .brain-insights-focus-title {
+            font-weight: 800;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .brain-insights-confidence {
+            margin-top: 14px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
         .brain-evidence-section {
             margin-top: 18px;
             background: white;
@@ -3230,6 +3306,76 @@
     }
 
 
+    function renderBrainInsights(payload, entityName) {
+
+        const insights =
+            payload && Array.isArray(payload.insights)
+                ? payload.insights
+                : [];
+
+        const focus =
+            payload && Array.isArray(payload.suggested_next_focus)
+                ? payload.suggested_next_focus
+                : [];
+
+        const insightHtml = insights.length
+            ? insights.map(function(item) {
+                const evidence = Array.isArray(item.evidence)
+                    ? item.evidence
+                    : [];
+
+                return '<div class="brain-insight-item">' +
+                    '<div class="brain-insight-item-type">' +
+                        brainText(String(item.type || 'insight')) +
+                    '</div>' +
+                    '<div class="brain-insight-item-title">' +
+                        brainText(String(item.title || 'Insight')) +
+                    '</div>' +
+                    '<div class="brain-insight-item-text">' +
+                        brainText(String(item.insight || '')) +
+                    '</div>' +
+                    (evidence.length
+                        ? '<div class="brain-insight-evidence">Evidence: ' +
+                            brainText(evidence.join(' · ')) +
+                          '</div>'
+                        : '') +
+                '</div>';
+            }).join('')
+            : '<div class="brain-empty">No additional insights were identified from the current evidence.</div>';
+
+        const focusHtml = focus.length
+            ? '<ul class="brain-intelligence-list">' +
+                focus.map(function(item) {
+                    return '<li>' + brainText(String(item)) + '</li>';
+                }).join('') +
+              '</ul>'
+            : '<div class="brain-empty">No next focus areas were identified from the current evidence.</div>';
+
+        return '<div class="brain-insights-section">' +
+                '<div class="brain-insights-title">💡 AI Project Insights</div>' +
+                '<div class="brain-insights-list">' +
+                    insightHtml +
+                '</div>' +
+                '<div class="brain-insights-focus">' +
+                    '<div class="brain-insights-focus-title">Suggested Next Focus</div>' +
+                    focusHtml +
+                '</div>' +
+                '<div class="brain-insights-confidence">' +
+                    'Evidence confidence: ' +
+                    brainText(String(payload.confidence || 0)) +
+                    '/10 · ' +
+                    brainText(String(payload.evidence_count || 0)) +
+                    ' memories · ' +
+                    brainText(String(payload.relationship_count || 0)) +
+                    ' relationships · ' +
+                    brainText(String(payload.entity_count || 0)) +
+                    ' entities' +
+                '</div>' +
+            '</div>';
+
+    }
+
+
     async function exploreBrainEntity(entityName) {
 
         const input =
@@ -3514,6 +3660,90 @@
                             brainText(
                                 intelligenceError && intelligenceError.message
                                     ? intelligenceError.message
+                                    : "Unknown error"
+                            ) +
+                        '</div>';
+                }
+
+            }
+
+            html = '';
+
+            const insightsPlaceholder =
+                result.querySelector(
+                    ".brain-insights-section"
+                );
+
+            if (!insightsPlaceholder) {
+                const insightLoading =
+                    document.createElement("div");
+
+                insightLoading.className =
+                    "brain-insights-section";
+
+                insightLoading.innerHTML =
+                    '<div class="brain-insights-title">💡 AI Project Insights</div>' +
+                    '<div class="loading">Analyzing stored evidence for project insights...</div>';
+
+                result.appendChild(insightLoading);
+            }
+
+            try {
+
+                const insightsResponse =
+                    await fetch(
+                        "/api?insights=true&name=" +
+                        encodeURIComponent(
+                            rootEntity.name || entityName
+                        ) +
+                        "&_=" +
+                        Date.now(),
+                        {
+                            method: "GET",
+                            cache: "no-store",
+                            headers: {
+                                "Accept": "application/json"
+                            }
+                        }
+                    );
+
+                const insightsData =
+                    await insightsResponse.json();
+
+                if (!insightsResponse.ok) {
+                    throw new Error(
+                        insightsData.error ||
+                        "Unable to generate project insights."
+                    );
+                }
+
+                const placeholder =
+                    result.querySelector(
+                        ".brain-insights-section"
+                    );
+
+                if (placeholder) {
+                    placeholder.outerHTML =
+                        renderBrainInsights(
+                            insightsData,
+                            rootEntity.name || entityName
+                        );
+                }
+
+            } catch (insightsError) {
+
+                const placeholder =
+                    result.querySelector(
+                        ".brain-insights-section"
+                    );
+
+                if (placeholder) {
+                    placeholder.innerHTML =
+                        '<div class="brain-insights-title">💡 AI Project Insights</div>' +
+                        '<div class="brain-empty">Project insights could not be generated. ' +
+                            brainText(
+                                insightsError && insightsError.message
+                                    ? insightsError.message
                                     : "Unknown error"
                             ) +
                         '</div>';
