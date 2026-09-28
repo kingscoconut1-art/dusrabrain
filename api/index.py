@@ -2093,6 +2093,131 @@ Rules:
 
 
 # ============================================================
+# EVIDENCE RESOLUTION
+# ============================================================
+
+def resolve_insight_evidence(user_id, evidence_refs):
+    """Resolve model-generated evidence references to stored records."""
+
+    if not isinstance(evidence_refs, list):
+        evidence_refs = []
+
+    memory_ids = []
+    relationship_ids = []
+
+    for ref in evidence_refs:
+        text = str(ref or "").strip().lower()
+
+        match = re.search(r"memory\s*(\d+)", text)
+        if match:
+            memory_ids.append(int(match.group(1)))
+            continue
+
+        match = re.search(r"relationship(?:\s+id)?\s*(\d+)", text)
+        if match:
+            relationship_ids.append(int(match.group(1)))
+
+    memories = []
+    relationships = []
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+
+            if memory_ids:
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        created_at
+                    FROM memories
+                    WHERE user_id = %s
+                      AND id = ANY(%s)
+                    ORDER BY created_at DESC, id DESC
+                    """,
+                    (user_id, memory_ids),
+                )
+
+                for row in cur.fetchall():
+                    memories.append({
+                        "id": row[0],
+                        "memory": row[1],
+                        "category": row[2],
+                        "importance": row[3],
+                        "subject": row[4],
+                        "created_at": row[5].isoformat() if row[5] else None,
+                    })
+
+            if relationship_ids:
+                cur.execute(
+                    """
+                    SELECT
+                        r.id,
+                        f.name,
+                        f.entity_type,
+                        r.relationship,
+                        t.name,
+                        t.entity_type,
+                        r.confidence,
+                        r.created_at
+                    FROM brain_relationships r
+                    JOIN brain_entities f
+                        ON f.id = r.from_entity_id
+                    JOIN brain_entities t
+                        ON t.id = r.to_entity_id
+                    WHERE r.user_id = %s
+                      AND r.id = ANY(%s)
+                    ORDER BY r.created_at DESC, r.id DESC
+                    """,
+                    (user_id, relationship_ids),
+                )
+
+                for row in cur.fetchall():
+                    relationships.append({
+                        "id": row[0],
+                        "from": row[1],
+                        "from_type": row[2],
+                        "relationship": row[3],
+                        "to": row[4],
+                        "to_type": row[5],
+                        "confidence": row[6],
+                        "created_at": row[7].isoformat() if row[7] else None,
+                    })
+
+    return {
+        "memories": memories,
+        "relationships": relationships,
+    }
+
+
+def enrich_project_insights_with_evidence(user_id, insights):
+    enriched = []
+
+    if not isinstance(insights, list):
+        return enriched
+
+    for insight in insights:
+        if not isinstance(insight, dict):
+            continue
+
+        evidence_refs = insight.get("evidence", [])
+        evidence_details = resolve_insight_evidence(
+            user_id,
+            evidence_refs,
+        )
+
+        item = dict(insight)
+        item["evidence_details"] = evidence_details
+        enriched.append(item)
+
+    return enriched
+
+
+
+# ============================================================
 # BRAIN PROJECT INSIGHTS
 # ============================================================
 
@@ -2234,9 +2359,14 @@ Rules:
             "confidence": 1,
         }
 
+    insights = enrich_project_insights_with_evidence(
+        user_id,
+        result.get("insights", []),
+    )
+
     return {
         "entity": graph.get("entity"),
-        "insights": result.get("insights", []),
+        "insights": insights,
         "suggested_next_focus": result.get(
             "suggested_next_focus", []
         ),
