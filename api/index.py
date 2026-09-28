@@ -92,7 +92,9 @@ def get_connection():
 
 def groq_request(
     messages,
-    temperature=0.2
+    temperature=0.2,
+    max_completion_tokens=None,
+    retry_429=True
 ):
 
     api_key = os.environ.get(
@@ -109,6 +111,11 @@ def groq_request(
         "messages": messages,
         "temperature": temperature,
     }
+
+    if max_completion_tokens is not None:
+        payload["max_completion_tokens"] = int(
+            max(1, max_completion_tokens)
+        )
 
     request = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -159,6 +166,39 @@ def groq_request(
         details = error.read().decode(
             "utf-8"
         )
+
+        if (
+            error.code == 429
+            and retry_429
+        ):
+            retry_after = 8
+
+            try:
+                retry_after = int(
+                    float(
+                        error.headers.get(
+                            "retry-after",
+                            "8"
+                        )
+                    )
+                )
+            except Exception:
+                pass
+
+            retry_after = max(
+                1,
+                min(12, retry_after)
+            )
+
+            import time
+            time.sleep(retry_after)
+
+            return groq_request(
+                messages,
+                temperature=temperature,
+                max_completion_tokens=max_completion_tokens,
+                retry_429=False
+            )
 
         raise Exception(
             "Groq API error "
@@ -3746,18 +3786,49 @@ def reject_brain_learning_proposal(user_id, proposal):
 
 def build_memory_consolidation_proposals(user_id, subject="", limit=30):
     """Create conservative, proposal-only canonical-memory suggestions."""
-    memories = get_all_user_memories(user_id, limit=500)
+    all_memories = get_all_user_memories(user_id, limit=500)
 
     subject = str(subject or "").strip()
+
     if subject:
         subject_lower = subject.lower()
         memories = [
-            item for item in memories
-            if subject_lower in str(item.get("subject", "") or "").lower()
-            or subject_lower in str(item.get("memory", "") or "").lower()
+            item for item in all_memories
+            if subject_lower in str(
+                item.get("subject", "") or ""
+            ).lower()
+            or subject_lower in str(
+                item.get("memory", "") or ""
+            ).lower()
         ]
+    else:
+        grouped = {}
 
-    memories = memories[:limit]
+        for item in all_memories:
+            key = str(
+                item.get("subject", "general") or "general"
+            ).strip().lower()
+
+            grouped.setdefault(key, []).append(item)
+
+        memories = []
+
+        for group in grouped.values():
+            if len(group) < 2:
+                continue
+
+            group = sorted(
+                group,
+                key=lambda item: (
+                    int(item.get("importance", 5) or 5),
+                    str(item.get("created_at", "") or ""),
+                ),
+                reverse=True,
+            )
+
+            memories.extend(group[:5])
+
+        memories = memories[:limit]
 
     if len(memories) < 2:
         return {
@@ -3772,89 +3843,88 @@ def build_memory_consolidation_proposals(user_id, subject="", limit=30):
     source_payload = [
         {
             "id": item.get("id"),
-            "memory": item.get("memory", ""),
-            "category": item.get("category", "general"),
-            "importance": item.get("importance", 5),
-            "subject": item.get("subject", "general"),
-            "created_at": item.get("created_at"),
+            "memory": str(item.get("memory", "") or ""),
+            "subject": str(item.get("subject", "general") or "general"),
+            "category": str(item.get("category", "general") or "general"),
+            "importance": int(item.get("importance", 5) or 5),
         }
         for item in memories
     ]
 
     system_prompt = """
-You are the Memory Consolidation Proposal Engine of Dusra Brain.
+You are Dusra Brain's conservative memory consolidation engine.
 
-Identify groups of stored memories that describe the SAME underlying fact,
-project scope, preference, decision, or durable knowledge and propose one
-clean canonical memory.
+Find groups of memories that clearly describe the SAME durable fact.
+Return only safe proposals.
 
-STRICT RULES:
-- Proposal only. NEVER save, update, merge, delete, or rewrite memories.
-- Every proposal MUST cite at least 2 existing memory IDs.
-- The canonical memory may ONLY contain information explicitly supported by
-  the cited memories.
-- Do NOT add dates, people, companies, ownership, partnerships, funding,
-  locations, plans, intent, causation, status, or other details unless they
-  are explicitly present in the cited memories.
-- Shared project names or generic words are NOT enough to consolidate.
-- If memories describe different stages, changes, or potentially conflicting
-  facts, do NOT collapse them into one fact.
-- Keep the canonical memory concise, normally 1-2 sentences.
-- PRESERVE DISTINCT DURABLE DETAILS from the cited memories. Do not replace
-  specific information with a generic statement such as "X is a user project"
-  when the cited memories contain more useful supported details.
-- If one cited memory contains a more specific scope, stage, product,
-  location, goal, or expansion detail and another cited memory confirms the
-  same underlying fact, the canonical memory should preserve that supported
-  detail.
-- The canonical memory must be information-preserving: a human should be
-  able to understand the important supported facts without reopening every
-  original memory.
-- Use only evidence IDs supplied in the input.
-- If overlap is not clear, return no proposal.
+Rules:
+- Proposal only. Never save, update, merge, delete, or rewrite records.
+- Cite at least 2 existing memory IDs.
+- Use ONLY information explicitly present in those memories.
+- Preserve useful specific details. Never reduce a detailed fact to
+  "X is a user project" when the evidence contains more useful information.
+- Do not invent dates, people, ownership, partners, funding, plans,
+  locations, causation, or status.
+- Do not merge different facts merely because they share a subject.
+- If overlap is uncertain, omit the proposal.
+- Keep canonical_memory to 1-2 concise sentences.
 
-Return valid JSON only:
-{
-  "proposals": [
-    {
-      "type": "consolidate",
-      "memory_ids": [1, 2],
-      "subject": "exact subject when supported",
-      "category": "category",
-      "canonical_memory": "conservative consolidated fact",
-      "reason": "why these memories materially overlap",
-      "evidence_quality": "direct",
-      "confidence": 1
-    }
-  ],
-  "suggested_followups": [],
-  "confidence": 1
-}
+Return JSON:
+{"proposals":[{"type":"consolidate","memory_ids":[1,2],
+"subject":"supported subject","category":"category",
+"canonical_memory":"information-preserving fact",
+"reason":"why these are the same fact","evidence_quality":"direct",
+"confidence":1}],"suggested_followups":[],"confidence":1}
 """
 
     user_prompt = (
-        "Review these stored memories for safe consolidation proposals.\n\n"
-        + json.dumps(source_payload, ensure_ascii=False, default=str)
+        "Evaluate these stored memories:\n"
+        + json.dumps(
+            source_payload,
+            ensure_ascii=False,
+            default=str,
+        )
     )
 
     raw = groq_request(
         [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
+            },
         ],
-        temperature=0.05,
+        temperature=0.0,
+        max_completion_tokens=600,
     )
 
     cleaned = clean_json_response(raw)
+
     try:
         result = json.loads(cleaned)
     except Exception:
-        result = {"proposals": [], "suggested_followups": [], "confidence": 1}
+        result = {
+            "proposals": [],
+            "suggested_followups": [],
+            "confidence": 1,
+        }
 
     if not isinstance(result, dict):
-        result = {"proposals": [], "suggested_followups": [], "confidence": 1}
+        result = {
+            "proposals": [],
+            "suggested_followups": [],
+            "confidence": 1,
+        }
 
-    valid_ids = {int(item["id"]) for item in memories if item.get("id") is not None}
+    valid_ids = {
+        int(item["id"])
+        for item in memories
+        if item.get("id") is not None
+    }
+
     proposals = []
 
     for proposal in result.get("proposals", []):
@@ -3862,55 +3932,144 @@ Return valid JSON only:
             continue
 
         raw_ids = proposal.get("memory_ids", [])
+
         if not isinstance(raw_ids, list):
             continue
 
         memory_ids = []
+
         for value in raw_ids:
             try:
                 memory_id = int(value)
             except Exception:
                 continue
-            if memory_id in valid_ids and memory_id not in memory_ids:
+
+            if (
+                memory_id in valid_ids
+                and memory_id not in memory_ids
+            ):
                 memory_ids.append(memory_id)
 
-        canonical = str(proposal.get("canonical_memory", "")).strip()
-        reason = str(proposal.get("reason", "")).strip()
-        if len(memory_ids) < 2 or not canonical or not reason:
+        canonical = str(
+            proposal.get(
+                "canonical_memory",
+                ""
+            )
+        ).strip()
+
+        reason = str(
+            proposal.get(
+                "reason",
+                ""
+            )
+        ).strip()
+
+        if (
+            len(memory_ids) < 2
+            or not canonical
+            or not reason
+        ):
             continue
 
-        cited = [item for item in memories if int(item.get("id")) in memory_ids]
-        evidence_text = " ".join(str(item.get("memory", "")) for item in cited).lower()
+        cited = [
+            item
+            for item in memories
+            if int(item.get("id")) in memory_ids
+        ]
+
+        evidence_text = " ".join(
+            str(item.get("memory", ""))
+            for item in cited
+        ).lower()
+
         canonical_tokens = {
-            t.lower() for t in re.findall(r"[A-Za-z0-9_'-]+", canonical) if len(t) >= 4
+            token.lower()
+            for token in re.findall(
+                r"[A-Za-z0-9_'-]+",
+                canonical
+            )
+            if len(token) >= 4
         }
+
         evidence_tokens = {
-            t.lower() for t in re.findall(r"[A-Za-z0-9_'-]+", evidence_text) if len(t) >= 4
+            token.lower()
+            for token in re.findall(
+                r"[A-Za-z0-9_'-]+",
+                evidence_text
+            )
+            if len(token) >= 4
         }
-        if len(canonical_tokens & evidence_tokens) < 2:
+
+        if len(
+            canonical_tokens & evidence_tokens
+        ) < 2:
             continue
 
         try:
-            confidence = max(1, min(10, int(proposal.get("confidence", 1))))
+            confidence = max(
+                1,
+                min(
+                    10,
+                    int(
+                        proposal.get(
+                            "confidence",
+                            1
+                        )
+                    )
+                )
+            )
         except Exception:
             confidence = 1
 
         source_memories = []
+
         for item in cited:
             source_memories.append({
                 "id": int(item.get("id")),
-                "memory": str(item.get("memory", "") or ""),
-                "subject": str(item.get("subject", "general") or "general"),
-                "category": str(item.get("category", "general") or "general"),
-                "importance": int(item.get("importance", 5) or 5),
-                "created_at": item.get("created_at"),
+                "memory": str(
+                    item.get(
+                        "memory",
+                        ""
+                    ) or ""
+                ),
+                "subject": str(
+                    item.get(
+                        "subject",
+                        "general"
+                    ) or "general"
+                ),
+                "category": str(
+                    item.get(
+                        "category",
+                        "general"
+                    ) or "general"
+                ),
+                "importance": int(
+                    item.get(
+                        "importance",
+                        5
+                    ) or 5
+                ),
+                "created_at": item.get(
+                    "created_at"
+                ),
             })
 
         proposals.append({
             "type": "consolidate",
             "memory_ids": memory_ids,
-            "subject": str(proposal.get("subject", "") or "").strip(),
-            "category": str(proposal.get("category", "general") or "general").strip(),
+            "subject": str(
+                proposal.get(
+                    "subject",
+                    ""
+                ) or ""
+            ).strip(),
+            "category": str(
+                proposal.get(
+                    "category",
+                    "general"
+                ) or "general"
+            ).strip(),
             "canonical_memory": canonical,
             "reason": reason,
             "evidence_quality": "direct",
@@ -3919,13 +4078,37 @@ Return valid JSON only:
         })
 
     try:
-        overall_confidence = max(1, min(10, int(result.get("confidence", 1))))
+        overall_confidence = max(
+            1,
+            min(
+                10,
+                int(
+                    result.get(
+                        "confidence",
+                        1
+                    )
+                )
+            )
+        )
     except Exception:
         overall_confidence = 1
 
     return {
         "proposals": proposals,
-        "suggested_followups": result.get("suggested_followups", []) if isinstance(result.get("suggested_followups", []), list) else [],
+        "suggested_followups": (
+            result.get(
+                "suggested_followups",
+                []
+            )
+            if isinstance(
+                result.get(
+                    "suggested_followups",
+                    []
+                ),
+                list
+            )
+            else []
+        ),
         "confidence": overall_confidence,
         "memory_count": len(memories),
         "proposal_only": True,
