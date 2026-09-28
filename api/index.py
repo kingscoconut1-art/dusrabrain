@@ -958,6 +958,364 @@ is substantially the same.
 # SAVE MEMORY
 # ============================================================
 
+
+# ============================================================
+# PHASE 6 — MEMORY VERSIONING
+# ============================================================
+
+def ensure_memory_versions_table():
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_versions
+                (
+                    id SERIAL PRIMARY KEY,
+                    memory_id INTEGER NOT NULL,
+                    user_id TEXT NOT NULL,
+                    version_number INTEGER NOT NULL,
+                    memory TEXT NOT NULL,
+                    category TEXT DEFAULT 'general',
+                    importance INTEGER DEFAULT 5,
+                    subject TEXT DEFAULT 'general',
+                    memory_key TEXT,
+                    session_id TEXT DEFAULT 'default',
+                    change_type TEXT NOT NULL,
+                    change_reason TEXT,
+                    is_current BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(memory_id, version_number)
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_memory_versions_memory_id
+                ON memory_versions(memory_id)
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_memory_versions_user_id
+                ON memory_versions(user_id)
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_memory_versions_subject
+                ON memory_versions(subject)
+                """
+            )
+
+        conn.commit()
+
+
+def get_next_memory_version_number(
+    cur,
+    memory_id
+):
+
+    cur.execute(
+        """
+        SELECT
+            COALESCE(
+                MAX(version_number),
+                0
+            )
+        FROM memory_versions
+        WHERE memory_id = %s
+        """,
+        (
+            memory_id,
+        )
+    )
+
+    row = cur.fetchone()
+
+    return int(row[0] or 0) + 1
+
+
+def record_memory_version(
+    cur,
+    memory_id,
+    user_id,
+    memory,
+    category,
+    importance,
+    subject,
+    memory_key,
+    session_id,
+    change_type,
+    change_reason
+):
+
+    version_number = get_next_memory_version_number(
+        cur,
+        memory_id
+    )
+
+    cur.execute(
+        """
+        UPDATE memory_versions
+        SET is_current = FALSE
+        WHERE memory_id = %s
+        """,
+        (
+            memory_id,
+        )
+    )
+
+    cur.execute(
+        """
+        INSERT INTO memory_versions
+        (
+            memory_id,
+            user_id,
+            version_number,
+            memory,
+            category,
+            importance,
+            subject,
+            memory_key,
+            session_id,
+            change_type,
+            change_reason,
+            is_current
+        )
+        VALUES
+        (
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            %s,
+            TRUE
+        )
+        RETURNING
+            id,
+            version_number,
+            created_at
+        """,
+        (
+            memory_id,
+            user_id,
+            version_number,
+            memory,
+            category,
+            importance,
+            subject,
+            memory_key,
+            session_id,
+            change_type,
+            change_reason,
+        )
+    )
+
+    row = cur.fetchone()
+
+    return {
+        "id": row[0],
+        "version_number": row[1],
+        "created_at":
+            row[2].isoformat()
+            if row[2]
+            else None,
+    }
+
+
+def get_memory_versions(
+    user_id,
+    memory_id=None,
+    subject=""
+):
+
+    ensure_memory_versions_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            if memory_id is not None:
+
+                cur.execute(
+                    """
+                    SELECT
+                        mv.id,
+                        mv.memory_id,
+                        mv.version_number,
+                        mv.memory,
+                        mv.category,
+                        mv.importance,
+                        mv.subject,
+                        mv.memory_key,
+                        mv.session_id,
+                        mv.change_type,
+                        mv.change_reason,
+                        mv.is_current,
+                        mv.created_at
+                    FROM memory_versions mv
+                    INNER JOIN memories m
+                        ON m.id = mv.memory_id
+                    WHERE mv.user_id = %s
+                      AND mv.memory_id = %s
+                    ORDER BY
+                        mv.version_number DESC
+                    """,
+                    (
+                        user_id,
+                        int(memory_id),
+                    )
+                )
+
+            elif subject:
+
+                cur.execute(
+                    """
+                    SELECT
+                        mv.id,
+                        mv.memory_id,
+                        mv.version_number,
+                        mv.memory,
+                        mv.category,
+                        mv.importance,
+                        mv.subject,
+                        mv.memory_key,
+                        mv.session_id,
+                        mv.change_type,
+                        mv.change_reason,
+                        mv.is_current,
+                        mv.created_at
+                    FROM memory_versions mv
+                    INNER JOIN memories m
+                        ON m.id = mv.memory_id
+                    WHERE mv.user_id = %s
+                      AND LOWER(mv.subject) = LOWER(%s)
+                    ORDER BY
+                        mv.memory_id,
+                        mv.version_number DESC
+                    """,
+                    (
+                        user_id,
+                        subject,
+                    )
+                )
+
+            else:
+
+                cur.execute(
+                    """
+                    SELECT
+                        mv.id,
+                        mv.memory_id,
+                        mv.version_number,
+                        mv.memory,
+                        mv.category,
+                        mv.importance,
+                        mv.subject,
+                        mv.memory_key,
+                        mv.session_id,
+                        mv.change_type,
+                        mv.change_reason,
+                        mv.is_current,
+                        mv.created_at
+                    FROM memory_versions mv
+                    INNER JOIN memories m
+                        ON m.id = mv.memory_id
+                    WHERE mv.user_id = %s
+                    ORDER BY
+                        mv.memory_id,
+                        mv.version_number DESC
+                    LIMIT 500
+                    """,
+                    (
+                        user_id,
+                    )
+                )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "memory_id": row[1],
+            "version_number": row[2],
+            "memory": row[3],
+            "category": row[4] or "general",
+            "importance": row[5] or 5,
+            "subject": row[6] or "general",
+            "memory_key": row[7],
+            "session_id": row[8] or "default",
+            "change_type": row[9],
+            "change_reason": row[10],
+            "is_current": bool(row[11]),
+            "created_at":
+                row[12].isoformat()
+                if row[12]
+                else None,
+        }
+        for row in rows
+    ]
+
+
+def get_memory_version_summary(
+    user_id
+):
+
+    ensure_memory_versions_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) AS version_count,
+                    COUNT(
+                        DISTINCT memory_id
+                    ) AS memory_count,
+                    COALESCE(
+                        MAX(version_number),
+                        0
+                    ) AS highest_version
+                FROM memory_versions
+                WHERE user_id = %s
+                """,
+                (
+                    user_id,
+                )
+            )
+
+            row = cur.fetchone()
+
+    return {
+        "version_count": int(
+            row[0] or 0
+        ),
+        "memory_count": int(
+            row[1] or 0
+        ),
+        "highest_version": int(
+            row[2] or 0
+        ),
+    }
+
+
 def save_memory(
     user_id,
     memory,
@@ -966,6 +1324,8 @@ def save_memory(
     subject="general",
     session_id="default"
 ):
+
+    ensure_memory_versions_table()
 
     memory_key = make_memory_key(
         subject,
@@ -988,38 +1348,11 @@ def save_memory(
 
         with conn.cursor() as cur:
 
-            if duplicate_id:
+            target_id = None
 
-                cur.execute(
-                    """
-                    UPDATE memories
-                    SET
-                        memory = %s,
-                        category = %s,
-                        importance = %s,
-                        subject = %s,
-                        memory_key = %s,
-                        session_id = %s
-                    WHERE id = %s
-                    RETURNING
-                        id,
-                        memory,
-                        created_at,
-                        category,
-                        importance,
-                        subject,
-                        memory_key,
-                        session_id
-                    """,
-                    (
-                        memory,
-                        category,
-                        importance,
-                        subject,
-                        memory_key,
-                        session_id,
-                        duplicate_id,
-                    )
+            if duplicate_id:
+                target_id = int(
+                    duplicate_id
                 )
 
             else:
@@ -1041,83 +1374,274 @@ def save_memory(
                 exact = cur.fetchone()
 
                 if exact:
-
-                    cur.execute(
-                        """
-                        UPDATE memories
-                        SET
-                            memory = %s,
-                            category = %s,
-                            importance = %s,
-                            subject = %s,
-                            session_id = %s
-                        WHERE id = %s
-                        RETURNING
-                            id,
-                            memory,
-                            created_at,
-                            category,
-                            importance,
-                            subject,
-                            memory_key,
-                            session_id
-                        """,
-                        (
-                            memory,
-                            category,
-                            importance,
-                            subject,
-                            session_id,
-                            exact[0],
-                        )
+                    target_id = int(
+                        exact[0]
                     )
+
+            if target_id is not None:
+
+                # Read the complete current state before changing it.
+                cur.execute(
+                    """
+                    SELECT
+                        id,
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key,
+                        session_id
+                    FROM memories
+                    WHERE id = %s
+                      AND user_id = %s
+                    FOR UPDATE
+                    """,
+                    (
+                        target_id,
+                        user_id,
+                    )
+                )
+
+                current = cur.fetchone()
+
+                if not current:
+                    target_id = None
 
                 else:
 
-                    cur.execute(
-                        """
-                        INSERT INTO memories
-                        (
-                            user_id,
-                            memory,
-                            category,
-                            importance,
-                            subject,
-                            memory_key,
-                            session_id
-                        )
-                        VALUES
-                        (
-                            %s,
-                            %s,
-                            %s,
-                            %s,
-                            %s,
-                            %s,
-                            %s
-                        )
-                        RETURNING
-                            id,
-                            memory,
-                            created_at,
-                            category,
-                            importance,
-                            subject,
-                            memory_key,
-                            session_id
-                        """,
-                        (
-                            user_id,
-                            memory,
-                            category,
-                            importance,
-                            subject,
-                            memory_key,
-                            session_id,
-                        )
+                    current_memory = str(
+                        current[2] or ""
+                    )
+                    current_category = (
+                        current[3]
+                        or "general"
+                    )
+                    current_importance = int(
+                        current[4]
+                        or 5
+                    )
+                    current_subject = (
+                        current[5]
+                        or "general"
+                    )
+                    current_memory_key = (
+                        current[6]
+                    )
+                    current_session_id = (
+                        current[7]
+                        or "default"
                     )
 
-            row = cur.fetchone()
+                    new_session_id = (
+                        session_id
+                        or "default"
+                    )
+
+                    has_changed = any(
+                        [
+                            current_memory != str(
+                                memory or ""
+                            ),
+                            current_category != category,
+                            current_importance != int(
+                                importance
+                            ),
+                            current_subject != subject,
+                            current_memory_key != memory_key,
+                            current_session_id != new_session_id,
+                        ]
+                    )
+
+                    if has_changed:
+
+                        record_memory_version(
+                            cur,
+                            target_id,
+                            user_id,
+                            memory=current_memory,
+                            category=current_category,
+                            importance=current_importance,
+                            subject=current_subject,
+                            memory_key=current_memory_key,
+                            session_id=current_session_id,
+                            change_type="previous",
+                            change_reason="superseded_by_update",
+                        )
+
+                        cur.execute(
+                            """
+                            UPDATE memories
+                            SET
+                                memory = %s,
+                                category = %s,
+                                importance = %s,
+                                subject = %s,
+                                memory_key = %s,
+                                session_id = %s
+                            WHERE id = %s
+                            RETURNING
+                                id,
+                                memory,
+                                created_at,
+                                category,
+                                importance,
+                                subject,
+                                memory_key,
+                                session_id
+                            """,
+                            (
+                                memory,
+                                category,
+                                importance,
+                                subject,
+                                memory_key,
+                                new_session_id,
+                                target_id,
+                            )
+                        )
+
+                        row = cur.fetchone()
+
+                        record_memory_version(
+                            cur,
+                            target_id,
+                            user_id,
+                            memory=str(
+                                memory or ""
+                            ),
+                            category=category,
+                            importance=int(
+                                importance
+                            ),
+                            subject=subject,
+                            memory_key=memory_key,
+                            session_id=new_session_id,
+                            change_type="updated",
+                            change_reason="memory_updated",
+                        )
+
+                    else:
+
+                        cur.execute(
+                            """
+                            SELECT
+                                id,
+                                memory,
+                                created_at,
+                                category,
+                                importance,
+                                subject,
+                                memory_key,
+                                session_id
+                            FROM memories
+                            WHERE id = %s
+                            """,
+                            (
+                                target_id,
+                            )
+                        )
+
+                        row = cur.fetchone()
+
+                        # If this memory existed before versioning was
+                        # introduced, create its initial baseline now.
+                        cur.execute(
+                            """
+                            SELECT 1
+                            FROM memory_versions
+                            WHERE memory_id = %s
+                            LIMIT 1
+                            """,
+                            (
+                                target_id,
+                            )
+                        )
+
+                        if not cur.fetchone():
+
+                            record_memory_version(
+                                cur,
+                                target_id,
+                                user_id,
+                                memory=str(
+                                    row[1] or ""
+                                ),
+                                category=row[3] or "general",
+                                importance=int(
+                                    row[4] or 5
+                                ),
+                                subject=row[5] or "general",
+                                memory_key=row[6],
+                                session_id=row[7] or "default",
+                                change_type="created",
+                                change_reason="versioning_baseline",
+                            )
+
+            if target_id is None:
+
+                cur.execute(
+                    """
+                    INSERT INTO memories
+                    (
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key,
+                        session_id
+                    )
+                    VALUES
+                    (
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s
+                    )
+                    RETURNING
+                        id,
+                        memory,
+                        created_at,
+                        category,
+                        importance,
+                        subject,
+                        memory_key,
+                        session_id
+                    """,
+                    (
+                        user_id,
+                        memory,
+                        category,
+                        importance,
+                        subject,
+                        memory_key,
+                        session_id or "default",
+                    )
+                )
+
+                row = cur.fetchone()
+
+                record_memory_version(
+                    cur,
+                    row[0],
+                    user_id,
+                    memory=str(
+                        memory or ""
+                    ),
+                    category=category,
+                    importance=int(
+                        importance
+                    ),
+                    subject=subject,
+                    memory_key=memory_key,
+                    session_id=session_id or "default",
+                    change_type="created",
+                    change_reason="memory_created",
+                )
 
         conn.commit()
 
@@ -4339,6 +4863,70 @@ class handler(
 
 
         # ----------------------------------------------------
+        # PHASE 6 — MEMORY VERSION HISTORY
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_versions"
+        ) == ["true"]:
+
+            memory_id = params.get(
+                "memory_id",
+                [""]
+            )[0]
+
+            subject = params.get(
+                "subject",
+                [""]
+            )[0]
+
+            try:
+
+                parsed_memory_id = None
+
+                if str(
+                    memory_id or ""
+                ).strip():
+
+                    parsed_memory_id = int(
+                        memory_id
+                    )
+
+                versions = get_memory_versions(
+                    user_id,
+                    memory_id=parsed_memory_id,
+                    subject=subject,
+                )
+
+                send_json(
+                    self,
+                    {
+                        "versions": versions,
+                        "count": len(versions),
+                        "summary":
+                            get_memory_version_summary(
+                                user_id
+                            ),
+                        "proposal_only": False,
+                        "automatic_deletion": False,
+                    }
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # ALL MEMORIES
         # ----------------------------------------------------
 
@@ -4875,6 +5463,9 @@ class handler(
                     bool(
                         get_database_url()
                     ),
+
+                "memory_versioning":
+                    True,
             }
         )
 
