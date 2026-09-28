@@ -3998,6 +3998,8 @@ Return ONLY JSON:
             )
         )
 
+        decision = None
+
         try:
             raw = groq_request(
                 [
@@ -4015,34 +4017,178 @@ Return ONLY JSON:
             )
 
             cleaned = clean_json_response(raw)
-            decision = json.loads(cleaned)
+            parsed = json.loads(cleaned)
+
+            if isinstance(parsed, dict):
+                decision = parsed
 
         except Exception:
-            # One failed candidate must not prevent the other candidate
-            # groups from being reviewed.
-            continue
+            # AI failure is handled by the deterministic safety fallback below.
+            decision = None
 
-        if not isinstance(decision, dict):
-            continue
+        canonical = ""
+        reason = ""
+        confidence = 7
 
-        if decision.get("consolidate") is not True:
-            continue
+        if isinstance(decision, dict) and decision.get("consolidate") is True:
+            canonical = str(
+                decision.get(
+                    "canonical_memory",
+                    ""
+                ) or ""
+            ).strip()
 
-        canonical = str(
-            decision.get(
-                "canonical_memory",
-                ""
-            ) or ""
-        ).strip()
+            reason = str(
+                decision.get(
+                    "reason",
+                    ""
+                ) or ""
+            ).strip()
 
-        reason = str(
-            decision.get(
-                "reason",
-                ""
-            ) or ""
-        ).strip()
+            try:
+                confidence = max(
+                    1,
+                    min(
+                        10,
+                        int(
+                            decision.get(
+                                "confidence",
+                                7
+                            )
+                        )
+                    )
+                )
+            except Exception:
+                confidence = 7
+
+        # ---------------------------------------------------------------
+        # SAFE DETERMINISTIC FALLBACK
+        # ---------------------------------------------------------------
+        # If the AI does not return a usable consolidation proposal,
+        # create one only when the evidence is unambiguously repetitive:
+        #
+        # 1. Same subject, AND
+        # 2. At least two memories share meaningful content, AND
+        # 3. We can construct the canonical memory entirely from existing
+        #    source text.
+        #
+        # This is still proposal-only. Nothing is written or deleted.
+        if not canonical or not reason:
+            if shared_subject and len(group) >= 2:
+                memories_text = [
+                    str(
+                        item.get(
+                            "memory",
+                            ""
+                        ) or ""
+                    ).strip()
+                    for item in group
+                ]
+
+                memories_text = [
+                    value
+                    for value in memories_text
+                    if value
+                ]
+
+                # Only use the fallback when there are at least two
+                # non-empty source memories.
+                if len(memories_text) >= 2:
+                    # Start with the most informative existing memory.
+                    canonical = max(
+                        memories_text,
+                        key=len
+                    )
+
+                    # Preserve a complementary source when it contains
+                    # meaningful information absent from the selected
+                    # canonical memory.
+                    canonical_lower = canonical.lower()
+
+                    additions = []
+                    for value in memories_text:
+                        value_lower = value.lower()
+
+                        if value == canonical:
+                            continue
+
+                        # Extract clauses after common conjunctions so that
+                        # useful details can be preserved without inventing
+                        # new facts.
+                        clauses = re.split(
+                            r"\s+(?:and|while|but|with|focused on)\s+",
+                            value,
+                            flags=re.IGNORECASE,
+                        )
+
+                        for clause in clauses:
+                            clause = clause.strip(
+                                " .;,:"
+                            )
+
+                            if len(clause) < 12:
+                                continue
+
+                            words = {
+                                token.lower()
+                                for token in re.findall(
+                                    r"[A-Za-z0-9_'-]+",
+                                    clause
+                                )
+                                if len(token) >= 5
+                            }
+
+                            existing_words = {
+                                token.lower()
+                                for token in re.findall(
+                                    r"[A-Za-z0-9_'-]+",
+                                    canonical
+                                )
+                                if len(token) >= 5
+                            }
+
+                            if (
+                                words
+                                and len(
+                                    words - existing_words
+                                ) >= 2
+                            ):
+                                additions.append(clause)
+
+                    if additions:
+                        # Deduplicate additions while preserving order.
+                        unique_additions = []
+                        seen_additions = set()
+
+                        for addition in additions:
+                            marker = addition.lower()
+                            if marker in seen_additions:
+                                continue
+                            seen_additions.add(marker)
+                            unique_additions.append(addition)
+
+                        canonical = (
+                            canonical.rstrip(". ")
+                            + "; "
+                            + "; ".join(
+                                unique_additions[:2]
+                            )
+                            + "."
+                        )
+
+                    reason = (
+                        "The source memories share the same subject and "
+                        "contain overlapping durable information. The "
+                        "canonical proposal is built only from existing "
+                        "memory text; the original memories remain "
+                        "unchanged as evidence."
+                    )
+
+                    confidence = 7
 
         if not canonical or not reason:
+            # One candidate that cannot be safely consolidated must not
+            # prevent other candidate groups from being reviewed.
             continue
 
         if len(canonical) > 600:
@@ -4050,22 +4196,6 @@ Return ONLY JSON:
 
         if len(reason) > 800:
             reason = reason[:800].rstrip()
-
-        try:
-            confidence = max(
-                1,
-                min(
-                    10,
-                    int(
-                        decision.get(
-                            "confidence",
-                            7
-                        )
-                    )
-                )
-            )
-        except Exception:
-            confidence = 7
 
         source_memories = []
 
