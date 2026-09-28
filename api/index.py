@@ -4645,6 +4645,435 @@ def reject_brain_learning_proposal(user_id, proposal):
 
 
 
+
+# ============================================================
+# PHASE 6 — STEP 2E — MEMORY CONSOLIDATION APPROVAL
+# ============================================================
+
+def ensure_memory_consolidation_reviews_table():
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_consolidation_reviews
+                (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    source_memory_ids JSONB NOT NULL,
+                    canonical_memory TEXT NOT NULL,
+                    canonical_memory_id INTEGER,
+                    subject TEXT DEFAULT 'general',
+                    category TEXT DEFAULT 'general',
+                    reason TEXT,
+                    confidence INTEGER DEFAULT 5,
+                    status TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    reviewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_memory_consolidation_reviews_user
+                ON memory_consolidation_reviews(user_id)
+                """
+            )
+
+        conn.commit()
+
+
+def approve_memory_consolidation_proposal(user_id, proposal):
+
+    if not isinstance(proposal, dict):
+        return {
+            "approved": False,
+            "error": "Invalid consolidation proposal."
+        }
+
+    memory_ids = proposal.get("memory_ids", [])
+
+    if not isinstance(memory_ids, list):
+        return {
+            "approved": False,
+            "error": "memory_ids must be a list."
+        }
+
+    try:
+        memory_ids = list(
+            dict.fromkeys(
+                int(memory_id)
+                for memory_id in memory_ids
+            )
+        )
+    except Exception:
+        return {
+            "approved": False,
+            "error": "Invalid memory IDs."
+        }
+
+    if len(memory_ids) < 2:
+        return {
+            "approved": False,
+            "error": "At least two source memories are required."
+        }
+
+    canonical_memory = str(
+        proposal.get("canonical_memory", "") or ""
+    ).strip()
+
+    subject = str(
+        proposal.get("subject", "general") or "general"
+    ).strip()
+
+    category = str(
+        proposal.get("category", "general") or "general"
+    ).strip()
+
+    reason = str(
+        proposal.get("reason", "") or ""
+    ).strip()
+
+    if not canonical_memory:
+        return {
+            "approved": False,
+            "error": "Canonical memory is required."
+        }
+
+    try:
+        confidence = int(
+            proposal.get("confidence", 5)
+        )
+    except Exception:
+        confidence = 5
+
+    confidence = max(1, min(10, confidence))
+
+    ensure_memory_versions_table()
+    ensure_memory_consolidation_reviews_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    memory,
+                    subject,
+                    category,
+                    importance,
+                    memory_key,
+                    session_id
+                FROM memories
+                WHERE user_id = %s
+                  AND id = ANY(%s)
+                ORDER BY id
+                """,
+                (
+                    user_id,
+                    memory_ids,
+                )
+            )
+
+            source_rows = cur.fetchall()
+
+            if len(source_rows) != len(memory_ids):
+                return {
+                    "approved": False,
+                    "error":
+                        "One or more source memories could not be verified."
+                }
+
+            cur.execute(
+                """
+                SELECT
+                    canonical_memory_id,
+                    status
+                FROM memory_consolidation_reviews
+                WHERE user_id = %s
+                  AND source_memory_ids = %s::jsonb
+                  AND status = 'approved'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    json.dumps(sorted(memory_ids)),
+                )
+            )
+
+            existing_review = cur.fetchone()
+
+            if existing_review:
+                return {
+                    "approved": True,
+                    "already_approved": True,
+                    "canonical_memory_id": existing_review[0],
+                    "message":
+                        "This consolidation proposal was already approved."
+                }
+
+            importance = max(
+                int(row[4] or 5)
+                for row in source_rows
+            )
+
+            session_id = source_rows[0][6] or "default"
+
+            memory_key = make_memory_key(
+                subject,
+                category,
+                canonical_memory
+            )
+
+            cur.execute(
+                """
+                INSERT INTO memories
+                (
+                    user_id,
+                    memory,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id
+                )
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s
+                )
+                RETURNING id
+                """,
+                (
+                    user_id,
+                    canonical_memory,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id,
+                )
+            )
+
+            canonical_memory_id = int(
+                cur.fetchone()[0]
+            )
+
+            canonical_version = record_memory_version(
+                cur,
+                canonical_memory_id,
+                user_id,
+                memory=canonical_memory,
+                category=category,
+                importance=importance,
+                subject=subject,
+                memory_key=memory_key,
+                session_id=session_id,
+                change_type="created",
+                change_reason="memory_consolidation_approved",
+            )
+
+            cur.execute(
+                """
+                INSERT INTO memory_consolidation_reviews
+                (
+                    user_id,
+                    source_memory_ids,
+                    canonical_memory,
+                    canonical_memory_id,
+                    subject,
+                    category,
+                    reason,
+                    confidence,
+                    status
+                )
+                VALUES
+                (
+                    %s,
+                    %s::jsonb,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    'approved'
+                )
+                """,
+                (
+                    user_id,
+                    json.dumps(sorted(memory_ids)),
+                    canonical_memory,
+                    canonical_memory_id,
+                    subject,
+                    category,
+                    reason,
+                    confidence,
+                )
+            )
+
+        conn.commit()
+
+    return {
+        "approved": True,
+        "already_approved": False,
+        "canonical_memory_id": canonical_memory_id,
+        "canonical_version": canonical_version,
+        "source_memory_ids": memory_ids,
+        "source_memories_preserved": True,
+        "memory_rows_deleted": 0,
+        "message":
+            "Memory consolidation approved. A canonical memory was created and all original memories were preserved."
+    }
+
+
+def reject_memory_consolidation_proposal(user_id, proposal):
+
+    if not isinstance(proposal, dict):
+        return {
+            "rejected": False,
+            "error": "Invalid consolidation proposal."
+        }
+
+    memory_ids = proposal.get("memory_ids", [])
+
+    if not isinstance(memory_ids, list):
+        return {
+            "rejected": False,
+            "error": "memory_ids must be a list."
+        }
+
+    try:
+        memory_ids = list(
+            dict.fromkeys(
+                int(memory_id)
+                for memory_id in memory_ids
+            )
+        )
+    except Exception:
+        return {
+            "rejected": False,
+            "error": "Invalid memory IDs."
+        }
+
+    if len(memory_ids) < 2:
+        return {
+            "rejected": False,
+            "error": "At least two source memories are required."
+        }
+
+    canonical_memory = str(
+        proposal.get("canonical_memory", "") or ""
+    ).strip()
+
+    subject = str(
+        proposal.get("subject", "general") or "general"
+    ).strip()
+
+    category = str(
+        proposal.get("category", "general") or "general"
+    ).strip()
+
+    reason = str(
+        proposal.get("reason", "") or ""
+    ).strip()
+
+    try:
+        confidence = int(
+            proposal.get("confidence", 5)
+        )
+    except Exception:
+        confidence = 5
+
+    confidence = max(1, min(10, confidence))
+
+    ensure_memory_consolidation_reviews_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT id
+                FROM memory_consolidation_reviews
+                WHERE user_id = %s
+                  AND source_memory_ids = %s::jsonb
+                  AND status = 'approved'
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    json.dumps(sorted(memory_ids)),
+                )
+            )
+
+            if cur.fetchone():
+                return {
+                    "rejected": False,
+                    "error": "This consolidation was already approved."
+                }
+
+            cur.execute(
+                """
+                INSERT INTO memory_consolidation_reviews
+                (
+                    user_id,
+                    source_memory_ids,
+                    canonical_memory,
+                    subject,
+                    category,
+                    reason,
+                    confidence,
+                    status
+                )
+                VALUES
+                (
+                    %s,
+                    %s::jsonb,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    'rejected'
+                )
+                """,
+                (
+                    user_id,
+                    json.dumps(sorted(memory_ids)),
+                    canonical_memory,
+                    subject,
+                    category,
+                    reason,
+                    confidence,
+                )
+            )
+
+        conn.commit()
+
+    return {
+        "rejected": True,
+        "source_memory_ids": memory_ids,
+        "memory_rows_modified": 0,
+        "memory_rows_deleted": 0,
+        "message":
+            "Consolidation rejected. No memory was changed."
+    }
+
+
 # ============================================================
 # REQUEST HANDLER
 # ============================================================
@@ -6028,6 +6457,48 @@ class handler(
                     self,
                     result,
                     200 if result.get("rejected") else 400
+                )
+
+                return
+
+            if action in [
+                "approve_memory_consolidation",
+                "reject_memory_consolidation",
+            ]:
+
+                proposal = body.get(
+                    "proposal",
+                    {}
+                )
+
+                if action == "approve_memory_consolidation":
+
+                    result = approve_memory_consolidation_proposal(
+                        user_id,
+                        proposal
+                    )
+
+                    send_json(
+                        self,
+                        result,
+                        200
+                        if result.get("approved")
+                        else 400
+                    )
+
+                    return
+
+                result = reject_memory_consolidation_proposal(
+                    user_id,
+                    proposal
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200
+                    if result.get("rejected")
+                    else 400
                 )
 
                 return
