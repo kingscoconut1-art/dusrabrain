@@ -3785,206 +3785,271 @@ def reject_brain_learning_proposal(user_id, proposal):
 # ============================================================
 
 def build_memory_consolidation_proposals(user_id, subject="", limit=30):
-    """Create conservative, proposal-only canonical-memory suggestions."""
-    all_memories = get_all_user_memories(user_id, limit=500)
+    """Find consolidation candidates deterministically, then use a small AI
+    call only to write the information-preserving canonical memory.
 
+    Proposal only: no memory is changed here.
+    """
+    all_memories = get_all_user_memories(user_id, limit=500)
     subject = str(subject or "").strip()
 
-    if subject:
-        subject_lower = subject.lower()
-        memories = [
-            item for item in all_memories
-            if subject_lower in str(
-                item.get("subject", "") or ""
-            ).lower()
-            or subject_lower in str(
-                item.get("memory", "") or ""
-            ).lower()
-        ]
-    else:
-        grouped = {}
+    # Group by normalized subject. Also allow an explicit subject request.
+    grouped = {}
 
-        for item in all_memories:
-            key = str(
-                item.get("subject", "general") or "general"
-            ).strip().lower()
+    for item in all_memories:
+        item_subject = str(
+            item.get("subject", "general") or "general"
+        ).strip()
 
-            grouped.setdefault(key, []).append(item)
+        key = re.sub(
+            r"\s+",
+            " ",
+            item_subject.lower()
+        )
 
-        memories = []
-
-        for group in grouped.values():
-            if len(group) < 2:
-                continue
-
-            group = sorted(
-                group,
-                key=lambda item: (
-                    int(item.get("importance", 5) or 5),
-                    str(item.get("created_at", "") or ""),
-                ),
-                reverse=True,
+        if subject:
+            requested = re.sub(
+                r"\s+",
+                " ",
+                subject.lower()
             )
 
-            memories.extend(group[:5])
+            memory_text = str(
+                item.get("memory", "") or ""
+            ).lower()
 
-        memories = memories[:limit]
+            if (
+                requested not in key
+                and requested not in memory_text
+            ):
+                continue
 
-    if len(memories) < 2:
+        grouped.setdefault(key, []).append(item)
+
+    # Deterministically select only subjects with repeated memories.
+    candidate_groups = []
+
+    for key, group in grouped.items():
+        if len(group) < 2:
+            continue
+
+        group = sorted(
+            group,
+            key=lambda item: (
+                int(item.get("importance", 5) or 5),
+                str(item.get("created_at", "") or ""),
+                int(item.get("id", 0) or 0),
+            ),
+            reverse=True,
+        )
+
+        # Keep the request small.
+        group = group[:5]
+
+        candidate_groups.append(group)
+
+    # If an explicit subject was requested, prioritize that group.
+    if subject:
+        candidate_groups.sort(
+            key=lambda group: 0 if any(
+                subject.lower()
+                in str(
+                    item.get("subject", "")
+                ).lower()
+                for item in group
+            ) else 1
+        )
+
+    candidate_groups = candidate_groups[:6]
+
+    if not candidate_groups:
         return {
             "proposals": [],
-            "message": "Not enough stored memories to propose a consolidation.",
-            "confidence": 1,
-            "memory_count": len(memories),
+            "suggested_followups": [],
+            "confidence": 10,
+            "memory_count": len(all_memories),
+            "candidate_group_count": 0,
             "proposal_only": True,
             "auto_saved": False,
         }
 
-    source_payload = [
-        {
-            "id": item.get("id"),
-            "memory": str(item.get("memory", "") or ""),
-            "subject": str(item.get("subject", "general") or "general"),
-            "category": str(item.get("category", "general") or "general"),
-            "importance": int(item.get("importance", 5) or 5),
-        }
-        for item in memories
-    ]
-
-    system_prompt = """
-You are Dusra Brain's conservative memory consolidation engine.
-
-Find groups of memories that clearly describe the SAME durable fact.
-Return only safe proposals.
-
-Rules:
-- Proposal only. Never save, update, merge, delete, or rewrite records.
-- Cite at least 2 existing memory IDs.
-- Use ONLY information explicitly present in those memories.
-- Preserve useful specific details. Never reduce a detailed fact to
-  "X is a user project" when the evidence contains more useful information.
-- Do not invent dates, people, ownership, partners, funding, plans,
-  locations, causation, or status.
-- Do not merge different facts merely because they share a subject.
-- If overlap is uncertain, omit the proposal.
-- Keep canonical_memory to 1-2 concise sentences.
-
-Return JSON:
-{"proposals":[{"type":"consolidate","memory_ids":[1,2],
-"subject":"supported subject","category":"category",
-"canonical_memory":"information-preserving fact",
-"reason":"why these are the same fact","evidence_quality":"direct",
-"confidence":1}],"suggested_followups":[],"confidence":1}
-"""
-
-    user_prompt = (
-        "Evaluate these stored memories:\n"
-        + json.dumps(
-            source_payload,
-            ensure_ascii=False,
-            default=str,
-        )
-    )
-
-    raw = groq_request(
-        [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": user_prompt,
-            },
-        ],
-        temperature=0.0,
-        max_completion_tokens=600,
-    )
-
-    cleaned = clean_json_response(raw)
-
-    try:
-        result = json.loads(cleaned)
-    except Exception:
-        result = {
-            "proposals": [],
-            "suggested_followups": [],
-            "confidence": 1,
-        }
-
-    if not isinstance(result, dict):
-        result = {
-            "proposals": [],
-            "suggested_followups": [],
-            "confidence": 1,
-        }
-
-    valid_ids = {
-        int(item["id"])
-        for item in memories
-        if item.get("id") is not None
-    }
-
     proposals = []
 
-    for proposal in result.get("proposals", []):
-        if not isinstance(proposal, dict):
-            continue
+    for group in candidate_groups:
 
-        raw_ids = proposal.get("memory_ids", [])
+        # Deterministic evidence payload. The AI sees only one small group.
+        source_payload = []
 
-        if not isinstance(raw_ids, list):
-            continue
+        for item in group:
+            source_payload.append({
+                "id": int(item.get("id")),
+                "memory": str(
+                    item.get("memory", "") or ""
+                ),
+                "subject": str(
+                    item.get(
+                        "subject",
+                        "general"
+                    ) or "general"
+                ),
+                "category": str(
+                    item.get(
+                        "category",
+                        "general"
+                    ) or "general"
+                ),
+                "importance": int(
+                    item.get(
+                        "importance",
+                        5
+                    ) or 5
+                ),
+            })
 
-        memory_ids = []
+        # Fast deterministic guard: only ask AI if the memories actually
+        # share meaningful subject/content overlap.
+        combined_subjects = [
+            str(
+                item.get(
+                    "subject",
+                    ""
+                ) or ""
+            ).strip().lower()
+            for item in group
+        ]
 
-        for value in raw_ids:
-            try:
-                memory_id = int(value)
-            except Exception:
+        normalized_subjects = [
+            re.sub(
+                r"\s+",
+                " ",
+                value
+            )
+            for value in combined_subjects
+            if value
+        ]
+
+        shared_subject = (
+            len(set(normalized_subjects)) == 1
+            and bool(normalized_subjects)
+        )
+
+        if not shared_subject:
+            text_tokens = []
+
+            for item in group:
+                tokens = {
+                    token.lower()
+                    for token in re.findall(
+                        r"[A-Za-z0-9_'-]+",
+                        str(
+                            item.get(
+                                "memory",
+                                ""
+                            ) or ""
+                        )
+                    )
+                    if len(token) >= 5
+                }
+
+                text_tokens.append(tokens)
+
+            if len(text_tokens) >= 2:
+                shared_tokens = set.intersection(
+                    *text_tokens
+                )
+            else:
+                shared_tokens = set()
+
+            if len(shared_tokens) < 2:
                 continue
 
-            if (
-                memory_id in valid_ids
-                and memory_id not in memory_ids
-            ):
-                memory_ids.append(memory_id)
+        system_prompt = """
+You are Dusra Brain's memory consolidation writer.
+
+The supplied memories were already grouped as likely related.
+Decide whether they express one durable underlying fact.
+
+Rules:
+- Use ONLY information explicitly present in the supplied memories.
+- Never invent or infer facts.
+- Preserve useful specific details.
+- Do not reduce detailed evidence to a generic statement.
+- If the memories are not actually the same underlying fact, return
+  {"consolidate":false}.
+- If they are the same underlying fact, create one concise canonical
+  memory that preserves the important supported details.
+- Cite every source memory ID used.
+
+Return ONLY JSON:
+{
+  "consolidate": true,
+  "canonical_memory": "...",
+  "reason": "...",
+  "confidence": 1
+}
+"""
+
+        user_prompt = (
+            "Candidate memories:\n"
+            + json.dumps(
+                source_payload,
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+
+        try:
+            raw = groq_request(
+                [
+                    {
+                        "role": "system",
+                        "content": system_prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt,
+                    },
+                ],
+                temperature=0.0,
+                max_completion_tokens=350,
+            )
+
+            cleaned = clean_json_response(raw)
+            decision = json.loads(cleaned)
+
+        except Exception:
+            # One failed candidate must not prevent the other candidate
+            # groups from being reviewed.
+            continue
+
+        if not isinstance(decision, dict):
+            continue
+
+        if decision.get("consolidate") is not True:
+            continue
 
         canonical = str(
-            proposal.get(
+            decision.get(
                 "canonical_memory",
                 ""
-            )
+            ) or ""
         ).strip()
 
         reason = str(
-            proposal.get(
+            decision.get(
                 "reason",
                 ""
-            )
+            ) or ""
         ).strip()
 
-        if (
-            len(memory_ids) < 2
-            or not canonical
-            or not reason
-        ):
+        if not canonical or not reason:
             continue
 
-        # Keep proposals concise and reviewable. The AI is already instructed
-        # to use only the cited memories; this is a size/safety guard rather
-        # than a semantic rewrite of the proposal.
         if len(canonical) > 600:
             canonical = canonical[:600].rstrip()
 
         if len(reason) > 800:
             reason = reason[:800].rstrip()
-
-        cited = [
-            item
-            for item in memories
-            if int(item.get("id")) in memory_ids
-        ]
 
         try:
             confidence = max(
@@ -3992,21 +4057,23 @@ Return JSON:
                 min(
                     10,
                     int(
-                        proposal.get(
+                        decision.get(
                             "confidence",
-                            1
+                            7
                         )
                     )
                 )
             )
         except Exception:
-            confidence = 1
+            confidence = 7
 
         source_memories = []
 
-        for item in cited:
+        for item in group:
             source_memories.append({
-                "id": int(item.get("id")),
+                "id": int(
+                    item.get("id")
+                ),
                 "memory": str(
                     item.get(
                         "memory",
@@ -4036,21 +4103,28 @@ Return JSON:
                 ),
             })
 
+        primary_subject = str(
+            group[0].get(
+                "subject",
+                "general"
+            ) or "general"
+        ).strip()
+
+        primary_category = str(
+            group[0].get(
+                "category",
+                "general"
+            ) or "general"
+        ).strip()
+
         proposals.append({
             "type": "consolidate",
-            "memory_ids": memory_ids,
-            "subject": str(
-                proposal.get(
-                    "subject",
-                    ""
-                ) or ""
-            ).strip(),
-            "category": str(
-                proposal.get(
-                    "category",
-                    "general"
-                ) or "general"
-            ).strip(),
+            "memory_ids": [
+                item["id"]
+                for item in source_memories
+            ],
+            "subject": primary_subject,
+            "category": primary_category,
             "canonical_memory": canonical,
             "reason": reason,
             "evidence_quality": "direct",
@@ -4059,40 +4133,25 @@ Return JSON:
             "evidence_count": len(source_memories),
         })
 
-    try:
-        overall_confidence = max(
-            1,
-            min(
-                10,
-                int(
-                    result.get(
-                        "confidence",
-                        1
-                    )
-                )
-            )
-        )
-    except Exception:
-        overall_confidence = 1
-
     return {
         "proposals": proposals,
-        "suggested_followups": (
-            result.get(
-                "suggested_followups",
-                []
+        "suggested_followups": [],
+        "confidence": (
+            max(
+                [
+                    int(
+                        proposal.get(
+                            "confidence",
+                            1
+                        )
+                    )
+                    for proposal in proposals
+                ]
+                or [10]
             )
-            if isinstance(
-                result.get(
-                    "suggested_followups",
-                    []
-                ),
-                list
-            )
-            else []
         ),
-        "confidence": overall_confidence,
-        "memory_count": len(memories),
+        "memory_count": len(all_memories),
+        "candidate_group_count": len(candidate_groups),
         "proposal_only": True,
         "auto_saved": False,
     }
