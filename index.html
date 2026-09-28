@@ -3866,7 +3866,10 @@
                         '</strong>. Checking stored memories instead...' +
                     '</div>';
 
-                await appendCrossMemoryConnections(result, entityName);
+                appendCrossMemoryConnectionsLauncher(
+                    result,
+                    entityName
+                );
 
                 return;
 
@@ -4162,7 +4165,7 @@
 
             }
 
-            await appendCrossMemoryConnections(
+            appendCrossMemoryConnectionsLauncher(
                 result,
                 rootEntity.name || entityName
             );
@@ -4841,6 +4844,121 @@
                 error: error && error.message ? error.message : 'Unable to load cross-memory connections.' };
         }
     }
+
+
+    function appendCrossMemoryConnectionsLauncher(result, entityName) {
+
+        const placeholder =
+            document.createElement("div");
+
+        placeholder.innerHTML =
+            '<div class="brain-cross-memory-section">' +
+                '<div class="brain-cross-memory-title">🔗 Cross-Memory Connections</div>' +
+                '<div class="brain-cross-memory-subtitle">' +
+                    'Analyze connections across stored memories and relationships when you want it. ' +
+                    '<strong>This is manual to avoid unnecessary AI API calls and rate limits.</strong>' +
+                '</div>' +
+                '<button type="button" class="brain-learning-approve" ' +
+                    'id="runCrossMemoryButton">' +
+                    '🔍 Analyze Cross-Memory Connections' +
+                '</button>' +
+                '<div class="brain-learning-status" id="crossMemoryLauncherStatus"></div>' +
+            '</div>';
+
+        result.appendChild(
+            placeholder.firstElementChild
+        );
+
+        const button =
+            result.querySelector(
+                "#runCrossMemoryButton"
+            );
+
+        if (!button) {
+            return;
+        }
+
+        button.addEventListener(
+            "click",
+            async function() {
+
+                button.disabled = true;
+                button.style.opacity = "0.6";
+
+                const status =
+                    result.querySelector(
+                        "#crossMemoryLauncherStatus"
+                    );
+
+                if (status) {
+                    status.textContent =
+                        "Analyzing cross-memory connections...";
+                }
+
+                const data =
+                    await loadCrossMemoryConnections(
+                        entityName
+                    );
+
+                const sections =
+                    result.querySelectorAll(
+                        ".brain-cross-memory-section"
+                    );
+
+                const section =
+                    sections.length
+                        ? sections[sections.length - 1]
+                        : null;
+
+                if (!section) {
+                    return;
+                }
+
+                if (data.error) {
+
+                    section.innerHTML =
+                        '<div class="brain-cross-memory-title">🔗 Cross-Memory Connections</div>' +
+                        '<div class="brain-empty">' +
+                            'Cross-memory analysis could not be generated. ' +
+                            brainText(data.error) +
+                        '</div>' +
+                        '<button type="button" class="brain-learning-approve" ' +
+                            'id="retryCrossMemoryButton">' +
+                            '↻ Try Again' +
+                        '</button>';
+
+                    const retry =
+                        section.querySelector(
+                            "#retryCrossMemoryButton"
+                        );
+
+                    if (retry) {
+                        retry.addEventListener(
+                            "click",
+                            function() {
+                                section.remove();
+                                appendCrossMemoryConnectionsLauncher(
+                                    result,
+                                    entityName
+                                );
+                            }
+                        );
+                    }
+
+                    return;
+                }
+
+                section.outerHTML =
+                    renderCrossMemoryConnections(
+                        data,
+                        entityName
+                    );
+
+            }
+        );
+
+    }
+
 
     async function appendCrossMemoryConnections(result, entityName) {
         const placeholder = document.createElement('div');
