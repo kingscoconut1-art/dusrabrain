@@ -1316,6 +1316,124 @@
         .brain-cross-memory-detail-meta { margin-top: 5px; color: #64748b; font-size: 11px; }
         .brain-cross-memory-confidence { margin-top: 14px; color: #64748b; font-size: 13px; font-weight: 700; }
 
+
+        /* =====================================================
+           PHASE 6 — STEP 1A — MEMORY CONSOLIDATION
+        ===================================================== */
+
+        .memory-consolidation-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .memory-consolidation-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .memory-consolidation-subtitle {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.55;
+            margin-bottom: 15px;
+        }
+
+        .memory-consolidation-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 11px;
+            padding: 16px;
+            background: #fff;
+            margin-top: 11px;
+        }
+
+        .memory-consolidation-subject {
+            font-size: 16px;
+            font-weight: 800;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .memory-consolidation-canonical {
+            background: #f8fafc;
+            border: 1px solid #dbe2f0;
+            border-radius: 10px;
+            padding: 13px;
+            margin-top: 10px;
+        }
+
+        .memory-consolidation-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #4338ca;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .memory-consolidation-text {
+            color: #334155;
+            line-height: 1.55;
+        }
+
+        .memory-consolidation-originals {
+            margin-top: 12px;
+        }
+
+        .memory-consolidation-original {
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            border-radius: 9px;
+            padding: 10px 12px;
+            margin-top: 7px;
+        }
+
+        .memory-consolidation-original-id {
+            font-size: 11px;
+            font-weight: 800;
+            color: #4338ca;
+            margin-bottom: 4px;
+        }
+
+        .memory-consolidation-original-text {
+            color: #475569;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .memory-consolidation-meta {
+            margin-top: 10px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        .memory-consolidation-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 13px;
+        }
+
+        .memory-consolidation-review {
+            background: #111827;
+            color: white;
+        }
+
+        .memory-consolidation-reject {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .memory-consolidation-status {
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+        }
+
     </style>
 </head>
 
@@ -4041,6 +4159,10 @@
                 result
             );
 
+            appendMemoryConsolidationLauncher(
+                result
+            );
+
         } catch (error) {
 
             result.innerHTML =
@@ -6169,6 +6291,238 @@
 
     }
 
+
+
+    // ========================================================
+    // PHASE 6 — STEP 1A — MEMORY CONSOLIDATION PROPOSALS
+    // ========================================================
+
+    let memoryConsolidationProposals = [];
+
+    async function loadMemoryConsolidation() {
+        try {
+            const response = await fetch(
+                "/api?consolidate=true&_=" + Date.now(),
+                {
+                    method: "GET",
+                    cache: "no-store",
+                    headers: { "Accept": "application/json" }
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error || "Unable to load memory consolidation proposals."
+                );
+            }
+
+            return data;
+        } catch (error) {
+            return {
+                proposals: [],
+                memory_count: 0,
+                confidence: 0,
+                proposal_only: true,
+                auto_saved: false,
+                error: error && error.message
+                    ? error.message
+                    : "Unable to load memory consolidation proposals."
+            };
+        }
+    }
+
+    function renderMemoryConsolidation(data) {
+        const proposals = Array.isArray(data.proposals)
+            ? data.proposals
+            : [];
+
+        memoryConsolidationProposals = proposals;
+
+        let html =
+            '<div class="memory-consolidation-section">' +
+                '<div class="memory-consolidation-title">🧠 Memory Consolidation</div>' +
+                '<div class="memory-consolidation-subtitle">' +
+                    'Dusra Brain can identify repetitive memories and propose a cleaner canonical memory. ' +
+                    '<strong>Nothing is changed or deleted automatically.</strong>' +
+                '</div>' +
+                '<div class="brain-learning-quality-gate">🛡️ Proposal only · Original memories remain untouched</div>';
+
+        if (data.error) {
+            html +=
+                '<div class="brain-empty">' +
+                    brainText(data.error) +
+                '</div></div>';
+            return html;
+        }
+
+        if (!proposals.length) {
+            html +=
+                '<div class="brain-empty">' +
+                    'No safe memory consolidation proposals were found.' +
+                '</div>' +
+                '<div class="memory-consolidation-meta">' +
+                    brainText(String(data.memory_count || 0)) +
+                    ' memories reviewed · No automatic changes made.' +
+                '</div></div>';
+            return html;
+        }
+
+        html += '<div class="memory-consolidation-list">';
+
+        proposals.forEach(function(proposal, index) {
+            const ids = Array.isArray(proposal.memory_ids)
+                ? proposal.memory_ids
+                : [];
+
+            html +=
+                '<div class="memory-consolidation-card" data-consolidation-index="' +
+                    String(index) +
+                '">' +
+                    '<div class="memory-consolidation-subject">' +
+                        '📌 ' +
+                        brainText(proposal.subject || "General") +
+                    '</div>' +
+
+                    '<div class="memory-consolidation-canonical">' +
+                        '<div class="memory-consolidation-label">Proposed canonical memory</div>' +
+                        '<div class="memory-consolidation-text">' +
+                            brainText(proposal.canonical_memory || "") +
+                        '</div>' +
+                    '</div>' +
+
+                    '<div class="memory-consolidation-originals">' +
+                        '<div class="memory-consolidation-label">Original memories / evidence</div>';
+
+            ids.forEach(function(id) {
+                html +=
+                    '<div class="memory-consolidation-original">' +
+                        '<div class="memory-consolidation-original-id">Memory #' +
+                            brainText(String(id)) +
+                        '</div>' +
+                        '<div class="memory-consolidation-original-text">' +
+                            'Original memory #' + brainText(String(id)) +
+                        '</div>' +
+                    '</div>';
+            });
+
+            html +=
+                    '</div>' +
+                    '<div class="memory-consolidation-meta">' +
+                        '<strong>Why:</strong> ' +
+                        brainText(proposal.reason || "Supported overlap between the cited memories.") +
+                        '<br><strong>Evidence:</strong> ' +
+                        brainText(proposal.evidence_quality || "direct") +
+                        ' · <strong>Confidence:</strong> ' +
+                        brainText(String(proposal.confidence || 0)) +
+                        '/10 · <strong>Category:</strong> ' +
+                        brainText(proposal.category || "general") +
+                    '</div>' +
+
+                    '<div class="memory-consolidation-actions">' +
+                        '<button type="button" class="memory-consolidation-review" ' +
+                            'onclick="reviewMemoryConsolidation(' + String(index) + ', true)">' +
+                            '✓ Approve for Review' +
+                        '</button>' +
+                        '<button type="button" class="memory-consolidation-reject" ' +
+                            'onclick="reviewMemoryConsolidation(' + String(index) + ', false)">' +
+                            'Reject' +
+                        '</button>' +
+                    '</div>' +
+
+                    '<div class="memory-consolidation-status" id="memoryConsolidationStatus' +
+                        String(index) +
+                    '"></div>' +
+                '</div>';
+        });
+
+        html +=
+            '</div>' +
+            '<div class="memory-consolidation-meta">' +
+                brainText(String(data.memory_count || 0)) +
+                ' memories reviewed · ' +
+                brainText(String(proposals.length)) +
+                ' proposal(s) · Nothing has been automatically saved.' +
+            '</div>' +
+            '</div>';
+
+        return html;
+    }
+
+    async function appendMemoryConsolidationLauncher(result) {
+        const placeholder = document.createElement("div");
+
+        placeholder.innerHTML =
+            '<div class="memory-consolidation-section">' +
+                '<div class="memory-consolidation-title">🧠 Memory Consolidation</div>' +
+                '<div class="memory-consolidation-subtitle">' +
+                    'Review repetitive memories and propose a clean canonical memory. ' +
+                    '<strong>This analysis is manual to avoid unnecessary AI API calls.</strong>' +
+                '</div>' +
+                '<button type="button" class="memory-consolidation-review" id="runMemoryConsolidationButton">' +
+                    '🔍 Find Memory Consolidation Opportunities' +
+                '</button>' +
+                '<div class="memory-consolidation-status" id="memoryConsolidationLauncherStatus"></div>' +
+            '</div>';
+
+        result.appendChild(placeholder.firstElementChild);
+
+        const button = result.querySelector("#runMemoryConsolidationButton");
+
+        if (!button) return;
+
+        button.addEventListener("click", async function() {
+            button.disabled = true;
+            button.style.opacity = "0.6";
+
+            const status = result.querySelector("#memoryConsolidationLauncherStatus");
+            if (status) status.textContent = "Reviewing stored memories...";
+
+            const data = await loadMemoryConsolidation();
+
+            const section = result.querySelector(".memory-consolidation-section");
+            if (!section) return;
+
+            section.outerHTML = renderMemoryConsolidation(data);
+        });
+    }
+
+    window.reviewMemoryConsolidation = function(index, approved) {
+        const proposal = memoryConsolidationProposals[index];
+        const status = document.getElementById(
+            "memoryConsolidationStatus" + String(index)
+        );
+
+        if (!proposal) {
+            if (status) status.textContent = "Proposal data is unavailable.";
+            return;
+        }
+
+        if (approved) {
+            if (status) {
+                status.textContent =
+                    "✓ Approved for review — database consolidation will be added in the next approval layer.";
+            }
+        } else {
+            if (status) {
+                status.textContent =
+                    "✓ Rejected — this consolidation proposal will not be saved.";
+            }
+        }
+
+        const card = document.querySelector(
+            '[data-consolidation-index="' + String(index) + '"]'
+        );
+
+        if (card) {
+            const buttons = card.querySelectorAll("button");
+            buttons.forEach(function(button) {
+                button.disabled = true;
+                button.style.opacity = "0.6";
+            });
+        }
+    };
 
     // ========================================================
     // INITIALIZE
