@@ -2398,25 +2398,86 @@ def generate_cross_memory_intelligence(
     memories = get_all_user_memories(user_id, limit=500)
 
     target = None
+    target_from_memory = False
+
     if target_name:
+        # First prefer a structured Brain entity.
         for entity in entities:
             if str(entity.get("name") or "").lower() == target_name.lower():
                 target = entity
                 break
 
+        # If the subject is not yet a structured entity, fall back to the
+        # user's stored memories. This keeps Cross-Memory Intelligence useful
+        # for important projects that have memories but no brain entity yet.
         if target is None:
-            return {
-                "entity": None,
-                "connections": [],
-                "confidence": 1,
-                "evidence_count": len(memories),
-                "entity_count": len(entities),
-                "relationship_count": len(relationships),
-                "error": "Entity not found",
-            }
+            matching_memories = [
+                memory
+                for memory in memories
+                if str(memory.get("subject") or "").strip().lower()
+                == target_name.lower()
+                or target_name.lower()
+                in str(memory.get("subject") or "").strip().lower()
+            ]
+
+            if matching_memories:
+                target_from_memory = True
+                target = {
+                    "id": None,
+                    "user_id": user_id,
+                    "entity_type": "subject",
+                    "name": target_name,
+                    "description": (
+                        "Subject represented by stored user memories; "
+                        "no structured Brain entity has been created yet."
+                    ),
+                    "importance": max(
+                        int(memory.get("importance") or 1)
+                        for memory in matching_memories
+                    ),
+                    "created_at": min(
+                        str(memory.get("created_at") or "")
+                        for memory in matching_memories
+                    ),
+                    "updated_at": max(
+                        str(memory.get("created_at") or "")
+                        for memory in matching_memories
+                    ),
+                    "source": "memory_subject",
+                    "memory_ids": [
+                        memory.get("id")
+                        for memory in matching_memories
+                    ],
+                }
+
+            else:
+                return {
+                    "entity": None,
+                    "connections": [],
+                    "confidence": 1,
+                    "evidence_count": len(memories),
+                    "entity_count": len(entities),
+                    "relationship_count": len(relationships),
+                    "error": "Entity or memory subject not found",
+                }
+
+    target_memories = []
+    if target_name:
+        target_memories = [
+            memory
+            for memory in memories
+            if str(memory.get("subject") or "").strip().lower()
+            == target_name.lower()
+            or target_name.lower()
+            in str(memory.get("subject") or "").strip().lower()
+        ]
 
     source_payload = {
         "target_entity": target,
+        "target_source": (
+            "memory_subject" if target_from_memory else "brain_entity"
+        ),
+        "target_memories": target_memories[:100],
         "entities": entities[:200],
         "relationships": relationships[:300],
         "memories": memories[:300],
