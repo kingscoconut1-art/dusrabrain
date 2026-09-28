@@ -778,6 +778,70 @@
             font-weight: 700;
         }
 
+        .brain-intelligence-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .brain-intelligence-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .brain-intelligence-summary {
+            font-size: 16px;
+            line-height: 1.65;
+            color: #334155;
+            background: #f8fafc;
+            border-radius: 11px;
+            padding: 15px;
+            margin-bottom: 14px;
+        }
+
+        .brain-intelligence-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .brain-intelligence-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 11px;
+            padding: 14px;
+            background: #fff;
+        }
+
+        .brain-intelligence-card-title {
+            font-weight: 800;
+            color: #374151;
+            margin-bottom: 9px;
+        }
+
+        .brain-intelligence-list {
+            margin: 0;
+            padding-left: 18px;
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .brain-intelligence-confidence {
+            margin-top: 14px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        @media (max-width: 800px) {
+            .brain-intelligence-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .brain-evidence-section {
             margin-top: 18px;
             background: white;
@@ -3097,6 +3161,75 @@
     }
 
 
+    function renderBrainIntelligence(
+        payload,
+        entityName
+    ) {
+
+        const intelligence =
+            payload && payload.intelligence
+                ? payload.intelligence
+                : null;
+
+        if (!intelligence) {
+            return '<div class="brain-intelligence-section">' +
+                    '<div class="brain-intelligence-title">🧠 What Dusra Brain Understands</div>' +
+                    '<div class="brain-empty">No intelligence summary is available yet.</div>' +
+                '</div>';
+        }
+
+        const list = function(items) {
+            const values = Array.isArray(items)
+                ? items
+                : [];
+
+            if (!values.length) {
+                return '<div class="brain-empty">None identified from current evidence.</div>';
+            }
+
+            return '<ul class="brain-intelligence-list">' +
+                values.map(function(item) {
+                    return '<li>' + brainText(String(item)) + '</li>';
+                }).join('') +
+                '</ul>';
+        };
+
+        return '<div class="brain-intelligence-section">' +
+                '<div class="brain-intelligence-title">🧠 What Dusra Brain Understands</div>' +
+                '<div class="brain-intelligence-summary">' +
+                    brainText(
+                        intelligence.summary ||
+                        'No summary is available from the current evidence.'
+                    ) +
+                '</div>' +
+                '<div class="brain-intelligence-grid">' +
+                    '<div class="brain-intelligence-card">' +
+                        '<div class="brain-intelligence-card-title">Key Facts</div>' +
+                        list(intelligence.key_facts) +
+                    '</div>' +
+                    '<div class="brain-intelligence-card">' +
+                        '<div class="brain-intelligence-card-title">Current State</div>' +
+                        list(intelligence.current_state) +
+                    '</div>' +
+                    '<div class="brain-intelligence-card">' +
+                        '<div class="brain-intelligence-card-title">Open Questions</div>' +
+                        list(intelligence.open_questions) +
+                    '</div>' +
+                '</div>' +
+                '<div class="brain-intelligence-confidence">' +
+                    'Evidence confidence: ' +
+                    brainText(String(intelligence.confidence || 0)) +
+                    '/10 · ' +
+                    brainText(String(payload.evidence_count || 0)) +
+                    ' memories · ' +
+                    brainText(String(payload.relationship_count || 0)) +
+                    ' relationships' +
+                '</div>' +
+            '</div>';
+
+    }
+
+
     async function exploreBrainEntity(entityName) {
 
         const input =
@@ -3317,7 +3450,76 @@
                     entityName
                 );
 
+            html +=
+                '<div class="brain-intelligence-section">' +
+                    '<div class="brain-intelligence-title">🧠 What Dusra Brain Understands</div>' +
+                    '<div class="loading">Generating intelligence from stored evidence...</div>' +
+                '</div>';
+
             result.innerHTML = html;
+
+            try {
+
+                const intelligenceResponse =
+                    await fetch(
+                        "/api?intelligence=true&name=" +
+                        encodeURIComponent(
+                            rootEntity.name || entityName
+                        ) +
+                        "&_=" +
+                        Date.now(),
+                        {
+                            method: "GET",
+                            cache: "no-store",
+                            headers: {
+                                "Accept": "application/json"
+                            }
+                        }
+                    );
+
+                const intelligenceData =
+                    await intelligenceResponse.json();
+
+                if (!intelligenceResponse.ok) {
+                    throw new Error(
+                        intelligenceData.error ||
+                        "Unable to generate brain intelligence."
+                    );
+                }
+
+                const placeholder =
+                    result.querySelector(
+                        ".brain-intelligence-section"
+                    );
+
+                if (placeholder) {
+                    placeholder.outerHTML =
+                        renderBrainIntelligence(
+                            intelligenceData,
+                            rootEntity.name || entityName
+                        );
+                }
+
+            } catch (intelligenceError) {
+
+                const placeholder =
+                    result.querySelector(
+                        ".brain-intelligence-section"
+                    );
+
+                if (placeholder) {
+                    placeholder.innerHTML =
+                        '<div class="brain-intelligence-title">🧠 What Dusra Brain Understands</div>' +
+                        '<div class="brain-empty">Intelligence could not be generated. ' +
+                            brainText(
+                                intelligenceError && intelligenceError.message
+                                    ? intelligenceError.message
+                                    : "Unknown error"
+                            ) +
+                        '</div>';
+                }
+
+            }
 
         } catch (error) {
 
