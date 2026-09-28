@@ -1167,6 +1167,104 @@
 
 
         /* =====================================================
+           STEP 20 — BRAIN LEARNING
+        ===================================================== */
+
+        .brain-learning-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .brain-learning-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .brain-learning-subtitle {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        .brain-learning-list {
+            display: grid;
+            gap: 11px;
+        }
+
+        .brain-learning-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 11px;
+            padding: 15px;
+            background: #fff;
+        }
+
+        .brain-learning-route {
+            font-size: 16px;
+            font-weight: 800;
+            color: #374151;
+            line-height: 1.5;
+        }
+
+        .brain-learning-relationship {
+            display: inline-block;
+            margin: 7px 0;
+            background: #eef2ff;
+            color: #4338ca;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .brain-learning-reason {
+            color: #475569;
+            line-height: 1.55;
+        }
+
+        .brain-learning-evidence {
+            margin-top: 9px;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        .brain-learning-confidence {
+            margin-top: 9px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .brain-learning-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 13px;
+        }
+
+        .brain-learning-approve {
+            background: #111827;
+            color: white;
+        }
+
+        .brain-learning-reject {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .brain-learning-status {
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+        }
+
+        /* =====================================================
            STEP 19 — CROSS-MEMORY CONNECTIONS
         ===================================================== */
 
@@ -3927,6 +4025,10 @@
                 rootEntity.name || entityName
             );
 
+            await appendBrainLearning(
+                result
+            );
+
         } catch (error) {
 
             result.innerHTML =
@@ -3944,6 +4046,314 @@
     }
 
 
+
+
+    // ========================================================
+    // STEP 20 — BRAIN LEARNING
+    // ========================================================
+
+    function renderBrainLearning(payload) {
+
+        const proposals =
+            payload && Array.isArray(payload.proposals)
+                ? payload.proposals
+                : [];
+
+        const confidence =
+            payload && payload.confidence
+                ? payload.confidence
+                : 0;
+
+        const evidenceCount =
+            payload && payload.evidence_count
+                ? payload.evidence_count
+                : 0;
+
+        const entityCount =
+            payload && payload.entity_count
+                ? payload.entity_count
+                : 0;
+
+        const relationshipCount =
+            payload && payload.relationship_count
+                ? payload.relationship_count
+                : 0;
+
+        let html =
+            '<div class="brain-learning-section">' +
+                '<div class="brain-learning-title">🧠 Brain Learning</div>' +
+                '<div class="brain-learning-subtitle">' +
+                    'Dusra Brain can propose new relationships from existing evidence. ' +
+                    '<strong>Nothing is saved automatically.</strong>' +
+                '</div>';
+
+        if (!proposals.length) {
+            html +=
+                '<div class="brain-empty">' +
+                    'No new evidence-supported relationship proposals found yet.' +
+                '</div>';
+        } else {
+
+            html +=
+                '<div class="brain-learning-list">';
+
+            proposals.forEach(function(proposal, index) {
+
+                const fromEntity =
+                    proposal && proposal.from_entity
+                        ? proposal.from_entity
+                        : '';
+
+                const toEntity =
+                    proposal && proposal.to_entity
+                        ? proposal.to_entity
+                        : '';
+
+                const relationship =
+                    proposal && proposal.relationship
+                        ? proposal.relationship
+                        : 'related_to';
+
+                const reason =
+                    proposal && proposal.reason
+                        ? proposal.reason
+                        : 'No explanation returned.';
+
+                const evidence =
+                    proposal && Array.isArray(proposal.evidence)
+                        ? proposal.evidence
+                        : [];
+
+                const proposalConfidence =
+                    proposal && proposal.confidence
+                        ? proposal.confidence
+                        : 0;
+
+                html +=
+                    '<div class="brain-learning-card" data-learning-index="' +
+                        brainText(String(index)) + '">' +
+
+                        '<div class="brain-learning-route">' +
+                            brainText(fromEntity) +
+                            ' → ' +
+                            brainText(toEntity) +
+                        '</div>' +
+
+                        '<div class="brain-learning-relationship">' +
+                            brainText(relationship) +
+                        '</div>' +
+
+                        '<div class="brain-learning-reason">' +
+                            brainText(reason) +
+                        '</div>' +
+
+                        '<div class="brain-learning-evidence">' +
+                            'Evidence: ' +
+                            brainText(
+                                evidence.length
+                                    ? evidence.join(' · ')
+                                    : 'No evidence reference returned'
+                            ) +
+                        '</div>' +
+
+                        '<div class="brain-learning-confidence">' +
+                            'Proposal confidence: ' +
+                            brainText(String(proposalConfidence)) +
+                            '/10' +
+                        '</div>' +
+
+                        '<div class="brain-learning-actions">' +
+                            '<button type="button" class="brain-learning-approve" ' +
+                                'onclick="reviewBrainLearningProposal(' +
+                                    String(index) +
+                                ', true)">' +
+                                'Approve' +
+                            '</button>' +
+
+                            '<button type="button" class="brain-learning-reject" ' +
+                                'onclick="reviewBrainLearningProposal(' +
+                                    String(index) +
+                                ', false)">' +
+                                'Reject' +
+                            '</button>' +
+                        '</div>' +
+
+                        '<div class="brain-learning-status" id="brainLearningStatus' +
+                            String(index) +
+                        '"></div>' +
+
+                    '</div>';
+
+            });
+
+            html +=
+                '</div>';
+        }
+
+        html +=
+            '<div class="brain-learning-confidence">' +
+                'Evidence confidence: ' +
+                brainText(String(confidence)) +
+                '/10 · ' +
+                brainText(String(evidenceCount)) +
+                ' memories · ' +
+                brainText(String(relationshipCount)) +
+                ' relationships · ' +
+                brainText(String(entityCount)) +
+                ' entities' +
+            '</div>' +
+
+            '</div>';
+
+        return html;
+    }
+
+
+    async function loadBrainLearning() {
+
+        try {
+
+            const response =
+                await fetch(
+                    '/api?discover=true&_=' +
+                    Date.now(),
+                    {
+                        method: 'GET',
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    'Unable to load Brain Learning.'
+                );
+
+            }
+
+            return data;
+
+        } catch (error) {
+
+            return {
+                proposals: [],
+                confidence: 0,
+                evidence_count: 0,
+                entity_count: 0,
+                relationship_count: 0,
+                error:
+                    error && error.message
+                        ? error.message
+                        : 'Unable to load Brain Learning.'
+            };
+
+        }
+
+    }
+
+
+    async function appendBrainLearning(result) {
+
+        const placeholder =
+            document.createElement('div');
+
+        placeholder.innerHTML =
+            '<div class="brain-learning-section">' +
+                '<div class="brain-learning-title">🧠 Brain Learning</div>' +
+                '<div class="loading">Reviewing stored evidence for possible new relationships...</div>' +
+            '</div>';
+
+        result.appendChild(
+            placeholder.firstElementChild
+        );
+
+        const data =
+            await loadBrainLearning();
+
+        const sections =
+            result.querySelectorAll(
+                '.brain-learning-section'
+            );
+
+        const section =
+            sections.length
+                ? sections[sections.length - 1]
+                : null;
+
+        if (!section) {
+            return;
+        }
+
+        if (data.error) {
+
+            section.innerHTML =
+                '<div class="brain-learning-title">🧠 Brain Learning</div>' +
+                '<div class="brain-empty">' +
+                    'Brain Learning could not be generated. ' +
+                    brainText(data.error) +
+                '</div>';
+
+            return;
+        }
+
+        section.outerHTML =
+            renderBrainLearning(
+                data
+            );
+
+    }
+
+
+    window.reviewBrainLearningProposal =
+        function(index, approved) {
+
+            const status =
+                document.getElementById(
+                    'brainLearningStatus' +
+                    String(index)
+                );
+
+            if (status) {
+
+                status.textContent =
+                    approved
+                        ? 'Approved for review — database writing will be added in the next approval layer.'
+                        : 'Rejected — this proposal will not be saved.';
+
+            }
+
+            const card =
+                document.querySelector(
+                    '[data-learning-index="' +
+                    String(index) +
+                    '"]'
+                );
+
+            if (card) {
+
+                const buttons =
+                    card.querySelectorAll(
+                        'button'
+                    );
+
+                buttons.forEach(
+                    function(button) {
+                        button.disabled = true;
+                        button.style.opacity = '0.6';
+                        button.style.cursor = 'default';
+                    }
+                );
+
+            }
+
+        };
 
 
     // ========================================================
