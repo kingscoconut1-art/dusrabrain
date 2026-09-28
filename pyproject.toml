@@ -12,7 +12,14 @@ authors = [
     { name = "Emanuilo Jovanovic", email = "emanuilo.jovanovic@hotmail.com" },
 ]
 requires-python = ">=3.10"
-keywords = ["memory", "ai", "assistant", "vector-search", "personal-knowledge", "second-brain"]
+keywords = [
+    "memory",
+    "ai",
+    "assistant",
+    "vector-search",
+    "personal-knowledge",
+    "second-brain",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
@@ -41,7 +48,6 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "loguru>=0.7.0",
     "python-dotenv>=1.0.0",
-    "neonize>=0.3.16",
 ]
 
 [project.scripts]
@@ -55,6 +61,7 @@ Issues = "https://github.com/emanuilo/memclaw/issues"
 cursor = [
     "cursor-sdk>=0.1.0",
 ]
+
 dev = [
     "pytest>=9.0.0",
     "pytest-asyncio>=1.0.0",
