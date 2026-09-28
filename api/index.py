@@ -2093,6 +2093,165 @@ Rules:
 
 
 # ============================================================
+# BRAIN PROJECT INSIGHTS
+# ============================================================
+
+def generate_project_insights(
+    user_id,
+    entity_name,
+):
+
+    entity_name = str(
+        entity_name or ""
+    ).strip()
+
+    if not entity_name:
+        return {
+            "entity": None,
+            "insights": [],
+            "error": "Entity name is required",
+        }
+
+    graph = explore_brain_graph(
+        user_id,
+        entity_name,
+        max_depth=3,
+        limit=100,
+    )
+
+    if not graph.get("entity"):
+        return {
+            "entity": None,
+            "insights": [],
+            "error": "Entity not found",
+        }
+
+    all_memories = get_all_user_memories(
+        user_id,
+        limit=500,
+    )
+
+    target = entity_name.lower()
+    memories = []
+
+    for memory in all_memories:
+        subject = str(
+            memory.get("subject") or ""
+        ).lower()
+        text = str(
+            memory.get("memory") or ""
+        ).lower()
+
+        if (
+            subject == target
+            or target in text
+        ):
+            memories.append(memory)
+
+    memories = memories[:40]
+
+    source_payload = {
+        "entity": graph.get("entity"),
+        "entities": graph.get("entities", []),
+        "relationships": graph.get("relationships", []),
+        "memories": memories,
+    }
+
+    system_prompt = """
+You are the Project Insights layer of Dusra Brain.
+
+Analyze only the supplied stored evidence. Do not invent facts, dates,
+partners, budgets, milestones, intentions, risks, or completed actions.
+Do not turn an unanswered question into a fact.
+
+Return valid JSON only with exactly these keys:
+{
+  "insights": [
+    {
+      "type": "evidence_gap|connection|progress|focus",
+      "title": "short title",
+      "insight": "factual insight or clearly labeled suggested focus",
+      "evidence": ["short evidence reference"]
+    }
+  ],
+  "suggested_next_focus": ["optional focus 1", "optional focus 2"],
+  "confidence": 1
+}
+
+Rules:
+- Produce 1-5 insights only when supported by the evidence.
+- "connection" identifies an explicit relationship between stored entities.
+- "progress" may be used only when the evidence explicitly shows a change,
+  stage, milestone, or action over time.
+- "evidence_gap" identifies important information that is visibly missing.
+- "focus" is a suggested area to clarify or work on; it must be phrased as a
+  suggestion, not as a claim that the user intends to do it.
+- Every insight must cite one or more short pieces of supplied evidence.
+- suggested_next_focus contains suggestions, not facts.
+- confidence is an integer from 1 to 10 representing evidence completeness.
+- If the evidence is too limited for an insight, omit it rather than guess.
+"""
+
+    user_prompt = (
+        "Generate evidence-grounded project insights for this Dusra Brain "
+        "entity.\n\n"
+        + json.dumps(
+            source_payload,
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+
+    raw = groq_request(
+        [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
+            },
+        ],
+        temperature=0.1,
+    )
+
+    cleaned = clean_json_response(raw)
+
+    try:
+        result = json.loads(cleaned)
+    except Exception:
+        result = {
+            "insights": [],
+            "suggested_next_focus": [],
+            "confidence": 1,
+        }
+
+    if not isinstance(result, dict):
+        result = {
+            "insights": [],
+            "suggested_next_focus": [],
+            "confidence": 1,
+        }
+
+    return {
+        "entity": graph.get("entity"),
+        "insights": result.get("insights", []),
+        "suggested_next_focus": result.get(
+            "suggested_next_focus", []
+        ),
+        "confidence": result.get("confidence", 1),
+        "evidence_count": len(memories),
+        "relationship_count": len(
+            graph.get("relationships", [])
+        ),
+        "entity_count": len(
+            graph.get("entities", [])
+        ),
+    }
+
+
+# ============================================================
 # BRAIN EXPLORER
 # ============================================================
 
@@ -2601,6 +2760,45 @@ class handler(
                             str(error)
                     },
                     500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # PROJECT INSIGHTS
+        # ----------------------------------------------------
+
+        if params.get(
+            "insights"
+        ) == ["true"]:
+
+            entity_name = params.get(
+                "name",
+                [""],
+            )[0]
+
+            try:
+
+                result = generate_project_insights(
+                    user_id,
+                    entity_name,
+                )
+
+                send_json(
+                    self,
+                    result,
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error),
+                    },
+                    500,
                 )
 
             return
