@@ -4647,6 +4647,126 @@ def reject_brain_learning_proposal(user_id, proposal):
 
 
 # ============================================================
+# PHASE 6 — STEP 2F — MEMORY CONSOLIDATION REVIEW HISTORY
+# ============================================================
+
+def get_memory_consolidation_reviews(user_id, subject="", status="", limit=100):
+
+    ensure_memory_consolidation_reviews_table()
+
+    subject = str(subject or "").strip()
+    status = str(status or "").strip().lower()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 100
+
+    limit = max(1, min(500, limit))
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            where = ["user_id = %s"]
+            values = [user_id]
+
+            if subject:
+                where.append("subject = %s")
+                values.append(subject)
+
+            if status in ("approved", "rejected"):
+                where.append("status = %s")
+                values.append(status)
+
+            values.append(limit)
+
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    source_memory_ids,
+                    canonical_memory,
+                    canonical_memory_id,
+                    subject,
+                    category,
+                    reason,
+                    confidence,
+                    status,
+                    created_at,
+                    reviewed_at
+                FROM memory_consolidation_reviews
+                WHERE {" AND ".join(where)}
+                ORDER BY reviewed_at DESC, id DESC
+                LIMIT %s
+                """,
+                tuple(values)
+            )
+
+            rows = cur.fetchall()
+
+    reviews = []
+
+    for row in rows:
+        source_ids = row[1]
+
+        if isinstance(source_ids, str):
+            try:
+                source_ids = json.loads(source_ids)
+            except Exception:
+                source_ids = []
+
+        reviews.append(
+            {
+                "id": int(row[0]),
+                "source_memory_ids": source_ids or [],
+                "canonical_memory": row[2],
+                "canonical_memory_id": row[3],
+                "subject": row[4] or "general",
+                "category": row[5] or "general",
+                "reason": row[6] or "",
+                "confidence": int(row[7] or 0),
+                "status": row[8],
+                "created_at": row[9].isoformat() if row[9] else None,
+                "reviewed_at": row[10].isoformat() if row[10] else None,
+            }
+        )
+
+    return reviews
+
+
+def get_memory_consolidation_review_summary(user_id):
+
+    ensure_memory_consolidation_reviews_table()
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'approved') AS approved,
+                    COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+                    COUNT(DISTINCT canonical_memory_id) FILTER (WHERE canonical_memory_id IS NOT NULL) AS canonical_memories
+                FROM memory_consolidation_reviews
+                WHERE user_id = %s
+                """,
+                (user_id,)
+            )
+
+            row = cur.fetchone()
+
+    return {
+        "total": int(row[0] or 0),
+        "approved": int(row[1] or 0),
+        "rejected": int(row[2] or 0),
+        "canonical_memories": int(row[3] or 0),
+    }
+
+
+# ============================================================
 # PHASE 6 — STEP 2E — MEMORY CONSOLIDATION APPROVAL
 # ============================================================
 
@@ -5738,6 +5858,45 @@ class handler(
                             str(error)
                     },
                     500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # PHASE 6 — MEMORY CONSOLIDATION REVIEW HISTORY
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_consolidation_reviews"
+        ) == ["true"]:
+
+            subject = params.get("subject", [""])[0]
+            status = params.get("status", [""])[0]
+
+            try:
+                reviews = get_memory_consolidation_reviews(
+                    user_id,
+                    subject=subject,
+                    status=status,
+                    limit=params.get("limit", ["100"])[0],
+                )
+
+                send_json(
+                    self,
+                    {
+                        "reviews": reviews,
+                        "count": len(reviews),
+                        "summary": get_memory_consolidation_review_summary(user_id),
+                        "read_only": True,
+                    }
+                )
+
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
                 )
 
             return
