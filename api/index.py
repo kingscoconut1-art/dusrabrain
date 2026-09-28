@@ -2381,6 +2381,263 @@ Rules:
     }
 
 
+
+# ============================================================
+# STEP 20 — BRAIN LEARNING & RELATIONSHIP DISCOVERY
+# ============================================================
+
+def discover_brain_relationships(
+    user_id,
+    limit=20,
+):
+    """
+    Review stored memories and existing brain entities/relationships,
+    then propose evidence-grounded relationships that are not already
+    represented in the structured Brain.
+
+    Step 20 is deliberately proposal-only:
+    it NEVER writes a relationship to the database.
+    The returned evidence can be reviewed before a future approval layer
+    decides whether to persist a relationship.
+    """
+
+    entities = get_brain_entities(user_id)
+    relationships = get_brain_relationships(user_id)
+    memories = get_all_user_memories(user_id, limit=500)
+
+    if len(memories) < 2:
+        return {
+            "proposals": [],
+            "message": "Not enough stored memories to discover cross-memory relationships.",
+            "confidence": 1,
+            "evidence_count": len(memories),
+            "entity_count": len(entities),
+            "relationship_count": len(relationships),
+        }
+
+    source_payload = {
+        "entities": entities[:200],
+        "relationships": relationships[:300],
+        "memories": memories[:300],
+    }
+
+    system_prompt = """
+You are the Brain Learning and Relationship Discovery layer of Dusra Brain.
+
+Your task is to identify ONLY evidence-grounded relationships that could be
+added to the structured Brain because stored memories explicitly support them.
+
+IMPORTANT:
+- This is a proposal system, not an automatic writer.
+- NEVER invent a relationship.
+- NEVER assume a partnership, ownership, funding, employment, location,
+  product relationship, causation, strategy, or intention.
+- A proposal must be supported by either:
+  1. one stored memory that clearly mentions both concepts/entities, OR
+  2. multiple explicit brain relationships that form a clear chain.
+- Shared generic words such as "India", "project", "business", "AI", or
+  "company" are NOT enough by themselves.
+- Do not propose a relationship that already exists in the supplied
+  relationships.
+- Prefer meaningful relationships involving named entities already present
+  in the structured Brain.
+- If evidence is insufficient, return no proposal.
+
+Return valid JSON only with exactly these keys:
+{
+  "proposals": [
+    {
+      "from_entity": "exact entity name",
+      "to_entity": "exact entity name",
+      "relationship": "short factual relationship",
+      "reason": "brief explanation grounded in evidence",
+      "evidence": ["memory 13", "relationship id 2"],
+      "confidence": 1
+    }
+  ],
+  "suggested_followups": ["optional suggestion"],
+  "confidence": 1
+}
+
+Rules:
+- 0-10 proposals.
+- Use exact entity names from the supplied entities.
+- confidence is an integer from 1 to 10.
+- Only return proposals with confidence >= 7.
+- Evidence references must point only to supplied memory IDs or relationship IDs.
+- Do not return duplicate proposals in reverse direction unless the relationship
+  itself is genuinely directional.
+"""
+
+    raw = groq_request(
+        [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Review this stored Dusra Brain evidence and identify "
+                    "new relationship proposals that are not already represented.\n\n"
+                    + json.dumps(
+                        source_payload,
+                        ensure_ascii=False,
+                        default=str,
+                    )
+                ),
+            },
+        ],
+        temperature=0.1,
+    )
+
+    cleaned = clean_json_response(raw)
+
+    try:
+        result = json.loads(cleaned)
+    except Exception:
+        result = {
+            "proposals": [],
+            "suggested_followups": [],
+            "confidence": 1,
+        }
+
+    if not isinstance(result, dict):
+        result = {
+            "proposals": [],
+            "suggested_followups": [],
+            "confidence": 1,
+        }
+
+    proposals = (
+        result.get("proposals", [])
+        if isinstance(result.get("proposals", []), list)
+        else []
+    )
+
+    existing_signatures = set()
+
+    for relationship in relationships:
+        existing_signatures.add(
+            (
+                str(relationship.get("from") or "").strip().lower(),
+                str(relationship.get("relationship") or "").strip().lower(),
+                str(relationship.get("to") or "").strip().lower(),
+            )
+        )
+
+    entity_names = {
+        str(entity.get("name") or "").strip().lower()
+        for entity in entities
+        if str(entity.get("name") or "").strip()
+    }
+
+    safe_proposals = []
+
+    for proposal in proposals[:10]:
+        if not isinstance(proposal, dict):
+            continue
+
+        from_name = str(
+            proposal.get("from_entity") or ""
+        ).strip()
+
+        to_name = str(
+            proposal.get("to_entity") or ""
+        ).strip()
+
+        relationship_name = str(
+            proposal.get("relationship") or ""
+        ).strip()
+
+        reason = str(
+            proposal.get("reason") or ""
+        ).strip()
+
+        evidence = (
+            proposal.get("evidence", [])
+            if isinstance(proposal.get("evidence", []), list)
+            else []
+        )
+
+        try:
+            confidence = int(
+                proposal.get("confidence", 1)
+            )
+        except Exception:
+            confidence = 1
+
+        confidence = max(
+            1,
+            min(
+                10,
+                confidence,
+            ),
+        )
+
+        if not from_name or not to_name or not relationship_name:
+            continue
+
+        if from_name.lower() not in entity_names:
+            continue
+
+        if to_name.lower() not in entity_names:
+            continue
+
+        signature = (
+            from_name.lower(),
+            relationship_name.lower(),
+            to_name.lower(),
+        )
+
+        if signature in existing_signatures:
+            continue
+
+        if confidence < 7:
+            continue
+
+        if not evidence:
+            continue
+
+        safe_proposals.append(
+            {
+                "from_entity": from_name,
+                "to_entity": to_name,
+                "relationship": relationship_name,
+                "reason": reason,
+                "evidence": [
+                    str(item)
+                    for item in evidence[:10]
+                ],
+                "confidence": confidence,
+            }
+        )
+
+    return {
+        "proposals": safe_proposals,
+        "suggested_followups": (
+            result.get("suggested_followups", [])
+            if isinstance(
+                result.get("suggested_followups", []),
+                list,
+            )
+            else []
+        ),
+        "confidence": max(
+            1,
+            min(
+                10,
+                int(result.get("confidence", 1) or 1),
+            ),
+        ),
+        "evidence_count": len(memories),
+        "entity_count": len(entities),
+        "relationship_count": len(relationships),
+        "proposal_only": True,
+        "auto_saved": False,
+    }
+
+
 # ============================================================
 # CROSS-MEMORY INTELLIGENCE
 # ============================================================
@@ -3108,6 +3365,39 @@ class handler(
                             str(error)
                     },
                     500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # BRAIN LEARNING / RELATIONSHIP DISCOVERY
+        # ----------------------------------------------------
+
+        if params.get(
+            "discover"
+        ) == ["true"]:
+
+            try:
+
+                result = discover_brain_relationships(
+                    user_id,
+                )
+
+                send_json(
+                    self,
+                    result,
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error),
+                    },
+                    500,
                 )
 
             return
