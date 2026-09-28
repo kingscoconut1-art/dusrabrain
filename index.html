@@ -7103,10 +7103,13 @@
         });
     }
 
-    window.reviewMemoryConsolidation = function(index, approved) {
+    window.reviewMemoryConsolidation = async function(index, approved) {
         const proposal = memoryConsolidationProposals[index];
         const status = document.getElementById(
             "memoryConsolidationStatus" + String(index)
+        );
+        const card = document.querySelector(
+            '[data-consolidation-index="' + String(index) + '"]'
         );
 
         if (!proposal) {
@@ -7114,27 +7117,78 @@
             return;
         }
 
-        if (approved) {
-            if (status) {
-                status.textContent =
-                    "✓ Approved for review — database consolidation will be added in the next approval layer.";
-            }
-        } else {
-            if (status) {
-                status.textContent =
-                    "✓ Rejected — this consolidation proposal will not be saved.";
-            }
+        const buttons = card
+            ? card.querySelectorAll("button")
+            : [];
+
+        buttons.forEach(function(button) {
+            button.disabled = true;
+            button.style.opacity = "0.6";
+        });
+
+        if (status) {
+            status.textContent = approved
+                ? "Saving approved consolidation..."
+                : "Saving rejection...";
         }
 
-        const card = document.querySelector(
-            '[data-consolidation-index="' + String(index) + '"]'
-        );
+        try {
+            const response = await fetch("/api", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({
+                    action: approved
+                        ? "approve_memory_consolidation"
+                        : "reject_memory_consolidation",
+                    user_id: "default_user",
+                    proposal: proposal
+                })
+            });
 
-        if (card) {
-            const buttons = card.querySelectorAll("button");
+            let data = {};
+
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                data = {};
+            }
+
+            if (!response.ok || (approved ? !data.approved : !data.rejected)) {
+                throw new Error(
+                    data.error ||
+                    "Memory consolidation review could not be saved."
+                );
+            }
+
+            if (status) {
+                status.textContent = approved
+                    ? (data.already_approved
+                        ? "✓ Already approved — canonical memory already exists."
+                        : "✓ Approved — canonical memory created. Original memories preserved.")
+                    : "✓ Rejected — no memory was changed.";
+            }
+
+            if (card) {
+                card.setAttribute(
+                    "data-consolidation-reviewed",
+                    approved ? "approved" : "rejected"
+                );
+            }
+        } catch (error) {
+            if (status) {
+                status.textContent =
+                    "✗ " +
+                    (error && error.message
+                        ? error.message
+                        : "Memory consolidation review failed.");
+            }
+
             buttons.forEach(function(button) {
-                button.disabled = true;
-                button.style.opacity = "0.6";
+                button.disabled = false;
+                button.style.opacity = "1";
             });
         }
     };
