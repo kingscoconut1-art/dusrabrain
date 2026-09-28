@@ -2435,13 +2435,6 @@ IMPORTANT:
 - A proposal must be supported by either:
   1. one stored memory that clearly mentions both concepts/entities, OR
   2. multiple explicit brain relationships that form a clear chain.
-- Prefer direct factual wording over interpretation.
-- Do NOT use words such as "implies", "suggests", "indicates", "likely",
-  "appears to", or similar inference language when the evidence does not
-  explicitly state the relationship.
-- Do not promote "bringing X from A to B" into ownership, partnership,
-  operations, exports, or other stronger claims unless the evidence explicitly
-  states that relationship.
 - Shared generic words such as "India", "project", "business", "AI", or
   "company" are NOT enough by themselves.
 - Do not propose a relationship that already exists in the supplied
@@ -2620,14 +2613,6 @@ Rules:
             }
         )
 
-    # STEP 24 — apply the conservative evidence-quality gate before
-    # previously reviewed proposals are filtered.
-    safe_proposals = apply_brain_learning_quality_gate(
-        user_id,
-        safe_proposals,
-        memories,
-    )
-
     reviewed_signatures = get_reviewed_relationship_signatures(
         user_id
     )
@@ -2695,248 +2680,7 @@ Rules:
         "relationship_count": len(relationships),
         "proposal_only": True,
         "auto_saved": False,
-        "quality_gate": "strict_evidence_v1",
-        "quality_gate_description": (
-            "Only direct evidence or explicit relationship-chain evidence "
-            "is eligible for Brain Learning proposals."
-        ),
     }
-
-
-# ============================================================
-# STEP 24 — BRAIN LEARNING EVIDENCE QUALITY GATE
-# ============================================================
-
-def apply_brain_learning_quality_gate(
-    user_id,
-    proposals,
-    memories,
-):
-    """
-    Step 24 adds a deterministic evidence-quality gate after the AI
-    relationship discovery step.
-
-    The gate is intentionally conservative:
-    - a proposal must have at least one verifiable memory/relationship reference
-    - memory evidence must contain both named entities when a memory is cited
-    - inference-heavy relationship language is blocked
-    - unsupported claims such as ownership, partnership, funding, employment,
-      or intent are blocked unless the evidence is explicitly represented
-    - confidence is capped when the evidence is indirect
-    - nothing is written to the database
-    """
-
-    if not isinstance(proposals, list):
-        return []
-
-    memory_by_id = {
-        int(memory.get("id")): memory
-        for memory in memories
-        if memory.get("id") is not None
-    }
-
-    # These relationship forms are especially prone to turning a statement
-    # into a stronger claim than the stored evidence actually supports.
-    blocked_relationship_terms = {
-        "owns",
-        "owned_by",
-        "partner",
-        "partners_with",
-        "partnered_with",
-        "funds",
-        "funded_by",
-        "invests_in",
-        "invested_in",
-        "employs",
-        "employed_by",
-        "works_for",
-        "works_with",
-        "founded_by",
-        "founded",
-        "controls",
-        "subsidiary_of",
-        "acquired_by",
-        "acquired",
-        "operates_in",
-        "based_in",
-        "located_in",
-        "headquartered_in",
-    }
-
-    inference_markers = (
-        "implies",
-        "implying",
-        "suggests",
-        "suggesting",
-        "indicates",
-        "indicating",
-        "likely",
-        "appears to",
-        "could mean",
-        "may mean",
-        "therefore",
-        "which means",
-        "presumably",
-        "possibly",
-    )
-
-    verified = []
-
-    for proposal in proposals:
-        if not isinstance(proposal, dict):
-            continue
-
-        from_name = str(
-            proposal.get("from_entity") or ""
-        ).strip()
-
-        to_name = str(
-            proposal.get("to_entity") or ""
-        ).strip()
-
-        relationship_name = str(
-            proposal.get("relationship") or ""
-        ).strip()
-
-        reason = str(
-            proposal.get("reason") or ""
-        ).strip()
-
-        evidence = (
-            proposal.get("evidence", [])
-            if isinstance(proposal.get("evidence", []), list)
-            else []
-        )
-
-        if not from_name or not to_name or not relationship_name:
-            continue
-
-        relationship_key = (
-            relationship_name
-            .strip()
-            .lower()
-            .replace(" ", "_")
-            .replace("-", "_")
-        )
-
-        if relationship_key in blocked_relationship_terms:
-            continue
-
-        reason_lower = reason.lower()
-
-        # If the model itself describes the relationship as an inference,
-        # do not promote it into the structured Brain.
-        if any(
-            marker in reason_lower
-            for marker in inference_markers
-        ):
-            continue
-
-        verified_memory_evidence = []
-
-        for item in evidence:
-            reference = str(item or "").strip()
-
-            match = re.match(
-                r"^memory\s+(\d+)$",
-                reference,
-                re.IGNORECASE,
-            )
-
-            if not match:
-                continue
-
-            memory_id = int(match.group(1))
-            memory = memory_by_id.get(memory_id)
-
-            if not memory:
-                continue
-
-            memory_text = str(
-                memory.get("memory") or ""
-            ).lower()
-
-            from_present = (
-                from_name.lower()
-                in memory_text
-            )
-
-            to_present = (
-                to_name.lower()
-                in memory_text
-            )
-
-            # A single memory must explicitly mention both entities.
-            if from_present and to_present:
-                verified_memory_evidence.append(
-                    reference
-                )
-
-        # Relationship-chain evidence is allowed only when it is explicitly
-        # supplied by the discovery model. It is not enough by itself to
-        # create a new relationship if the proposal is inference-heavy.
-        verified_relationship_evidence = [
-            str(item).strip()
-            for item in evidence
-            if re.match(
-                r"^relationship\s+\d+$",
-                str(item or "").strip(),
-                re.IGNORECASE,
-            )
-        ]
-
-        if not verified_memory_evidence and not verified_relationship_evidence:
-            continue
-
-        # A proposal backed only by relationship-chain evidence is kept at a
-        # maximum of 7 unless the reason is explicitly factual.
-        try:
-            confidence = int(
-                proposal.get("confidence", 1)
-            )
-        except Exception:
-            confidence = 1
-
-        confidence = max(
-            1,
-            min(
-                10,
-                confidence,
-            ),
-        )
-
-        if (
-            not verified_memory_evidence
-            and verified_relationship_evidence
-        ):
-            confidence = min(
-                confidence,
-                7,
-            )
-
-        if confidence < 7:
-            continue
-
-        verified.append(
-            {
-                "from_entity": from_name,
-                "to_entity": to_name,
-                "relationship": relationship_name,
-                "reason": reason,
-                "evidence": (
-                    verified_memory_evidence
-                    + verified_relationship_evidence
-                )[:10],
-                "confidence": confidence,
-                "evidence_quality": (
-                    "direct"
-                    if verified_memory_evidence
-                    else "relationship_chain"
-                ),
-            }
-        )
-
-    return verified
 
 
 # ============================================================
@@ -3995,6 +3739,177 @@ def reject_brain_learning_proposal(user_id, proposal):
 # REQUEST HANDLER
 # ============================================================
 
+
+# ============================================================
+# PHASE 6 — STEP 1A — MEMORY CONSOLIDATION PROPOSALS
+# ============================================================
+
+def build_memory_consolidation_proposals(user_id, subject="", limit=30):
+    """Create conservative, proposal-only canonical-memory suggestions."""
+    memories = get_all_user_memories(user_id, limit=500)
+
+    subject = str(subject or "").strip()
+    if subject:
+        subject_lower = subject.lower()
+        memories = [
+            item for item in memories
+            if subject_lower in str(item.get("subject", "") or "").lower()
+            or subject_lower in str(item.get("memory", "") or "").lower()
+        ]
+
+    memories = memories[:limit]
+
+    if len(memories) < 2:
+        return {
+            "proposals": [],
+            "message": "Not enough stored memories to propose a consolidation.",
+            "confidence": 1,
+            "memory_count": len(memories),
+            "proposal_only": True,
+            "auto_saved": False,
+        }
+
+    source_payload = [
+        {
+            "id": item.get("id"),
+            "memory": item.get("memory", ""),
+            "category": item.get("category", "general"),
+            "importance": item.get("importance", 5),
+            "subject": item.get("subject", "general"),
+            "created_at": item.get("created_at"),
+        }
+        for item in memories
+    ]
+
+    system_prompt = """
+You are the Memory Consolidation Proposal Engine of Dusra Brain.
+
+Identify groups of stored memories that describe the SAME underlying fact,
+project scope, preference, decision, or durable knowledge and propose one
+clean canonical memory.
+
+STRICT RULES:
+- Proposal only. NEVER save, update, merge, delete, or rewrite memories.
+- Every proposal MUST cite at least 2 existing memory IDs.
+- The canonical memory may ONLY contain information explicitly supported by
+  the cited memories.
+- Do NOT add dates, people, companies, ownership, partnerships, funding,
+  locations, plans, intent, causation, status, or other details unless they
+  are explicitly present in the cited memories.
+- Shared project names or generic words are NOT enough to consolidate.
+- If memories describe different stages, changes, or potentially conflicting
+  facts, do NOT collapse them into one fact.
+- Keep the canonical memory concise, normally 1-2 sentences.
+- Use only evidence IDs supplied in the input.
+- If overlap is not clear, return no proposal.
+
+Return valid JSON only:
+{
+  "proposals": [
+    {
+      "type": "consolidate",
+      "memory_ids": [1, 2],
+      "subject": "exact subject when supported",
+      "category": "category",
+      "canonical_memory": "conservative consolidated fact",
+      "reason": "why these memories materially overlap",
+      "evidence_quality": "direct",
+      "confidence": 1
+    }
+  ],
+  "suggested_followups": [],
+  "confidence": 1
+}
+"""
+
+    user_prompt = (
+        "Review these stored memories for safe consolidation proposals.\n\n"
+        + json.dumps(source_payload, ensure_ascii=False, default=str)
+    )
+
+    raw = groq_request(
+        [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.05,
+    )
+
+    cleaned = clean_json_response(raw)
+    try:
+        result = json.loads(cleaned)
+    except Exception:
+        result = {"proposals": [], "suggested_followups": [], "confidence": 1}
+
+    if not isinstance(result, dict):
+        result = {"proposals": [], "suggested_followups": [], "confidence": 1}
+
+    valid_ids = {int(item["id"]) for item in memories if item.get("id") is not None}
+    proposals = []
+
+    for proposal in result.get("proposals", []):
+        if not isinstance(proposal, dict):
+            continue
+
+        raw_ids = proposal.get("memory_ids", [])
+        if not isinstance(raw_ids, list):
+            continue
+
+        memory_ids = []
+        for value in raw_ids:
+            try:
+                memory_id = int(value)
+            except Exception:
+                continue
+            if memory_id in valid_ids and memory_id not in memory_ids:
+                memory_ids.append(memory_id)
+
+        canonical = str(proposal.get("canonical_memory", "")).strip()
+        reason = str(proposal.get("reason", "")).strip()
+        if len(memory_ids) < 2 or not canonical or not reason:
+            continue
+
+        cited = [item for item in memories if int(item.get("id")) in memory_ids]
+        evidence_text = " ".join(str(item.get("memory", "")) for item in cited).lower()
+        canonical_tokens = {
+            t.lower() for t in re.findall(r"[A-Za-z0-9_'-]+", canonical) if len(t) >= 4
+        }
+        evidence_tokens = {
+            t.lower() for t in re.findall(r"[A-Za-z0-9_'-]+", evidence_text) if len(t) >= 4
+        }
+        if len(canonical_tokens & evidence_tokens) < 2:
+            continue
+
+        try:
+            confidence = max(1, min(10, int(proposal.get("confidence", 1))))
+        except Exception:
+            confidence = 1
+
+        proposals.append({
+            "type": "consolidate",
+            "memory_ids": memory_ids,
+            "subject": str(proposal.get("subject", "") or "").strip(),
+            "category": str(proposal.get("category", "general") or "general").strip(),
+            "canonical_memory": canonical,
+            "reason": reason,
+            "evidence_quality": "direct",
+            "confidence": confidence,
+        })
+
+    try:
+        overall_confidence = max(1, min(10, int(result.get("confidence", 1))))
+    except Exception:
+        overall_confidence = 1
+
+    return {
+        "proposals": proposals,
+        "suggested_followups": result.get("suggested_followups", []) if isinstance(result.get("suggested_followups", []), list) else [],
+        "confidence": overall_confidence,
+        "memory_count": len(memories),
+        "proposal_only": True,
+        "auto_saved": False,
+    }
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -4162,6 +4077,34 @@ class handler(
                     500
                 )
 
+            return
+
+
+        # ----------------------------------------------------
+        # PHASE 6 — MEMORY CONSOLIDATION PROPOSALS
+        # ----------------------------------------------------
+
+        if params.get(
+            "consolidate"
+        ) == ["true"]:
+
+            subject = params.get(
+                "subject",
+                [""],
+            )[0]
+
+            try:
+                result = build_memory_consolidation_proposals(
+                    user_id,
+                    subject=subject,
+                )
+                send_json(self, result)
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
             return
 
 
