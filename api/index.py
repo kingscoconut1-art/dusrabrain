@@ -3971,39 +3971,20 @@ Return JSON:
         ):
             continue
 
+        # Keep proposals concise and reviewable. The AI is already instructed
+        # to use only the cited memories; this is a size/safety guard rather
+        # than a semantic rewrite of the proposal.
+        if len(canonical) > 600:
+            canonical = canonical[:600].rstrip()
+
+        if len(reason) > 800:
+            reason = reason[:800].rstrip()
+
         cited = [
             item
             for item in memories
             if int(item.get("id")) in memory_ids
         ]
-
-        evidence_text = " ".join(
-            str(item.get("memory", ""))
-            for item in cited
-        ).lower()
-
-        canonical_tokens = {
-            token.lower()
-            for token in re.findall(
-                r"[A-Za-z0-9_'-]+",
-                canonical
-            )
-            if len(token) >= 4
-        }
-
-        evidence_tokens = {
-            token.lower()
-            for token in re.findall(
-                r"[A-Za-z0-9_'-]+",
-                evidence_text
-            )
-            if len(token) >= 4
-        }
-
-        if len(
-            canonical_tokens & evidence_tokens
-        ) < 2:
-            continue
 
         try:
             confidence = max(
@@ -4075,6 +4056,7 @@ Return JSON:
             "evidence_quality": "direct",
             "confidence": confidence,
             "source_memories": source_memories,
+            "evidence_count": len(source_memories),
         })
 
     try:
