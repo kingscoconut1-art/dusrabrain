@@ -3800,6 +3800,16 @@ STRICT RULES:
 - If memories describe different stages, changes, or potentially conflicting
   facts, do NOT collapse them into one fact.
 - Keep the canonical memory concise, normally 1-2 sentences.
+- PRESERVE DISTINCT DURABLE DETAILS from the cited memories. Do not replace
+  specific information with a generic statement such as "X is a user project"
+  when the cited memories contain more useful supported details.
+- If one cited memory contains a more specific scope, stage, product,
+  location, goal, or expansion detail and another cited memory confirms the
+  same underlying fact, the canonical memory should preserve that supported
+  detail.
+- The canonical memory must be information-preserving: a human should be
+  able to understand the important supported facts without reopening every
+  original memory.
 - Use only evidence IDs supplied in the input.
 - If overlap is not clear, return no proposal.
 
@@ -3885,6 +3895,17 @@ Return valid JSON only:
         except Exception:
             confidence = 1
 
+        source_memories = []
+        for item in cited:
+            source_memories.append({
+                "id": int(item.get("id")),
+                "memory": str(item.get("memory", "") or ""),
+                "subject": str(item.get("subject", "general") or "general"),
+                "category": str(item.get("category", "general") or "general"),
+                "importance": int(item.get("importance", 5) or 5),
+                "created_at": item.get("created_at"),
+            })
+
         proposals.append({
             "type": "consolidate",
             "memory_ids": memory_ids,
@@ -3894,6 +3915,7 @@ Return valid JSON only:
             "reason": reason,
             "evidence_quality": "direct",
             "confidence": confidence,
+            "source_memories": source_memories,
         })
 
     try:
