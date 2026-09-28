@@ -3345,6 +3345,13 @@ IMPORTANT:
 - A proposal must be supported by either:
   1. one stored memory that clearly mentions both concepts/entities, OR
   2. multiple explicit brain relationships that form a clear chain.
+- Prefer direct factual wording over interpretation.
+- Do NOT use words such as "implies", "suggests", "indicates", "likely",
+  "appears to", or similar inference language when the evidence does not
+  explicitly state the relationship.
+- Do not promote "bringing X from A to B" into ownership, partnership,
+  operations, exports, or other stronger claims unless the evidence explicitly
+  states that relationship.
 - Shared generic words such as "India", "project", "business", "AI", or
   "company" are NOT enough by themselves.
 - Do not propose a relationship that already exists in the supplied
@@ -3523,6 +3530,14 @@ Rules:
             }
         )
 
+    # STEP 24 — apply the conservative evidence-quality gate before
+    # previously reviewed proposals are filtered.
+    safe_proposals = apply_brain_learning_quality_gate(
+        user_id,
+        safe_proposals,
+        memories,
+    )
+
     reviewed_signatures = get_reviewed_relationship_signatures(
         user_id
     )
@@ -3590,7 +3605,248 @@ Rules:
         "relationship_count": len(relationships),
         "proposal_only": True,
         "auto_saved": False,
+        "quality_gate": "strict_evidence_v1",
+        "quality_gate_description": (
+            "Only direct evidence or explicit relationship-chain evidence "
+            "is eligible for Brain Learning proposals."
+        ),
     }
+
+
+# ============================================================
+# STEP 24 — BRAIN LEARNING EVIDENCE QUALITY GATE
+# ============================================================
+
+def apply_brain_learning_quality_gate(
+    user_id,
+    proposals,
+    memories,
+):
+    """
+    Step 24 adds a deterministic evidence-quality gate after the AI
+    relationship discovery step.
+
+    The gate is intentionally conservative:
+    - a proposal must have at least one verifiable memory/relationship reference
+    - memory evidence must contain both named entities when a memory is cited
+    - inference-heavy relationship language is blocked
+    - unsupported claims such as ownership, partnership, funding, employment,
+      or intent are blocked unless the evidence is explicitly represented
+    - confidence is capped when the evidence is indirect
+    - nothing is written to the database
+    """
+
+    if not isinstance(proposals, list):
+        return []
+
+    memory_by_id = {
+        int(memory.get("id")): memory
+        for memory in memories
+        if memory.get("id") is not None
+    }
+
+    # These relationship forms are especially prone to turning a statement
+    # into a stronger claim than the stored evidence actually supports.
+    blocked_relationship_terms = {
+        "owns",
+        "owned_by",
+        "partner",
+        "partners_with",
+        "partnered_with",
+        "funds",
+        "funded_by",
+        "invests_in",
+        "invested_in",
+        "employs",
+        "employed_by",
+        "works_for",
+        "works_with",
+        "founded_by",
+        "founded",
+        "controls",
+        "subsidiary_of",
+        "acquired_by",
+        "acquired",
+        "operates_in",
+        "based_in",
+        "located_in",
+        "headquartered_in",
+    }
+
+    inference_markers = (
+        "implies",
+        "implying",
+        "suggests",
+        "suggesting",
+        "indicates",
+        "indicating",
+        "likely",
+        "appears to",
+        "could mean",
+        "may mean",
+        "therefore",
+        "which means",
+        "presumably",
+        "possibly",
+    )
+
+    verified = []
+
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            continue
+
+        from_name = str(
+            proposal.get("from_entity") or ""
+        ).strip()
+
+        to_name = str(
+            proposal.get("to_entity") or ""
+        ).strip()
+
+        relationship_name = str(
+            proposal.get("relationship") or ""
+        ).strip()
+
+        reason = str(
+            proposal.get("reason") or ""
+        ).strip()
+
+        evidence = (
+            proposal.get("evidence", [])
+            if isinstance(proposal.get("evidence", []), list)
+            else []
+        )
+
+        if not from_name or not to_name or not relationship_name:
+            continue
+
+        relationship_key = (
+            relationship_name
+            .strip()
+            .lower()
+            .replace(" ", "_")
+            .replace("-", "_")
+        )
+
+        if relationship_key in blocked_relationship_terms:
+            continue
+
+        reason_lower = reason.lower()
+
+        # If the model itself describes the relationship as an inference,
+        # do not promote it into the structured Brain.
+        if any(
+            marker in reason_lower
+            for marker in inference_markers
+        ):
+            continue
+
+        verified_memory_evidence = []
+
+        for item in evidence:
+            reference = str(item or "").strip()
+
+            match = re.match(
+                r"^memory\s+(\d+)$",
+                reference,
+                re.IGNORECASE,
+            )
+
+            if not match:
+                continue
+
+            memory_id = int(match.group(1))
+            memory = memory_by_id.get(memory_id)
+
+            if not memory:
+                continue
+
+            memory_text = str(
+                memory.get("memory") or ""
+            ).lower()
+
+            from_present = (
+                from_name.lower()
+                in memory_text
+            )
+
+            to_present = (
+                to_name.lower()
+                in memory_text
+            )
+
+            # A single memory must explicitly mention both entities.
+            if from_present and to_present:
+                verified_memory_evidence.append(
+                    reference
+                )
+
+        # Relationship-chain evidence is allowed only when it is explicitly
+        # supplied by the discovery model. It is not enough by itself to
+        # create a new relationship if the proposal is inference-heavy.
+        verified_relationship_evidence = [
+            str(item).strip()
+            for item in evidence
+            if re.match(
+                r"^relationship\s+\d+$",
+                str(item or "").strip(),
+                re.IGNORECASE,
+            )
+        ]
+
+        if not verified_memory_evidence and not verified_relationship_evidence:
+            continue
+
+        # A proposal backed only by relationship-chain evidence is kept at a
+        # maximum of 7 unless the reason is explicitly factual.
+        try:
+            confidence = int(
+                proposal.get("confidence", 1)
+            )
+        except Exception:
+            confidence = 1
+
+        confidence = max(
+            1,
+            min(
+                10,
+                confidence,
+            ),
+        )
+
+        if (
+            not verified_memory_evidence
+            and verified_relationship_evidence
+        ):
+            confidence = min(
+                confidence,
+                7,
+            )
+
+        if confidence < 7:
+            continue
+
+        verified.append(
+            {
+                "from_entity": from_name,
+                "to_entity": to_name,
+                "relationship": relationship_name,
+                "reason": reason,
+                "evidence": (
+                    verified_memory_evidence
+                    + verified_relationship_evidence
+                )[:10],
+                "confidence": confidence,
+                "evidence_quality": (
+                    "direct"
+                    if verified_memory_evidence
+                    else "relationship_chain"
+                ),
+            }
+        )
+
+    return verified
 
 
 # ============================================================
