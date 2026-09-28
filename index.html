@@ -1164,6 +1164,48 @@
                 margin-bottom: 5px;
             }
         }
+
+
+        /* =====================================================
+           STEP 19 — CROSS-MEMORY CONNECTIONS
+        ===================================================== */
+
+        .brain-cross-memory-section {
+            margin-top: 18px;
+            background: white;
+            border-radius: 14px;
+            padding: 22px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .brain-cross-memory-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+
+        .brain-cross-memory-subtitle {
+            color: #64748b;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        .brain-cross-memory-list { display: grid; gap: 11px; }
+        .brain-cross-memory-card { border: 1px solid #e5e7eb; border-radius: 11px; padding: 15px; background: #fff; }
+        .brain-cross-memory-card-title { font-weight: 800; color: #374151; margin-bottom: 6px; }
+        .brain-cross-memory-type { display: inline-block; margin-bottom: 8px; background: #eef2ff; color: #4338ca; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+        .brain-cross-memory-text { color: #475569; line-height: 1.55; }
+        .brain-cross-memory-evidence { margin-top: 9px; color: #64748b; font-size: 12px; }
+        .brain-cross-memory-details { margin-top: 12px; border-top: 1px solid #eef2f7; padding-top: 10px; }
+        .brain-cross-memory-detail-title { font-size: 12px; font-weight: 800; color: #475569; margin-bottom: 8px; }
+        .brain-cross-memory-detail-card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px; margin-top: 7px; }
+        .brain-cross-memory-detail-label { font-size: 11px; font-weight: 800; color: #4338ca; text-transform: uppercase; margin-bottom: 4px; }
+        .brain-cross-memory-detail-text { color: #475569; line-height: 1.5; font-size: 13px; }
+        .brain-cross-memory-detail-meta { margin-top: 5px; color: #64748b; font-size: 11px; }
+        .brain-cross-memory-confidence { margin-top: 14px; color: #64748b; font-size: 13px; font-weight: 700; }
+
     </style>
 </head>
 
@@ -3579,10 +3621,12 @@
 
                 result.innerHTML =
                     '<div class="brain-empty">' +
-                        'No matching entity found in your brain for <strong>' +
+                        'No structured Brain entity found for <strong>' +
                         brainText(entityName) +
-                        '</strong>.' +
+                        '</strong>. Checking stored memories instead...' +
                     '</div>';
+
+                await appendCrossMemoryConnections(result, entityName);
 
                 return;
 
@@ -3878,6 +3922,11 @@
 
             }
 
+            await appendCrossMemoryConnections(
+                result,
+                rootEntity.name || entityName
+            );
+
         } catch (error) {
 
             result.innerHTML =
@@ -3892,6 +3941,118 @@
 
         }
 
+    }
+
+
+
+
+    // ========================================================
+    // STEP 19 — CROSS-MEMORY CONNECTIONS
+    // ========================================================
+
+    function renderCrossMemoryConnections(payload, entityName) {
+
+        const connections = payload && Array.isArray(payload.connections)
+            ? payload.connections : [];
+        const evidenceCount = payload && payload.evidence_count ? payload.evidence_count : 0;
+        const relationshipCount = payload && payload.relationship_count ? payload.relationship_count : 0;
+        const entityCount = payload && payload.entity_count ? payload.entity_count : 0;
+        const confidence = payload && payload.confidence ? payload.confidence : 0;
+
+        let html = '<div class="brain-cross-memory-section">' +
+            '<div class="brain-cross-memory-title">🔗 Cross-Memory Connections</div>' +
+            '<div class="brain-cross-memory-subtitle">Connections across stored memories, projects, products, companies, locations, and relationships. Only evidence-supported connections are shown.</div>';
+
+        if (!connections.length) {
+            html += '<div class="brain-empty">No supported cross-memory connections found for <strong>' +
+                brainText(entityName || 'this subject') + '</strong> yet.</div>' +
+                '<div class="brain-cross-memory-confidence">Evidence confidence: ' + brainText(String(confidence)) +
+                '/10 · ' + brainText(String(evidenceCount)) + ' memories · ' + brainText(String(relationshipCount)) +
+                ' relationships · ' + brainText(String(entityCount)) + ' entities</div></div>';
+            return html;
+        }
+
+        html += '<div class="brain-cross-memory-list">';
+
+        connections.forEach(function(connection) {
+            const type = connection && connection.type ? connection.type : 'connection';
+            const title = connection && connection.title ? connection.title : 'Supported connection';
+            const connectionText = connection && connection.connection ? connection.connection : '';
+            const evidence = connection && Array.isArray(connection.evidence) ? connection.evidence : [];
+
+            html += '<div class="brain-cross-memory-card">' +
+                '<div class="brain-cross-memory-type">' + brainText(type) + '</div>' +
+                '<div class="brain-cross-memory-card-title">' + brainText(title) + '</div>' +
+                '<div class="brain-cross-memory-text">' + brainText(connectionText || 'No connection description was returned.') + '</div>' +
+                '<div class="brain-cross-memory-evidence">Evidence: ' +
+                    brainText(evidence.length ? evidence.join(' · ') : 'No evidence reference returned') + '</div>';
+
+            const details = connection && connection.evidence_details ? connection.evidence_details : null;
+            if (details) {
+                const memories = Array.isArray(details.memories) ? details.memories : [];
+                const relationships = Array.isArray(details.relationships) ? details.relationships : [];
+                if (memories.length || relationships.length) {
+                    html += '<div class="brain-cross-memory-details"><div class="brain-cross-memory-detail-title">Evidence details</div>';
+
+                    memories.forEach(function(memory) {
+                        html += '<div class="brain-cross-memory-detail-card">' +
+                            '<div class="brain-cross-memory-detail-label">Memory #' + brainText(String(memory.id || '')) + '</div>' +
+                            '<div class="brain-cross-memory-detail-text">' + brainText(memory.memory || '') + '</div>' +
+                            '<div class="brain-cross-memory-detail-meta">Subject: ' + brainText(memory.subject || 'general') +
+                            ' · Category: ' + brainText(memory.category || 'general') +
+                            ' · Importance: ' + brainText(String(memory.importance || 0)) + '/10</div></div>';
+                    });
+
+                    relationships.forEach(function(relationship) {
+                        html += '<div class="brain-cross-memory-detail-card">' +
+                            '<div class="brain-cross-memory-detail-label">Relationship #' + brainText(String(relationship.id || '')) + '</div>' +
+                            '<div class="brain-cross-memory-detail-text">' + brainText(
+                                (relationship.from || '') + ' → ' + (relationship.relationship || 'related_to') + ' → ' + (relationship.to || '')
+                            ) + '</div>' +
+                            '<div class="brain-cross-memory-detail-meta">' + brainText(relationship.from_type || 'entity') +
+                            ' → ' + brainText(relationship.to_type || 'entity') +
+                            ' · Confidence: ' + brainText(String(relationship.confidence || 0)) + '/10</div></div>';
+                    });
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+        });
+
+        html += '</div><div class="brain-cross-memory-confidence">Evidence confidence: ' + brainText(String(confidence)) +
+            '/10 · ' + brainText(String(evidenceCount)) + ' memories · ' + brainText(String(relationshipCount)) +
+            ' relationships · ' + brainText(String(entityCount)) + ' entities</div></div>';
+        return html;
+    }
+
+    async function loadCrossMemoryConnections(entityName) {
+        try {
+            const response = await fetch('/api?cross_memory=true&name=' + encodeURIComponent(entityName || '') + '&_=' + Date.now(), {
+                method: 'GET', cache: 'no-store', headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Unable to load cross-memory connections.');
+            return data;
+        } catch (error) {
+            return { entity: null, connections: [], confidence: 0, evidence_count: 0, relationship_count: 0, entity_count: 0,
+                error: error && error.message ? error.message : 'Unable to load cross-memory connections.' };
+        }
+    }
+
+    async function appendCrossMemoryConnections(result, entityName) {
+        const placeholder = document.createElement('div');
+        placeholder.innerHTML = '<div class="brain-cross-memory-section"><div class="brain-cross-memory-title">🔗 Cross-Memory Connections</div><div class="loading">Looking across stored memories and relationships...</div></div>';
+        result.appendChild(placeholder.firstElementChild);
+        const data = await loadCrossMemoryConnections(entityName);
+        const sections = result.querySelectorAll('.brain-cross-memory-section');
+        const section = sections.length ? sections[sections.length - 1] : null;
+        if (section) {
+            if (data.error) {
+                section.innerHTML = '<div class="brain-cross-memory-title">🔗 Cross-Memory Connections</div><div class="brain-empty">Cross-memory analysis could not be generated. ' + brainText(data.error) + '</div>';
+            } else {
+                section.outerHTML = renderCrossMemoryConnections(data, entityName);
+            }
+        }
     }
 
 
