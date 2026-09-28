@@ -898,6 +898,47 @@
             font-size: 12px;
         }
 
+        .brain-insight-evidence-details {
+            margin-top: 12px;
+            border-top: 1px solid #eef2f7;
+            padding-top: 10px;
+        }
+
+        .brain-insight-evidence-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+
+        .brain-evidence-detail-card {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 9px;
+            padding: 10px 12px;
+            margin-top: 7px;
+        }
+
+        .brain-evidence-detail-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #4338ca;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .brain-evidence-detail-text {
+            color: #475569;
+            line-height: 1.5;
+            font-size: 13px;
+        }
+
+        .brain-evidence-detail-meta {
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 11px;
+        }
+
         .brain-insights-focus {
             margin-top: 16px;
             border-radius: 11px;
@@ -3318,6 +3359,91 @@
                 ? payload.suggested_next_focus
                 : [];
 
+        function renderEvidenceDetails(details) {
+
+            if (!details || typeof details !== "object") {
+                return "";
+            }
+
+            const memories =
+                Array.isArray(details.memories)
+                    ? details.memories
+                    : [];
+
+            const relationships =
+                Array.isArray(details.relationships)
+                    ? details.relationships
+                    : [];
+
+            if (!memories.length && !relationships.length) {
+                return '<div class="brain-insight-evidence-details">' +
+                    '<div class="brain-insight-evidence-title">Evidence details</div>' +
+                    '<div class="brain-evidence-detail-text">' +
+                        'No direct supporting memory or relationship record was returned for this insight.' +
+                    '</div>' +
+                '</div>';
+            }
+
+            let html =
+                '<div class="brain-insight-evidence-details">' +
+                    '<div class="brain-insight-evidence-title">Evidence details</div>';
+
+            if (memories.length) {
+                html += memories.map(function(memory) {
+                    return '<div class="brain-evidence-detail-card">' +
+                        '<div class="brain-evidence-detail-label">Memory #' +
+                            brainText(String(memory.id || "")) +
+                        '</div>' +
+                        '<div class="brain-evidence-detail-text">' +
+                            brainText(String(memory.memory || "")) +
+                        '</div>' +
+                        '<div class="brain-evidence-detail-meta">' +
+                            brainText(String(memory.subject || "general")) +
+                            ' · ' +
+                            brainText(String(memory.category || "general")) +
+                            ' · Importance ' +
+                            brainText(String(memory.importance || 0)) +
+                            '/10' +
+                            (memory.created_at
+                                ? ' · ' + brainText(String(memory.created_at))
+                                : '') +
+                        '</div>' +
+                    '</div>';
+                }).join("");
+            }
+
+            if (relationships.length) {
+                html += relationships.map(function(relationship) {
+                    return '<div class="brain-evidence-detail-card">' +
+                        '<div class="brain-evidence-detail-label">Relationship #' +
+                            brainText(String(relationship.id || "")) +
+                        '</div>' +
+                        '<div class="brain-evidence-detail-text">' +
+                            brainText(String(relationship.from || "")) +
+                            ' → ' +
+                            brainText(String(relationship.relationship || "")) +
+                            ' → ' +
+                            brainText(String(relationship.to || "")) +
+                        '</div>' +
+                        '<div class="brain-evidence-detail-meta">' +
+                            brainText(String(relationship.from_type || "")) +
+                            ' → ' +
+                            brainText(String(relationship.to_type || "")) +
+                            ' · Confidence ' +
+                            brainText(String(relationship.confidence || 0)) +
+                            '/10' +
+                            (relationship.created_at
+                                ? ' · ' + brainText(String(relationship.created_at))
+                                : '') +
+                        '</div>' +
+                    '</div>';
+                }).join("");
+            }
+
+            html += '</div>';
+            return html;
+        }
+
         const insightHtml = insights.length
             ? insights.map(function(item) {
                 const evidence = Array.isArray(item.evidence)
@@ -3335,10 +3461,11 @@
                         brainText(String(item.insight || '')) +
                     '</div>' +
                     (evidence.length
-                        ? '<div class="brain-insight-evidence">Evidence: ' +
+                        ? '<div class="brain-insight-evidence">Evidence references: ' +
                             brainText(evidence.join(' · ')) +
                           '</div>'
                         : '') +
+                    renderEvidenceDetails(item.evidence_details) +
                 '</div>';
             }).join('')
             : '<div class="brain-empty">No additional insights were identified from the current evidence.</div>';
