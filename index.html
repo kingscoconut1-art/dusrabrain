@@ -4025,7 +4025,7 @@
                 rootEntity.name || entityName
             );
 
-            await appendBrainLearning(
+            appendBrainLearningLauncher(
                 result
             );
 
@@ -4307,6 +4307,142 @@
             renderBrainLearning(
                 data
             );
+
+    }
+
+
+    function appendBrainLearningLauncher(result) {
+
+        const placeholder =
+            document.createElement("div");
+
+        placeholder.innerHTML =
+            '<div class="brain-learning-section">' +
+                '<div class="brain-learning-title">🧠 Brain Learning</div>' +
+                '<div class="brain-learning-subtitle">' +
+                    'Run relationship discovery when you want it. ' +
+                    'This is manual to avoid unnecessary AI API calls and rate limits.' +
+                '</div>' +
+                '<button type="button" class="brain-learning-approve" ' +
+                    'id="runBrainLearningButton">' +
+                    '🔍 Discover New Relationships' +
+                '</button>' +
+                '<div class="brain-learning-status" id="brainLearningLauncherStatus"></div>' +
+            '</div>';
+
+        result.appendChild(
+            placeholder.firstElementChild
+        );
+
+        const button =
+            result.querySelector(
+                "#runBrainLearningButton"
+            );
+
+        if (!button) {
+            return;
+        }
+
+        button.addEventListener(
+            "click",
+            async function() {
+
+                button.disabled = true;
+                button.style.opacity = "0.6";
+
+                const status =
+                    result.querySelector(
+                        "#brainLearningLauncherStatus"
+                    );
+
+                if (status) {
+                    status.textContent =
+                        "Reviewing stored evidence...";
+                }
+
+                const data =
+                    await loadBrainLearning();
+
+                const section =
+                    result.querySelector(
+                        ".brain-learning-section"
+                    );
+
+                if (!section) {
+                    return;
+                }
+
+                if (data.error) {
+
+                    section.innerHTML =
+                        '<div class="brain-learning-title">🧠 Brain Learning</div>' +
+                        '<div class="brain-learning-subtitle">' +
+                            'Brain Learning could not be generated. ' +
+                            'You can try again later when the AI rate limit resets.' +
+                        '</div>' +
+                        '<div class="brain-learning-status">' +
+                            brainText(data.error) +
+                        '</div>' +
+                        '<button type="button" class="brain-learning-approve" ' +
+                            'id="runBrainLearningRetryButton">' +
+                            '↻ Try Again' +
+                        '</button>';
+
+                    const retry =
+                        section.querySelector(
+                            "#runBrainLearningRetryButton"
+                        );
+
+                    if (retry) {
+                        retry.addEventListener(
+                            "click",
+                            function() {
+                                section.outerHTML =
+                                    '<div class="brain-learning-section">' +
+                                        '<div class="brain-learning-title">🧠 Brain Learning</div>' +
+                                        '<div class="loading">Reviewing stored evidence...</div>' +
+                                    '</div>';
+
+                                const freshSection =
+                                    result.querySelector(
+                                        ".brain-learning-section:last-of-type"
+                                    );
+
+                                if (freshSection) {
+                                    const freshButton =
+                                        document.createElement("button");
+
+                                    freshButton.type = "button";
+                                    freshButton.className = "brain-learning-approve";
+                                    freshButton.textContent = "🔍 Discover New Relationships";
+
+                                    freshSection.appendChild(
+                                        freshButton
+                                    );
+
+                                    freshButton.addEventListener(
+                                        "click",
+                                        function() {
+                                            appendBrainLearningLauncher(
+                                                result
+                                            );
+                                        }
+                                    );
+                                }
+                            }
+                        );
+                    }
+
+                    return;
+                }
+
+                section.outerHTML =
+                    renderBrainLearning(
+                        data
+                    );
+
+            }
+        );
 
     }
 
