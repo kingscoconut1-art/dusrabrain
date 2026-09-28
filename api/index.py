@@ -5873,13 +5873,14 @@ class handler(
 
             subject = params.get("subject", [""])[0]
             status = params.get("status", [""])[0]
+            limit = params.get("limit", ["100"])[0]
 
             try:
                 reviews = get_memory_consolidation_reviews(
                     user_id,
                     subject=subject,
                     status=status,
-                    limit=params.get("limit", ["100"])[0],
+                    limit=limit,
                 )
 
                 send_json(
@@ -5887,7 +5888,9 @@ class handler(
                     {
                         "reviews": reviews,
                         "count": len(reviews),
-                        "summary": get_memory_consolidation_review_summary(user_id),
+                        "summary": get_memory_consolidation_review_summary(
+                            user_id
+                        ),
                         "read_only": True,
                     }
                 )
