@@ -4059,6 +4059,9 @@
                 ? payload.proposals
                 : [];
 
+        window.brainLearningProposals =
+            proposals;
+
         const confidence =
             payload && payload.confidence
                 ? payload.confidence
@@ -4448,22 +4451,7 @@
 
 
     window.reviewBrainLearningProposal =
-        function(index, approved) {
-
-            const status =
-                document.getElementById(
-                    'brainLearningStatus' +
-                    String(index)
-                );
-
-            if (status) {
-
-                status.textContent =
-                    approved
-                        ? 'Approved for review — database writing will be added in the next approval layer.'
-                        : 'Rejected — this proposal will not be saved.';
-
-            }
+        async function(index, approved) {
 
             const card =
                 document.querySelector(
@@ -4472,20 +4460,134 @@
                     '"]'
                 );
 
-            if (card) {
+            const status =
+                document.getElementById(
+                    'brainLearningStatus' +
+                    String(index)
+                );
 
-                const buttons =
-                    card.querySelectorAll(
-                        'button'
+            if (!card) {
+                return;
+            }
+
+            const proposal =
+                window.brainLearningProposals &&
+                window.brainLearningProposals[index]
+                    ? window.brainLearningProposals[index]
+                    : null;
+
+            if (!proposal) {
+
+                if (status) {
+                    status.textContent =
+                        'Proposal data is unavailable. Please run Brain Learning again.';
+                }
+
+                return;
+            }
+
+            const buttons =
+                card.querySelectorAll(
+                    'button'
+                );
+
+            buttons.forEach(
+                function(button) {
+                    button.disabled = true;
+                    button.style.opacity = '0.6';
+                    button.style.cursor = 'default';
+                }
+            );
+
+            if (status) {
+                status.textContent =
+                    approved
+                        ? 'Saving approved relationship...'
+                        : 'Recording rejection...';
+            }
+
+            try {
+
+                const response =
+                    await fetch(
+                        '/api',
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(
+                                {
+                                    action:
+                                        approved
+                                            ? 'approve_brain_learning'
+                                            : 'reject_brain_learning',
+
+                                    user_id:
+                                        'default_user',
+
+                                    proposal:
+                                        proposal
+                                }
+                            )
+                        }
                     );
+
+                const data =
+                    await response.json();
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        data.error ||
+                        'Unable to process the proposal.'
+                    );
+
+                }
+
+                if (status) {
+
+                    status.textContent =
+                        approved
+                            ? (
+                                '✓ Approved and saved to the Brain.' +
+                                (
+                                    data.relationship_id
+                                        ? ' Relationship #' +
+                                          String(
+                                              data.relationship_id
+                                          ) +
+                                          '.'
+                                        : ''
+                                )
+                            )
+                            : '✓ Rejected and recorded. It will not be proposed again.';
+
+                }
+
+                card.style.opacity = '0.75';
+
+            } catch (error) {
 
                 buttons.forEach(
                     function(button) {
-                        button.disabled = true;
-                        button.style.opacity = '0.6';
-                        button.style.cursor = 'default';
+                        button.disabled = false;
+                        button.style.opacity = '1';
+                        button.style.cursor = 'pointer';
                     }
                 );
+
+                if (status) {
+                    status.textContent =
+                        'Error: ' +
+                        (
+                            error &&
+                            error.message
+                                ? error.message
+                                : 'Unable to process the proposal.'
+                        );
+                }
 
             }
 
