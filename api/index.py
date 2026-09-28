@@ -1944,6 +1944,155 @@ def get_brain_relationships(
 
 
 # ============================================================
+# BRAIN INTELLIGENCE
+# ============================================================
+
+def generate_brain_intelligence(
+    user_id,
+    entity_name,
+):
+
+    entity_name = str(
+        entity_name or ""
+    ).strip()
+
+    if not entity_name:
+        return {
+            "entity": None,
+            "intelligence": None,
+            "error": "Entity name is required",
+        }
+
+    graph = explore_brain_graph(
+        user_id,
+        entity_name,
+        max_depth=3,
+        limit=100,
+    )
+
+    if not graph.get("entity"):
+        return {
+            "entity": None,
+            "intelligence": None,
+            "error": "Entity not found",
+        }
+
+    root = graph["entity"]
+
+    all_memories = get_all_user_memories(
+        user_id,
+        limit=500,
+    )
+
+    target = entity_name.lower()
+
+    memories = []
+
+    for memory in all_memories:
+
+        subject = str(
+            memory.get("subject") or ""
+        ).lower()
+
+        text = str(
+            memory.get("memory") or ""
+        ).lower()
+
+        if (
+            subject == target
+            or target in text
+        ):
+            memories.append(memory)
+
+    memories = memories[:30]
+
+    source_payload = {
+        "entity": root,
+        "connected_entities": graph.get(
+            "entities", []
+        ),
+        "relationships": graph.get(
+            "relationships", []
+        ),
+        "memories": memories,
+    }
+
+    system_prompt = """
+You are the Brain Intelligence layer of Dusra Brain.
+
+Your job is to synthesize only the information explicitly provided in the
+source data. Do not invent facts, motivations, plans, dates, people, numbers,
+or relationships. Do not treat a missing detail as true.
+
+Return valid JSON only with exactly these keys:
+{
+  "summary": "short factual summary",
+  "key_facts": ["fact 1", "fact 2"],
+  "current_state": ["current known state 1"],
+  "open_questions": ["question 1", "question 2"],
+  "confidence": 1
+}
+
+Rules:
+- summary must be 1-3 sentences.
+- key_facts must contain only supported facts.
+- current_state must describe only what the stored data supports.
+- open_questions should contain useful unanswered questions only when the data
+  shows that the information is missing. If none are justified, return [].
+- confidence is an integer from 1 to 10 representing how complete the supplied
+  evidence is for understanding the entity, not how important the entity is.
+"""
+
+    user_prompt = (
+        "Create a factual intelligence summary for this Dusra Brain entity.\n\n"
+        + json.dumps(
+            source_payload,
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+
+    raw = groq_request(
+        [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
+            },
+        ],
+        temperature=0.1,
+    )
+
+    cleaned = clean_json_response(raw)
+
+    try:
+        intelligence = json.loads(cleaned)
+    except Exception:
+        intelligence = {
+            "summary": str(raw).strip(),
+            "key_facts": [],
+            "current_state": [],
+            "open_questions": [],
+            "confidence": 1,
+        }
+
+    return {
+        "entity": root,
+        "intelligence": intelligence,
+        "evidence_count": len(memories),
+        "relationship_count": len(
+            graph.get("relationships", [])
+        ),
+        "entity_count": len(
+            graph.get("entities", [])
+        ),
+    }
+
+
+# ============================================================
 # BRAIN EXPLORER
 # ============================================================
 
@@ -2402,6 +2551,45 @@ class handler(
                         "count":
                             len(entities),
                     }
+                )
+
+            except Exception as error:
+
+                send_json(
+                    self,
+                    {
+                        "error":
+                            str(error)
+                    },
+                    500
+                )
+
+            return
+
+
+        # ----------------------------------------------------
+        # BRAIN INTELLIGENCE
+        # ----------------------------------------------------
+
+        if params.get(
+            "intelligence"
+        ) == ["true"]:
+
+            entity_name = params.get(
+                "name",
+                [""]
+            )[0]
+
+            try:
+
+                result = generate_brain_intelligence(
+                    user_id,
+                    entity_name,
+                )
+
+                send_json(
+                    self,
+                    result
                 )
 
             except Exception as error:
