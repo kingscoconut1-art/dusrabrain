@@ -1321,6 +1321,103 @@
            PHASE 6 — STEP 1A — MEMORY CONSOLIDATION
         ===================================================== */
 
+
+        .memory-version-section {
+            margin-top: 22px;
+            padding: 22px;
+            border-radius: 18px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .memory-version-title {
+            font-size: 21px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .memory-version-subtitle {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .memory-version-list {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .memory-version-group {
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 16px;
+            background: #f8fafc;
+        }
+
+        .memory-version-group-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #334155;
+            margin-bottom: 12px;
+        }
+
+        .memory-version-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px;
+            background: #ffffff;
+            margin-top: 10px;
+        }
+
+        .memory-version-card.current {
+            border-width: 2px;
+        }
+
+        .memory-version-badge {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            color: #475569;
+            margin-bottom: 9px;
+        }
+
+        .memory-version-card.current .memory-version-badge {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .memory-version-text {
+            color: #1e293b;
+            font-size: 15px;
+            line-height: 1.65;
+        }
+
+        .memory-version-meta {
+            margin-top: 9px;
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .memory-version-change {
+            margin-top: 8px;
+            color: #475569;
+            font-size: 13px;
+        }
+
+        .memory-version-empty {
+            color: #64748b;
+            text-align: center;
+            padding: 18px;
+        }
+
         .memory-consolidation-section {
             margin-top: 18px;
             background: white;
@@ -4178,6 +4275,11 @@
                 result
             );
 
+            appendMemoryVersionHistoryLauncher(
+                result,
+                rootEntity.name || entityName
+            );
+
         } catch (error) {
 
             result.innerHTML =
@@ -6421,6 +6523,359 @@
 
     }
 
+
+
+    // ========================================================
+    // PHASE 6 — STEP 2D — MEMORY VERSION HISTORY UI
+    // ========================================================
+
+    let loadedMemoryVersionHistory = [];
+
+    async function loadMemoryVersionHistory(subject) {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api?memory_versions=true&subject=" +
+                    encodeURIComponent(subject || "") +
+                    "&_=" +
+                    Date.now(),
+                    {
+                        method: "GET",
+                        cache: "no-store",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Unable to load memory version history."
+                );
+
+            }
+
+            return data;
+
+        } catch (error) {
+
+            return {
+                versions: [],
+                count: 0,
+                summary: {
+                    version_count: 0,
+                    memory_count: 0,
+                    highest_version: 0
+                },
+                error:
+                    error && error.message
+                        ? error.message
+                        : "Unable to load memory version history."
+            };
+
+        }
+
+    }
+
+
+    function renderMemoryVersionHistory(
+        data,
+        subject
+    ) {
+
+        const versions =
+            data && Array.isArray(data.versions)
+                ? data.versions
+                : [];
+
+        loadedMemoryVersionHistory =
+            versions;
+
+        let html =
+            '<div class="memory-version-section">' +
+                '<div class="memory-version-title">🕒 Memory Version History</div>' +
+                '<div class="memory-version-subtitle">' +
+                    'Dusra Brain preserves previous memory states when a memory changes. ' +
+                    '<strong>Historical versions are read-only evidence; the current version is clearly marked.</strong>' +
+                '</div>';
+
+        if (data && data.error) {
+
+            html +=
+                '<div class="memory-version-empty">' +
+                    brainText(data.error) +
+                '</div>' +
+            '</div>';
+
+            return html;
+
+        }
+
+        if (!versions.length) {
+
+            html +=
+                '<div class="memory-version-empty">' +
+                    'No version history is available for ' +
+                    brainText(subject || "this subject") +
+                    ' yet.' +
+                '</div>' +
+                '<div class="memory-version-meta">' +
+                    'Version history is created when memories are created or updated through Dusra Brain.' +
+                '</div>' +
+            '</div>';
+
+            return html;
+
+        }
+
+        const grouped = {};
+
+        versions.forEach(function(version) {
+
+            const memoryId =
+                String(
+                    version.memory_id
+                );
+
+            if (!grouped[memoryId]) {
+                grouped[memoryId] = [];
+            }
+
+            grouped[memoryId].push(
+                version
+            );
+
+        });
+
+        html +=
+            '<div class="memory-version-list">';
+
+        Object.keys(grouped)
+            .sort(function(a, b) {
+                return Number(a) - Number(b);
+            })
+            .forEach(function(memoryId) {
+
+                const memoryVersions =
+                    grouped[memoryId].slice().sort(
+                        function(a, b) {
+                            return Number(
+                                b.version_number || 0
+                            ) - Number(
+                                a.version_number || 0
+                            );
+                        }
+                    );
+
+                html +=
+                    '<div class="memory-version-group">' +
+                        '<div class="memory-version-group-title">' +
+                            'Memory #' +
+                            brainText(memoryId) +
+                        '</div>';
+
+                memoryVersions.forEach(function(version) {
+
+                    const isCurrent =
+                        Boolean(
+                            version.is_current
+                        );
+
+                    html +=
+                        '<div class="memory-version-card ' +
+                            (
+                                isCurrent
+                                    ? 'current'
+                                    : ''
+                            ) +
+                        '">' +
+
+                            '<div class="memory-version-badge">' +
+                                (
+                                    isCurrent
+                                        ? '🟢 Current'
+                                        : 'Version'
+                                ) +
+                                ' ' +
+                                brainText(
+                                    String(
+                                        version.version_number ||
+                                        0
+                                    )
+                                ) +
+                            '</div>' +
+
+                            '<div class="memory-version-text">' +
+                                brainText(
+                                    version.memory ||
+                                    "No memory text available."
+                                ) +
+                            '</div>' +
+
+                            '<div class="memory-version-meta">' +
+                                'Category: ' +
+                                brainText(
+                                    version.category ||
+                                    "general"
+                                ) +
+                                ' · Importance: ' +
+                                brainText(
+                                    String(
+                                        version.importance ||
+                                        0
+                                    )
+                                ) +
+                                '/10' +
+                                (
+                                    version.created_at
+                                        ? ' · ' +
+                                          brainText(
+                                              new Date(
+                                                  version.created_at
+                                              ).toLocaleString()
+                                          )
+                                        : ''
+                                ) +
+                            '</div>' +
+
+                            '<div class="memory-version-change">' +
+                                '<strong>Change:</strong> ' +
+                                brainText(
+                                    version.change_type ||
+                                    "unknown"
+                                ) +
+                                (
+                                    version.change_reason
+                                        ? ' · ' +
+                                          brainText(
+                                              version.change_reason
+                                          )
+                                        : ''
+                                ) +
+                            '</div>' +
+
+                        '</div>';
+
+                });
+
+                html +=
+                    '</div>';
+
+            });
+
+        html +=
+            '</div>' +
+            '<div class="memory-version-meta">' +
+                brainText(
+                    String(
+                        data.summary &&
+                        data.summary.version_count
+                            ? data.summary.version_count
+                            : versions.length
+                    )
+                ) +
+                ' version record(s) · ' +
+                brainText(
+                    String(
+                        data.summary &&
+                        data.summary.memory_count
+                            ? data.summary.memory_count
+                            : Object.keys(grouped).length
+                    )
+                ) +
+                ' memory record(s) · Historical versions are preserved.' +
+            '</div>' +
+            '</div>';
+
+        return html;
+
+    }
+
+
+    async function appendMemoryVersionHistoryLauncher(
+        result,
+        subject
+    ) {
+
+        const placeholder =
+            document.createElement(
+                "div"
+            );
+
+        placeholder.innerHTML =
+            '<div class="memory-version-section">' +
+                '<div class="memory-version-title">🕒 Memory Version History</div>' +
+                '<div class="memory-version-subtitle">' +
+                    'View how stored memories for this subject changed over time. ' +
+                    '<strong>This is manual and does not create any AI API call.</strong>' +
+                '</div>' +
+                '<button type="button" class="memory-consolidation-review" id="runMemoryVersionHistoryButton">' +
+                    '🕒 View Memory History' +
+                '</button>' +
+                '<div class="memory-consolidation-status" id="memoryVersionHistoryLauncherStatus"></div>' +
+            '</div>';
+
+        result.appendChild(
+            placeholder.firstElementChild
+        );
+
+        const button =
+            result.querySelector(
+                "#runMemoryVersionHistoryButton"
+            );
+
+        if (!button) {
+            return;
+        }
+
+        button.addEventListener(
+            "click",
+            async function() {
+
+                button.disabled = true;
+                button.style.opacity = "0.6";
+
+                const status =
+                    result.querySelector(
+                        "#memoryVersionHistoryLauncherStatus"
+                    );
+
+                if (status) {
+                    status.textContent =
+                        "Loading preserved memory versions...";
+                }
+
+                const data =
+                    await loadMemoryVersionHistory(
+                        subject
+                    );
+
+                const section =
+                    result.querySelector(
+                        ".memory-version-section"
+                    );
+
+                if (!section) {
+                    return;
+                }
+
+                section.outerHTML =
+                    renderMemoryVersionHistory(
+                        data,
+                        subject
+                    );
+
+            }
+        );
+
+    }
 
 
     // ========================================================
