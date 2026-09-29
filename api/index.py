@@ -9642,6 +9642,23 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4E
+            # DECISION ANALYSIS ENGINE
+            # ------------------------------------------------
+
+            decision_analysis = generate_decision_analysis(
+                decision_context=decision_context,
+                decision_evidence_matrix=decision_evidence_matrix,
+                decision_readiness=decision_readiness,
+            )
+
+            decision_analysis_trace = build_decision_analysis_trace(
+                decision_readiness=decision_readiness,
+                analysis_result=decision_analysis,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9788,6 +9805,9 @@ class handler(
                     "decision_readiness_trace":
                         decision_readiness_trace,
 
+                    "decision_analysis_trace":
+                        decision_analysis_trace,
+
                     "session_id":
                         session_id,
 
@@ -9893,6 +9913,162 @@ def build_decision_readiness_trace(decision_evidence_matrix, readiness_result):
         "missing_requirements": list(result.get("missing_requirements", []) or []),
         "evidence_coverage": float(result.get("evidence_coverage", 0.0) or 0.0),
         "evidence_source_count": int(result.get("evidence_source_count", 0) or 0),
+    }
+
+
+
+# ============================================================
+# PHASE 7 — STEP 4E
+# DECISION ANALYSIS ENGINE
+# ============================================================
+
+def validate_decision_analysis_result(result, decision_context, decision_evidence_matrix):
+    """Validate model-produced analysis against supplied decision context."""
+    value = result if isinstance(result, dict) else {}
+    context = decision_context if isinstance(decision_context, dict) else {}
+    matrix = decision_evidence_matrix if isinstance(decision_evidence_matrix, dict) else {}
+
+    allowed_options = context.get("options", [])
+    allowed_options = allowed_options if isinstance(allowed_options, list) else []
+    allowed_option_text = {str(item).strip() for item in allowed_options if str(item).strip()}
+
+    raw_options = value.get("option_analysis", [])
+    raw_options = raw_options if isinstance(raw_options, list) else []
+    clean_options = []
+    for item in raw_options[:20]:
+        if not isinstance(item, dict):
+            continue
+        option = str(item.get("option") or "").strip()
+        if not option:
+            continue
+        if allowed_option_text and option not in allowed_option_text:
+            continue
+        clean_options.append({
+            "option": option,
+            "supporting_evidence": item.get("supporting_evidence", []) if isinstance(item.get("supporting_evidence", []), list) else [],
+            "benefits": item.get("benefits", []) if isinstance(item.get("benefits", []), list) else [],
+            "risks": item.get("risks", []) if isinstance(item.get("risks", []), list) else [],
+            "tradeoffs": item.get("tradeoffs", []) if isinstance(item.get("tradeoffs", []), list) else [],
+            "unknowns": item.get("unknowns", []) if isinstance(item.get("unknowns", []), list) else [],
+        })
+
+    dimensions = value.get("comparison_dimensions", [])
+    dimensions = dimensions if isinstance(dimensions, list) else []
+    questions = value.get("unresolved_questions", [])
+    questions = questions if isinstance(questions, list) else []
+
+    return {
+        "decision_summary": str(value.get("decision_summary") or "").strip(),
+        "option_analysis": clean_options,
+        "comparison_dimensions": [str(x).strip() for x in dimensions[:20] if str(x).strip()],
+        "unresolved_questions": [str(x).strip() for x in questions[:20] if str(x).strip()],
+        "evidence_source_count": int(matrix.get("evidence_source_count", 0) or 0),
+        "grounded": bool(matrix.get("evidence_source_count", 0)),
+    }
+
+
+def generate_decision_analysis(decision_context, decision_evidence_matrix, decision_readiness):
+    """Analyze a decision only when Step 4D says the context is ready."""
+    context = decision_context if isinstance(decision_context, dict) else {}
+    matrix = decision_evidence_matrix if isinstance(decision_evidence_matrix, dict) else {}
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+
+    if not bool(readiness.get("ready", False)):
+        return {
+            "built": True,
+            "analyzed": False,
+            "status": "not_ready",
+            "reason": str(readiness.get("reason") or "decision_not_ready"),
+            "analysis": {},
+        }
+
+    evidence = matrix.get("supporting_evidence", [])
+    evidence = evidence if isinstance(evidence, list) else []
+    supplied = {
+        "decision": context.get("decision", []),
+        "options": context.get("options", []),
+        "goals": context.get("goals", []),
+        "constraints": context.get("constraints", []),
+        "risks": context.get("risks", []),
+        "uncertainties": context.get("uncertainties", []),
+        "tradeoffs": context.get("tradeoffs", []),
+        "evidence": evidence[:10],
+    }
+
+    system_prompt = f"""You are the Decision Analysis Engine for Dusra Brain.
+Analyze ONLY the supplied decision context and evidence.
+Do not invent facts, options, risks, benefits, numbers, dates, or relationships.
+Do not make the decision and do not recommend an option.
+Preserve uncertainty and explicitly surface unresolved questions.
+
+SUPPLIED DECISION CONTEXT:
+{supplied}
+
+Return ONLY valid JSON:
+{{
+  "decision_summary": "",
+  "option_analysis": [
+    {{
+      "option": "",
+      "supporting_evidence": [],
+      "benefits": [],
+      "risks": [],
+      "tradeoffs": [],
+      "unknowns": []
+    }}
+  ],
+  "comparison_dimensions": [],
+  "unresolved_questions": []
+}}
+"""
+
+    try:
+        raw = groq_request(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "Analyze the supplied decision context."},
+            ],
+            temperature=0,
+        )
+        parsed = json.loads(clean_json_response(raw))
+        analysis = validate_decision_analysis_result(parsed, context, matrix)
+        return {
+            "built": True,
+            "analyzed": True,
+            "status": "analyzed",
+            "reason": "decision_context_ready",
+            "analysis": analysis,
+        }
+    except Exception:
+        return {
+            "built": True,
+            "analyzed": False,
+            "status": "failed",
+            "reason": "decision_analysis_failed",
+            "analysis": {},
+        }
+
+
+def build_decision_analysis_trace(decision_readiness, analysis_result):
+    """Compact public verification trace for Step 4E."""
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    result = analysis_result if isinstance(analysis_result, dict) else {}
+    analysis = result.get("analysis", {})
+    analysis = analysis if isinstance(analysis, dict) else {}
+    option_analysis = analysis.get("option_analysis", [])
+    option_analysis = option_analysis if isinstance(option_analysis, list) else []
+    unresolved = analysis.get("unresolved_questions", [])
+    unresolved = unresolved if isinstance(unresolved, list) else []
+
+    return {
+        "built": bool(result.get("built", False)),
+        "analyzed": bool(result.get("analyzed", False)),
+        "status": str(result.get("status") or "failed"),
+        "reason": str(result.get("reason") or "unknown"),
+        "readiness_status": str(readiness.get("status") or "not_ready"),
+        "option_analysis_count": len(option_analysis),
+        "unresolved_question_count": len(unresolved),
+        "evidence_source_count": int(analysis.get("evidence_source_count", 0) or 0),
     }
 
     # ========================================================
