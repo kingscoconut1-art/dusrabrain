@@ -8127,6 +8127,141 @@ def build_reasoning_quality_trace(
 
 
 
+# ============================================================
+# PHASE 7 — STEP 4C
+# DECISION EVIDENCE MATRIX
+# ============================================================
+
+def build_decision_evidence_matrix(
+    decision_context,
+    interpretation,
+):
+    """Build a deterministic, read-only decision evidence matrix."""
+    context = decision_context if isinstance(decision_context, dict) else {}
+    interpreted = interpretation if isinstance(interpretation, dict) else {}
+
+    evidence = context.get("evidence_trace", [])
+    evidence = evidence if isinstance(evidence, list) else []
+
+    evidence_items = []
+    seen = set()
+    for item in evidence[:10]:
+        if not isinstance(item, dict):
+            continue
+        source_type = str(item.get("source_type") or "").strip()
+        source_id = item.get("source_id")
+        text_value = str(item.get("text") or "").strip()
+        key = (source_type, str(source_id), text_value)
+        if key in seen:
+            continue
+        seen.add(key)
+        evidence_items.append({
+            "source_type": source_type,
+            "source_id": source_id,
+            "label": str(item.get("label") or "").strip(),
+            "text": text_value,
+        })
+
+    fields = [
+        "decision",
+        "options",
+        "goals",
+        "constraints",
+        "risks",
+        "uncertainties",
+        "tradeoffs",
+    ]
+
+    field_status = {}
+    supported_field_count = 0
+    for field in fields:
+        value = context.get(field, [])
+        values = value if isinstance(value, list) else []
+        present = bool(values)
+        field_status[field] = {
+            "present": present,
+            "count": len(values),
+        }
+        if present:
+            supported_field_count += 1
+
+    missing = context.get("missing_information", [])
+    missing = missing if isinstance(missing, list) else []
+    missing_items = [
+        str(item).strip()
+        for item in missing[:20]
+        if str(item or "").strip()
+    ]
+
+    total_fields = len(fields)
+    evidence_coverage = (
+        round(supported_field_count / total_fields, 3)
+        if total_fields
+        else 0.0
+    )
+
+    decision_present = bool(context.get("decision"))
+    options_value = context.get("options", [])
+    option_count = len(options_value) if isinstance(options_value, list) else 0
+    evidence_source_count = len(evidence_items)
+
+    decision_ready = bool(
+        decision_present
+        and option_count > 0
+        and evidence_source_count > 0
+        and not missing_items
+    )
+
+    return {
+        "question": str(context.get("question") or "").strip(),
+        "context_type": str(interpreted.get("context_type") or "informational"),
+        "supporting_evidence": evidence_items,
+        "evidence_source_count": evidence_source_count,
+        "field_status": field_status,
+        "supported_field_count": supported_field_count,
+        "total_decision_fields": total_fields,
+        "evidence_coverage": evidence_coverage,
+        "known_items": evidence_items,
+        "unknown_items": missing_items,
+        "missing_information": missing_items,
+        "decision_readiness": decision_ready,
+        "readiness_reason": (
+            "sufficient_explicit_decision_evidence"
+            if decision_ready
+            else "decision_context_or_evidence_incomplete"
+        ),
+    }
+
+
+def build_decision_evidence_matrix_trace(
+    matrix,
+):
+    """Return a compact public verification trace for Step 4C."""
+    value = matrix if isinstance(matrix, dict) else {}
+    field_status = value.get("field_status", {})
+    field_status = field_status if isinstance(field_status, dict) else {}
+    known = value.get("known_items", [])
+    unknown = value.get("unknown_items", [])
+
+    return {
+        "built": bool(value),
+        "context_type": str(value.get("context_type") or "informational"),
+        "evidence_source_count": int(value.get("evidence_source_count", 0) or 0),
+        "supported_field_count": int(value.get("supported_field_count", 0) or 0),
+        "total_decision_fields": int(value.get("total_decision_fields", 0) or 0),
+        "evidence_coverage": float(value.get("evidence_coverage", 0.0) or 0.0),
+        "known_item_count": len(known) if isinstance(known, list) else 0,
+        "unknown_item_count": len(unknown) if isinstance(unknown, list) else 0,
+        "decision_ready": bool(value.get("decision_readiness", False)),
+        "readiness_reason": str(value.get("readiness_reason") or "unknown"),
+        "field_presence": {
+            key: bool(item.get("present", False))
+            for key, item in field_status.items()
+            if isinstance(item, dict)
+        },
+    }
+
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -9477,6 +9612,21 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4C
+            # DECISION EVIDENCE MATRIX
+            # ------------------------------------------------
+
+            decision_evidence_matrix = build_decision_evidence_matrix(
+                decision_context=decision_context,
+                interpretation=decision_context_interpretation,
+            )
+
+            decision_evidence_matrix_trace = build_decision_evidence_matrix_trace(
+                matrix=decision_evidence_matrix,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9616,6 +9766,9 @@ class handler(
 
                     "decision_context_interpretation_trace":
                         decision_context_interpretation_trace,
+
+                    "decision_evidence_matrix_trace":
+                        decision_evidence_matrix_trace,
 
                     "session_id":
                         session_id,
