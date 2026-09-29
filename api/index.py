@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import re
 import urllib.request
@@ -9062,6 +9063,24 @@ class handler(
                 )
             ).strip().lower()
 
+            if action == "get_decision_history":
+
+                history = get_decision_history(
+                    user_id=user_id,
+                    limit=body.get("limit", 50),
+                )
+
+                send_json(
+                    self,
+                    {
+                        "history": history,
+                        "count": len(history),
+                    },
+                    200
+                )
+
+                return
+
             if action == "update_memory_version":
 
                 memory_id = body.get(
@@ -9742,6 +9761,30 @@ class handler(
             )
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4J
+            # DECISION PERSISTENCE & DECISION HISTORY
+            # ------------------------------------------------
+
+            decision_persistence = persist_explicit_decision(
+                user_id=user_id,
+                session_id=session_id,
+                title=title,
+                decision_input=decision_input,
+                decision_payload=body.get(
+                    "decision_input",
+                    {}
+                ),
+                evidence_trace=evidence_trace,
+                decision_capture=decision_capture,
+                decision_synthesis_quality=decision_synthesis_quality,
+            )
+
+            decision_history_trace = build_decision_history_trace(
+                persistence_result=decision_persistence,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9902,6 +9945,9 @@ class handler(
 
                     "decision_input_trace":
                         decision_input_trace,
+
+                    "decision_history_trace":
+                        decision_history_trace,
 
 
                     "session_id":
@@ -11032,4 +11078,323 @@ def build_explicit_decision_input_trace(
         "decision_recorded": False,
         "action_created": False,
         "recommendation_generated": False,
+    }
+
+
+# ============================================================
+# PHASE 7 — STEP 4J
+# DECISION PERSISTENCE & DECISION HISTORY
+# ============================================================
+
+def ensure_decision_history_table():
+    """Create the append-only decision history store if it does not exist."""
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS decision_history
+                (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL DEFAULT 'default',
+                    title TEXT DEFAULT 'New Chat',
+                    decision TEXT NOT NULL,
+                    selected_option TEXT DEFAULT '',
+                    rationale TEXT DEFAULT '',
+                    evidence_trace JSONB DEFAULT '[]'::jsonb,
+                    decision_input_trace JSONB DEFAULT '{}'::jsonb,
+                    decision_capture_trace JSONB DEFAULT '{}'::jsonb,
+                    decision_synthesis_quality_trace JSONB DEFAULT '{}'::jsonb,
+                    fingerprint TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, fingerprint)
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_decision_history_user_created
+                ON decision_history(user_id, created_at DESC)
+                """
+            )
+
+        conn.commit()
+
+
+def _decision_history_fingerprint(
+    user_id,
+    session_id,
+    decision,
+    selected_option,
+    rationale,
+):
+    """Stable idempotency key for one explicit decision submission."""
+
+    raw = "|".join([
+        str(user_id or "").strip(),
+        str(session_id or "default").strip(),
+        str(decision or "").strip(),
+        str(selected_option or "").strip(),
+        str(rationale or "").strip(),
+    ])
+
+    return hashlib.sha256(
+        raw.encode("utf-8")
+    ).hexdigest()
+
+
+def persist_explicit_decision(
+    user_id,
+    session_id,
+    title,
+    decision_input,
+    decision_payload,
+    evidence_trace,
+    decision_capture,
+    decision_synthesis_quality,
+):
+    """
+    Persist ONLY an accepted Step 4I decision.
+
+    Step 4J never infers, rewrites, selects, or recommends a decision.
+    Identical submissions are idempotent and evidence provenance is retained.
+    """
+
+    result = decision_input if isinstance(decision_input, dict) else {}
+    payload = decision_payload if isinstance(decision_payload, dict) else {}
+    evidence = evidence_trace if isinstance(evidence_trace, list) else []
+    capture = decision_capture if isinstance(decision_capture, dict) else {}
+    quality = decision_synthesis_quality if isinstance(decision_synthesis_quality, dict) else {}
+
+    if not bool(result.get("accepted", False)):
+        return {
+            "built": True,
+            "persisted": False,
+            "status": "not_persisted",
+            "reason": str(
+                result.get("reason") or "explicit_decision_not_accepted"
+            ),
+            "decision_id": None,
+            "duplicate": False,
+            "decision_recorded": False,
+            "history_available": False,
+        }
+
+    decision = str(payload.get("decision") or "").strip()
+    selected_option = str(payload.get("selected_option") or "").strip()
+    rationale = str(payload.get("rationale") or "").strip()
+
+    if not decision or not bool(payload.get("confirmed", False)):
+        return {
+            "built": True,
+            "persisted": False,
+            "status": "not_persisted",
+            "reason": "invalid_accepted_input",
+            "decision_id": None,
+            "duplicate": False,
+            "decision_recorded": False,
+            "history_available": False,
+        }
+
+    ensure_decision_history_table()
+
+    fingerprint = _decision_history_fingerprint(
+        user_id,
+        session_id,
+        decision,
+        selected_option,
+        rationale,
+    )
+
+    decision_input_trace = {
+        key: result.get(key)
+        for key in [
+            "built",
+            "accepted",
+            "status",
+            "reason",
+            "gate_capturable",
+            "explicit_decision_present",
+            "selected_option_present",
+            "rationale_present",
+            "explicit_confirmation",
+        ]
+    }
+
+    capture_trace = {
+        key: capture.get(key)
+        for key in [
+            "built",
+            "capturable",
+            "status",
+            "reason",
+            "readiness_status",
+            "quality_status",
+            "synthesis_status",
+        ]
+    }
+
+    quality_trace = {
+        key: quality.get(key)
+        for key in [
+            "built",
+            "passed",
+            "status",
+            "reason",
+            "readiness_status",
+            "analysis_status",
+            "synthesis_status",
+        ]
+    }
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                INSERT INTO decision_history
+                (
+                    user_id,
+                    session_id,
+                    title,
+                    decision,
+                    selected_option,
+                    rationale,
+                    evidence_trace,
+                    decision_input_trace,
+                    decision_capture_trace,
+                    decision_synthesis_quality_trace,
+                    fingerprint
+                )
+                VALUES
+                (
+                    %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
+                    %s::jsonb, %s::jsonb, %s
+                )
+                ON CONFLICT (user_id, fingerprint) DO NOTHING
+                RETURNING id
+                """,
+                (
+                    str(user_id),
+                    str(session_id or "default"),
+                    str(title or "New Chat"),
+                    decision,
+                    selected_option,
+                    rationale,
+                    json.dumps(evidence, ensure_ascii=False, default=str),
+                    json.dumps(decision_input_trace, ensure_ascii=False, default=str),
+                    json.dumps(capture_trace, ensure_ascii=False, default=str),
+                    json.dumps(quality_trace, ensure_ascii=False, default=str),
+                    fingerprint,
+                )
+            )
+
+            inserted = cur.fetchone()
+
+            if inserted:
+                decision_id = int(inserted[0])
+                duplicate = False
+            else:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM decision_history
+                    WHERE user_id = %s
+                      AND fingerprint = %s
+                    LIMIT 1
+                    """,
+                    (str(user_id), fingerprint)
+                )
+                existing = cur.fetchone()
+                decision_id = int(existing[0]) if existing else None
+                duplicate = True
+
+        conn.commit()
+
+    return {
+        "built": True,
+        "persisted": decision_id is not None,
+        "status": "duplicate" if duplicate else "persisted",
+        "reason": (
+            "decision_already_persisted"
+            if duplicate
+            else "explicit_user_decision_persisted"
+        ),
+        "decision_id": decision_id,
+        "duplicate": duplicate,
+        "decision_recorded": decision_id is not None,
+        "history_available": decision_id is not None,
+    }
+
+
+def get_decision_history(user_id, limit=50):
+    """Return the user's persisted decision history, newest first."""
+
+    ensure_decision_history_table()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 50
+
+    limit = max(1, min(100, limit))
+
+    with get_connection() as conn:
+
+        with conn.cursor() as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    id, session_id, title, decision, selected_option,
+                    rationale, evidence_trace, created_at
+                FROM decision_history
+                WHERE user_id = %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (str(user_id), limit)
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": row[0],
+            "session_id": row[1],
+            "title": row[2],
+            "decision": row[3],
+            "selected_option": row[4],
+            "rationale": row[5],
+            "evidence_trace": row[6] or [],
+            "created_at": row[7].isoformat() if row[7] else None,
+        }
+        for row in rows
+    ]
+
+
+def build_decision_history_trace(persistence_result):
+    """Compact public Step 4J verification trace."""
+
+    result = (
+        persistence_result
+        if isinstance(persistence_result, dict)
+        else {}
+    )
+
+    return {
+        "built": bool(result.get("built", False)),
+        "persisted": bool(result.get("persisted", False)),
+        "status": str(result.get("status") or "not_persisted"),
+        "reason": str(result.get("reason") or "unknown"),
+        "decision_id": result.get("decision_id"),
+        "duplicate": bool(result.get("duplicate", False)),
+        "decision_recorded": bool(result.get("decision_recorded", False)),
+        "history_available": bool(result.get("history_available", False)),
     }
