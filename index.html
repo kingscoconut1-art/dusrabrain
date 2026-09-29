@@ -1663,6 +1663,9 @@
 .decision-stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:15px; }
 .decision-stat-number { font-size:22px; font-weight:800; color:#111827; }
 .decision-stat-label { margin-top:4px; color:#64748b; font-size:12px; font-weight:700; }
+.decision-next-step { background:#f8fafc; border:1px solid #dbe3ee; border-radius:14px; padding:16px 17px; margin-bottom:18px; }
+.decision-next-step-title { font-size:16px; font-weight:800; color:#111827; margin-bottom:5px; }
+.decision-next-step-text { color:#475569; font-size:13px; line-height:1.55; margin-bottom:12px; }
 .decision-section { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:17px; margin-bottom:15px; }
 .decision-section-title { font-size:17px; font-weight:800; color:#111827; margin-bottom:4px; }
 .decision-section-subtitle { color:#64748b; font-size:12px; margin-bottom:13px; }
@@ -2353,10 +2356,16 @@
                 </div>
 
                 <div class="decision-grid">
-                    <div class="decision-stat"><div class="decision-stat-number" id="decisionReadinessStat">—</div><div class="decision-stat-label">Can I decide with what I know?</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionReadinessStat">—</div><div class="decision-stat-label">Decision readiness</div></div>
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionEvidenceStat">0</div><div class="decision-stat-label">Supporting information</div></div>
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionOptionsStat">0</div><div class="decision-stat-label">Options identified</div></div>
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionHistoryStat">0</div><div class="decision-stat-label">Saved decisions</div></div>
+                </div>
+
+                <div class="decision-next-step" id="decisionNextStep">
+                    <div class="decision-next-step-title">What should I do next?</div>
+                    <div class="decision-next-step-text" id="decisionNextStepText">Dusra Brain is ready to help. Tell it what decision you are trying to make.</div>
+                    <button class="decision-button primary" id="decisionNextStepButton" type="button">Tell Dusra Brain the decision</button>
                 </div>
 
                 <div class="decision-section">
@@ -3320,20 +3329,44 @@
         return String(status || "unknown");
     }
 
-    function decisionUserStatus(trace) {
+    function decisionUserStatus(trace, code) {
         trace = trace && typeof trace === "object" ? trace : {};
+
+        /*
+         * Consumer-facing status only.
+         * Internal API states remain available under Technical details.
+         * Never use a generic "Checked" label: it implies completion even
+         * when the system is waiting for information or user confirmation.
+         */
+        if (code === "4A") return trace.decision_present ? "Decision identified" : "Waiting for your decision";
+        if (code === "4B") return trace.information_gap ? "More information needed" : "Situation understood";
+        if (code === "4C") return (Number(trace.evidence_source_count) || 0) > 0 ? "Supporting information found" : "Waiting for supporting information";
+        if (code === "4D") return trace.ready ? "Ready to analyse" : "Not ready yet";
+        if (code === "4E") return trace.analyzed ? "Analysis available" : "Waiting for enough information";
+        if (code === "4F") return trace.synthesized ? "Summary available" : "Waiting for analysis";
+        if (code === "4G") return trace.passed ? "Quality check passed" : "Quality check pending";
+        if (code === "4H") return trace.capturable ? "Ready for confirmation" : "Waiting for validated decision support";
+        if (code === "4I") return trace.accepted ? "Decision received" : "Waiting for your confirmation";
+        if (code === "4J") return trace.persisted ? "Saved" : "Not saved";
+        if (code === "4K") return trace.triggered ? "History searched" : "Not needed for this request";
+        if (code === "4L") return trace.answered ? "Available" : "Not needed for this request";
+        if (code === "4M") return trace.integrated ? "Evidence connected" : "Not needed for this request";
+        if (code === "4N") return trace.detected ? "Comparison available" : "Not needed for this request";
+        if (code === "4O") return trace.detected ? "Change found" : "Not needed for this request";
+        if (code === "4P") return trace.answered ? "Explanation available" : "Not needed for this request";
+
         if (trace.status === "pass" || trace.passed) return "Verified";
         if (trace.status === "ready" || trace.ready) return "Ready";
-        if (trace.status === "capturable") return "Ready for your confirmation";
+        if (trace.status === "capturable") return "Ready for confirmation";
         if (trace.status === "accepted" || trace.accepted) return "Confirmed";
         if (trace.status === "persisted" || trace.persisted) return "Saved";
         if (trace.status === "not_ready") return "Not ready yet";
-        if (trace.status === "not_triggered") return "Not needed yet";
+        if (trace.status === "not_triggered") return "Not needed for this request";
         if (trace.status === "not_persisted") return "Not saved";
         if (trace.status === "fail") return "Needs attention";
         if (trace.status === "answered" || trace.answered) return "Available";
         if (trace.detected) return "Detected";
-        return "Checked";
+        return "Waiting for information";
     }
 
     function decisionHumanSummary(code, trace) {
@@ -3361,7 +3394,7 @@
 
     function renderDecisionTraceCard(code, title, trace) {
         trace = trace && typeof trace === "object" ? trace : {};
-        var status = decisionUserStatus(trace);
+        var status = decisionUserStatus(trace, code);
         var technical = Object.keys(trace).filter(function(k){ return k !== "built"; }).slice(0, 20);
         var kv = technical.map(function(key){
             return '<div class="k">' + brainText(key.replace(/_/g," ")) + '</div><div class="v">' + brainText(decisionValue(trace[key])) + '</div>';
@@ -3396,14 +3429,36 @@
         var pipeline = document.getElementById("decisionPipeline");
         pipeline.innerHTML = Object.keys(map).map(function(code){
             var t=map[code][1]||{};
-            return '<div class="decision-pipeline-item"><div class="decision-pipeline-name">'+brainText(map[code][0])+'</div><div class="decision-pipeline-status">'+brainText(decisionUserStatus(t))+'</div></div>';
+            return '<div class="decision-pipeline-item"><div class="decision-pipeline-name">'+brainText(map[code][0])+'</div><div class="decision-pipeline-status">'+brainText(decisionUserStatus(t, code))+'</div></div>';
         }).join("");
         document.getElementById("decisionContextTraces").innerHTML = ["4A","4B","4C","4D"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionAnalysisTraces").innerHTML = ["4E","4F","4G"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionHistoryTraces").innerHTML = ["4H","4I","4J","4K","4L"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionEvolutionTraces").innerHTML = ["4M","4N","4O","4P"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         var readiness = data.decision_readiness_trace || {};
-        document.getElementById("decisionReadinessStat").textContent = readiness.ready ? "Yes" : "Not yet";
+        document.getElementById("decisionReadinessStat").textContent = readiness.ready ? "Ready" : "Not ready yet";
+
+        var nextStepText = document.getElementById("decisionNextStepText");
+        var nextStepButton = document.getElementById("decisionNextStepButton");
+        if (nextStepText && nextStepButton) {
+            var context = data.decision_context_trace || {};
+            var capture = data.decision_capture_trace || {};
+            var input = data.decision_input_trace || {};
+            if (input.accepted || capture.capturable) {
+                nextStepText.textContent = "Your decision can be confirmed now. Only your explicit confirmation will allow Dusra Brain to capture it.";
+                nextStepButton.textContent = "Confirm your decision";
+            } else if (!context.decision_present) {
+                nextStepText.textContent = "Tell Dusra Brain what decision you are trying to make. It will not assume a decision on your behalf.";
+                nextStepButton.textContent = "Tell Dusra Brain the decision";
+            } else if (readiness.ready) {
+                nextStepText.textContent = "You have enough structured information to review the available analysis before making your own decision.";
+                nextStepButton.textContent = "Review the analysis";
+            } else {
+                nextStepText.textContent = "Add the missing information or choices before treating this as decision-ready.";
+                nextStepButton.textContent = "Review what is missing";
+            }
+        }
+
         var matrix = data.decision_evidence_matrix_trace || {};
         document.getElementById("decisionEvidenceStat").textContent = matrix.evidence_source_count || 0;
         document.getElementById("decisionOptionsStat").textContent = (matrix.field_presence && matrix.field_presence.options) ? (matrix.field_presence.options.count || 0) : 0;
@@ -3422,6 +3477,18 @@
         }
         historyBox.innerHTML = answerText;
     }
+
+    document.addEventListener("click", function(event) {
+        var button = event.target && event.target.closest ? event.target.closest("#decisionNextStepButton") : null;
+        if (!button) return;
+        event.preventDefault();
+        var capture = document.getElementById("decisionInputText");
+        if (capture) {
+            capture.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(function(){ capture.focus(); }, 350);
+        }
+    });
+
 
     function openDecisionCenter(event) {
         if (event) {
