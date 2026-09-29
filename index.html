@@ -3371,10 +3371,38 @@
         historyBox.innerHTML = answerText;
     }
 
-    function openDecisionCenter() {
-        showView(decisionView);
-        if (lastDecisionApiResponse) renderDecisionCenter(lastDecisionApiResponse);
-        else renderDecisionCenter({});
+    function openDecisionCenter(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        const targetDecisionView =
+            document.getElementById("decisionView");
+
+        if (!targetDecisionView) {
+            console.error("Dusra Brain: decisionView is missing from the DOM.");
+            return;
+        }
+
+        /*
+         * Explicitly switch views here instead of relying only on the
+         * cached element reference. This makes the Decisions button
+         * resilient to the existing single-page view system.
+         */
+        document.querySelectorAll(".view").forEach(function(view) {
+            view.classList.remove("active");
+        });
+
+        targetDecisionView.classList.add("active");
+
+        if (lastDecisionApiResponse) {
+            renderDecisionCenter(lastDecisionApiResponse);
+        } else {
+            renderDecisionCenter({});
+        }
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     async function askDecisionHistory() {
@@ -3402,7 +3430,22 @@
         } catch (error) { status.textContent = "Unable to submit decision: " + error.message; }
     }
 
-    document.getElementById("decisionButton").addEventListener("click", openDecisionCenter);
+    /* ========================================================
+       DECISION BUTTON — ROBUST NAVIGATION BINDING
+       Uses delegated click handling so the button continues to work
+       even if the surrounding header is re-rendered.
+    ======================================================== */
+    document.addEventListener("click", function(event) {
+        const button = event.target && event.target.closest
+            ? event.target.closest("#decisionButton")
+            : null;
+
+        if (!button) {
+            return;
+        }
+
+        openDecisionCenter(event);
+    });
     document.getElementById("decisionBackButton").addEventListener("click", function(){ showView(chatView); });
     document.getElementById("decisionRefreshButton").addEventListener("click", function(){ if(lastDecisionApiResponse) renderDecisionCenter(lastDecisionApiResponse); });
     document.getElementById("decisionHistoryButton").addEventListener("click", askDecisionHistory);
