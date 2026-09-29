@@ -9112,6 +9112,84 @@ class handler(
 
                 return
 
+
+            if action == "update_memory":
+
+                memory_id = body.get("id")
+                memory = str(body.get("memory", "")).strip()
+                category = str(body.get("category", "general")).strip()
+                importance = int(body.get("importance", 5))
+                subject = normalize_subject(body.get("subject", "general"))
+
+                if not memory_id:
+                    send_json(self, {"error": "Memory ID is required"}, 400)
+                    return
+
+                if not memory:
+                    send_json(self, {"error": "Memory cannot be empty"}, 400)
+                    return
+
+                memory_key = make_memory_key(subject, category, memory)
+
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            UPDATE memories
+                            SET memory=%s, category=%s, importance=%s,
+                                subject=%s, memory_key=%s
+                            WHERE id=%s AND user_id=%s
+                            RETURNING id, memory, created_at, category,
+                                      importance, subject, memory_key, session_id
+                            """,
+                            (memory, category, importance, subject,
+                             memory_key, memory_id, user_id)
+                        )
+                        row = cur.fetchone()
+                    conn.commit()
+
+                if not row:
+                    send_json(self, {"error": "Memory not found"}, 404)
+                    return
+
+                send_json(self, {
+                    "memory": {
+                        "id": row[0],
+                        "memory": row[1],
+                        "created_at": row[2].isoformat() if row[2] else None,
+                        "category": row[3],
+                        "importance": row[4],
+                        "subject": row[5],
+                        "memory_key": row[6],
+                        "session_id": row[7] or "default",
+                    }
+                })
+                return
+
+            if action == "delete_memory":
+
+                memory_id = body.get("id")
+
+                if not memory_id:
+                    send_json(self, {"error": "Memory ID is required"}, 400)
+                    return
+
+                with get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "DELETE FROM memories WHERE id=%s AND user_id=%s RETURNING id",
+                            (memory_id, user_id)
+                        )
+                        deleted = cur.fetchone()
+                    conn.commit()
+
+                if not deleted:
+                    send_json(self, {"error": "Memory not found"}, 404)
+                    return
+
+                send_json(self, {"success": True, "deleted_id": deleted[0]})
+                return
+
             if action == "record_decision_outcome":
 
                 outcome_result = persist_decision_outcome(
