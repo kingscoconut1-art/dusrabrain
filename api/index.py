@@ -8294,6 +8294,101 @@ def build_fast_path_trace(reason):
     }
 
 
+def is_fast_general_chat_request(message, body):
+    """Return True for ordinary chat that only needs one grounded LLM call.
+
+    Fast chat deliberately avoids the expensive reasoning/decision pipeline and
+    automatic extraction passes. Explicit memory/decision capture and complex
+    planning/analysis requests continue through the full pipeline.
+    """
+    if isinstance(body, dict) and isinstance(body.get("decision_input"), dict):
+        payload = body.get("decision_input") or {}
+        if any(str(payload.get(k) or "").strip() for k in (
+            "decision", "selected_option", "rationale"
+        )):
+            return False
+
+    text = str(message or "").strip()
+    if not text:
+        return False
+
+    lowered = text.lower()
+
+    # Decision/history queries have their own deterministic fast path.
+    if detect_decision_history_recall(text):
+        return False
+
+    heavy_terms = (
+        "decision", "decide", "choose", "should i", "which should",
+        "compare", "comparison", "pros and cons", "trade-off",
+        "strategy", "strategic", "roadmap", "business plan",
+        "plan for", "planning", "analyze", "analysis", "evaluate",
+        "recommend", "recommendation", "risk", "budget", "investment",
+        "roi", "forecast", "what should", "how should", "why should",
+        "remember", "memory", "save this", "forget this",
+        "i am", "i'm", "my name", "i have", "i own", "i prefer",
+        "i like", "i want", "i work", "i live", "i need you to remember",
+    )
+
+    if any(term in lowered for term in heavy_terms):
+        return False
+
+    # Keep long/complex prompts on the full pipeline.
+    if len(text) > 450:
+        return False
+
+    return True
+
+
+def get_fast_chat_memories(user_id, message, session_id="default", limit=20):
+    """Retrieve useful memory for fast chat using DB-only matching.
+
+    This intentionally avoids detect_subject(), which uses an additional LLM
+    call. Exact subject mentions are resolved locally.
+    """
+    base = get_memories(
+        user_id,
+        message=message,
+        session_id=session_id,
+        limit=limit,
+    )
+
+    try:
+        subjects = get_memory_subjects(user_id)
+    except Exception:
+        subjects = []
+
+    lowered = str(message or "").strip().lower()
+    matched = []
+
+    for subject in subjects:
+        value = str(subject or "").strip()
+        if value and value.lower() in lowered:
+            matched.extend(
+                get_subject_memories(
+                    user_id,
+                    value,
+                    session_id=session_id,
+                    limit=20,
+                )
+            )
+
+    combined = []
+    seen = set()
+
+    for item in matched + base:
+        item_id = item.get("id") if isinstance(item, dict) else None
+        key = item_id if item_id is not None else repr(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        combined.append(item)
+        if len(combined) >= limit:
+            break
+
+    return combined
+
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -9112,84 +9207,6 @@ class handler(
 
                 return
 
-
-            if action == "update_memory":
-
-                memory_id = body.get("id")
-                memory = str(body.get("memory", "")).strip()
-                category = str(body.get("category", "general")).strip()
-                importance = int(body.get("importance", 5))
-                subject = normalize_subject(body.get("subject", "general"))
-
-                if not memory_id:
-                    send_json(self, {"error": "Memory ID is required"}, 400)
-                    return
-
-                if not memory:
-                    send_json(self, {"error": "Memory cannot be empty"}, 400)
-                    return
-
-                memory_key = make_memory_key(subject, category, memory)
-
-                with get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            UPDATE memories
-                            SET memory=%s, category=%s, importance=%s,
-                                subject=%s, memory_key=%s
-                            WHERE id=%s AND user_id=%s
-                            RETURNING id, memory, created_at, category,
-                                      importance, subject, memory_key, session_id
-                            """,
-                            (memory, category, importance, subject,
-                             memory_key, memory_id, user_id)
-                        )
-                        row = cur.fetchone()
-                    conn.commit()
-
-                if not row:
-                    send_json(self, {"error": "Memory not found"}, 404)
-                    return
-
-                send_json(self, {
-                    "memory": {
-                        "id": row[0],
-                        "memory": row[1],
-                        "created_at": row[2].isoformat() if row[2] else None,
-                        "category": row[3],
-                        "importance": row[4],
-                        "subject": row[5],
-                        "memory_key": row[6],
-                        "session_id": row[7] or "default",
-                    }
-                })
-                return
-
-            if action == "delete_memory":
-
-                memory_id = body.get("id")
-
-                if not memory_id:
-                    send_json(self, {"error": "Memory ID is required"}, 400)
-                    return
-
-                with get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "DELETE FROM memories WHERE id=%s AND user_id=%s RETURNING id",
-                            (memory_id, user_id)
-                        )
-                        deleted = cur.fetchone()
-                    conn.commit()
-
-                if not deleted:
-                    send_json(self, {"error": "Memory not found"}, 404)
-                    return
-
-                send_json(self, {"success": True, "deleted_id": deleted[0]})
-                return
-
             if action == "record_decision_outcome":
 
                 outcome_result = persist_decision_outcome(
@@ -9605,6 +9622,125 @@ class handler(
                             "skipped": [
                                 "memory_retrieval",
                                 "grounded_answer_generation",
+                                "reasoning_engine",
+                                "decision_analysis_pipeline",
+                                "memory_extraction",
+                                "brain_structure_extraction",
+                            ],
+                        },
+                        "session_id": session_id,
+                        "title": title,
+                    },
+                    200,
+                )
+
+                return
+
+
+            # ------------------------------------------------
+            # PERFORMANCE PATCH — FAST GENERAL CHAT ROUTE
+            # ------------------------------------------------
+            # Ordinary short chat uses one grounded Groq call only. This avoids
+            # the extra subject-detection, reasoning, decision-analysis,
+            # memory-extraction and brain-extraction model calls that made a
+            # fresh chat feel slow. Complex/explicit-memory/decision requests
+            # continue through the existing full pipeline.
+            # ------------------------------------------------
+            if is_fast_general_chat_request(message, body):
+
+                fast_history = get_conversation_history(
+                    user_id,
+                    session_id=session_id,
+                    limit=10,
+                )
+
+                fast_memories = get_fast_chat_memories(
+                    user_id,
+                    message,
+                    session_id=session_id,
+                    limit=20,
+                )
+
+                fast_grounded = generate_grounded_answer(
+                    message=message,
+                    session_id=session_id,
+                    title=title,
+                    memories=fast_memories,
+                    brain_entities=[],
+                    brain_relationships=[],
+                    history=fast_history,
+                )
+
+                response = str(
+                    fast_grounded.get("answer") or
+                    "I don't have enough stored information to answer that reliably."
+                ).strip()
+
+                evidence_trace = fast_grounded.get(
+                    "evidence_trace", []
+                )
+
+                save_conversation(
+                    user_id,
+                    "assistant",
+                    response,
+                    session_id,
+                    title
+                )
+
+                skipped = build_fast_path_trace(
+                    "fast_general_chat_single_llm_call"
+                )
+
+                send_json(
+                    self,
+                    {
+                        "response": response,
+                        "evidence_trace": evidence_trace,
+                        "evidence_count": len(evidence_trace),
+                        "grounded": bool(fast_grounded.get("grounded", False)),
+                        "recall_trace": skipped,
+                        "reasoning_context_trace": skipped,
+                        "reasoning_trace": skipped,
+                        "reasoning_verification_trace": skipped,
+                        "reasoning_quality_trace": skipped,
+                        "decision_context_trace": skipped,
+                        "decision_context_interpretation_trace": skipped,
+                        "decision_evidence_matrix_trace": skipped,
+                        "decision_readiness_trace": skipped,
+                        "decision_analysis_trace": skipped,
+                        "decision_synthesis_trace": skipped,
+                        "decision_synthesis_quality_trace": skipped,
+                        "decision_capture_trace": skipped,
+                        "decision_input_trace": skipped,
+                        "decision_history_trace": skipped,
+                        "decision_history_recall_trace": skipped,
+                        "decision_history_answer_trace": skipped,
+                        "decision_history_memory_evidence_trace": skipped,
+                        "decision_current_plan_conflict_trace": skipped,
+                        "decision_change_evolution_trace": skipped,
+                        "decision_evolution_answer_trace": skipped,
+                        "decision_outcome_trace": {
+                            "built": True,
+                            "accepted": False,
+                            "persisted": False,
+                            "status": "not_triggered",
+                            "reason": "outcome_requires_explicit_user_capture",
+                            "decision_id": None,
+                            "outcome_id": None,
+                            "duplicate": False,
+                            "outcome_recorded": False,
+                            "recommendation_generated": False,
+                            "decision_modified": False,
+                            "action_created": False,
+                            "read_only": True,
+                        },
+                        "performance_trace": {
+                            "fast_path": True,
+                            "route": "general_chat",
+                            "llm_calls": 1,
+                            "skipped": [
+                                "subject_detection_llm",
                                 "reasoning_engine",
                                 "decision_analysis_pipeline",
                                 "memory_extraction",
