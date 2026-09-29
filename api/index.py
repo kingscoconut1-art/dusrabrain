@@ -9696,6 +9696,25 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4H
+            # DECISION CAPTURE & ACTION GATE
+            # ------------------------------------------------
+
+            decision_capture = validate_decision_capture(
+                decision_readiness=decision_readiness,
+                decision_synthesis_quality=decision_synthesis_quality,
+                decision_synthesis=decision_synthesis,
+            )
+
+            decision_capture_trace = build_decision_capture_trace(
+                decision_readiness=decision_readiness,
+                decision_synthesis_quality=decision_synthesis_quality,
+                decision_synthesis=decision_synthesis,
+                capture_result=decision_capture,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9850,6 +9869,9 @@ class handler(
 
                     "decision_synthesis_quality_trace":
                         decision_synthesis_quality_trace,
+
+                    "decision_capture_trace":
+                        decision_capture_trace,
 
                     "session_id":
                         session_id,
