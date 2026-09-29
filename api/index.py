@@ -7327,11 +7327,132 @@ SUPPLIED EVIDENCE:
 
 
 # ============================================================
+# PHASE 7 — DECISION INPUT EXTRACTION
+# ============================================================
+
+def looks_like_decision_request(message):
+    """Cheap gate so the extraction model is only called for decision-like requests."""
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+
+    phrases = [
+        "should i", "should we", "which should", "which one", "help me decide",
+        "help me choose", "need to decide", "decision", "decide between",
+        "choose between", "compare", "or should", "whether i should",
+        "whether we should", "option", "options", "alternative",
+    ]
+    return any(phrase in text for phrase in phrases)
+
+
+def extract_decision_context_from_text(message, history=None):
+    """
+    Extract only decision information explicitly stated by the user.
+    This is an interpretation layer; it does not choose, recommend, or
+    invent facts. If the request is not decision-like, it returns empty data.
+    """
+    message = str(message or "").strip()
+    history = history if isinstance(history, list) else []
+
+    empty = {
+        "decision": [],
+        "options": [],
+        "goals": [],
+        "constraints": [],
+        "risks": [],
+        "uncertainties": [],
+        "tradeoffs": [],
+        "missing_information": [],
+    }
+
+    if not message or not looks_like_decision_request(message):
+        return empty
+
+    recent = []
+    for item in history[-8:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip()
+        content = str(item.get("message") or "").strip()
+        if content:
+            recent.append({"role": role, "message": content})
+
+    prompt = f"""
+Extract decision-support structure from the user's own words.
+
+STRICT RULES:
+1. Use only information explicitly stated by the user in the current message
+   or the recent conversation below.
+2. Do not invent options, facts, risks, goals, constraints, numbers, dates,
+   or recommendations.
+3. If the user asks a comparison such as "A or B", the two explicitly named
+   alternatives are options.
+4. Convert the user's decision question into one concise decision statement.
+5. Only populate a field when the content is explicitly present.
+6. Missing optional fields are NOT errors.
+7. Never choose an option and never recommend one.
+8. Return JSON only.
+
+CURRENT USER MESSAGE:
+{message}
+
+RECENT CONVERSATION:
+{json.dumps(recent, ensure_ascii=False)}
+
+JSON:
+{{
+  "decision": [],
+  "options": [],
+  "goals": [],
+  "constraints": [],
+  "risks": [],
+  "uncertainties": [],
+  "tradeoffs": [],
+  "missing_information": []
+}}
+"""
+
+    try:
+        raw = groq_request(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You extract explicit decision-support information. "
+                        "You never make the decision."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+        )
+        parsed = json.loads(clean_json_response(raw))
+        if not isinstance(parsed, dict):
+            return empty
+
+        result = {}
+        for key in empty:
+            value = parsed.get(key, [])
+            if isinstance(value, list):
+                result[key] = [
+                    item if isinstance(item, dict) else str(item).strip()
+                    for item in value[:20]
+                    if str(item).strip()
+                ]
+            else:
+                result[key] = []
+
+        return result
+    except Exception:
+        return empty
+
+
 # PHASE 7 — STEP 4A
 # DECISION CONTEXT BUILDER
 # ============================================================
 
 def build_decision_context(
+
     reasoning_context,
 ):
     """
@@ -7347,6 +7468,12 @@ def build_decision_context(
     context = (
         reasoning_context
         if isinstance(reasoning_context, dict)
+        else {}
+    )
+
+    extracted = (
+        extracted_context
+        if isinstance(extracted_context, dict)
         else {}
     )
 
@@ -7444,31 +7571,29 @@ def build_decision_context(
     tradeoffs = collect_explicit("tradeoffs")
     missing_information = collect_explicit("missing_information")
 
-    if not missing_information:
-        if not decision_values:
-            missing_information.append(
-                "No explicit decision statement was found in the retrieved context."
-            )
-        if not options:
-            missing_information.append(
-                "No explicit decision options were found in the retrieved context."
-            )
-        if not goals:
-            missing_information.append(
-                "No explicit decision goals were found in the retrieved context."
-            )
-        if not constraints:
-            missing_information.append(
-                "No explicit decision constraints were found in the retrieved context."
-            )
-        if not risks:
-            missing_information.append(
-                "No explicit decision risks were found in the retrieved context."
-            )
-        if not uncertainties:
-            missing_information.append(
-                "No explicit decision uncertainties were found in the retrieved context."
-            )
+    # Merge the explicit user-language extraction without allowing it to
+    # overwrite stronger structured context already present in the system.
+    for field_name, current in [
+        ("decision", decision_values),
+        ("options", options),
+        ("goals", goals),
+        ("constraints", constraints),
+        ("risks", risks),
+        ("uncertainties", uncertainties),
+        ("tradeoffs", tradeoffs),
+        ("missing_information", missing_information),
+    ]:
+        extracted_values = extracted.get(field_name, [])
+        if not isinstance(extracted_values, list):
+            continue
+        for value in extracted_values:
+            if value is None or str(value).strip() == "":
+                continue
+            if value not in current:
+                current.append(value)
+
+    # Do NOT manufacture missing requirements for optional decision fields.
+    # Only explicitly identified gaps are blocking.
 
     source_counts = context.get(
         "source_counts",
@@ -7486,9 +7611,20 @@ def build_decision_context(
         "uncertainties": uncertainties,
         "tradeoffs": tradeoffs,
         "evidence_trace": [
-            dict(item)
-            for item in context.get("evidence_trace", [])[:10]
-            if isinstance(item, dict)
+            *[
+                dict(item)
+                for item in context.get("evidence_trace", [])[:10]
+                if isinstance(item, dict)
+            ],
+            *([{
+                "source_type": "conversation",
+                "source_id": max(
+                    0,
+                    int(context.get("source_counts", {}).get("conversation_messages", 1) or 1) - 1,
+                ),
+                "label": "Current user message",
+                "text": question,
+            }] if question and (decision_values or options) else []),
         ],
         "source_index": dict(
             context.get("source_index", {})
@@ -8163,6 +8299,9 @@ def build_decision_evidence_matrix(
             "text": text_value,
         })
 
+    # Decision readiness is based on the fields that are genuinely required
+    # to discuss a choice. Goals/constraints/risks/trade-offs improve the
+    # analysis but are not mandatory unless the user explicitly says they are.
     fields = [
         "decision",
         "options",
@@ -8195,16 +8334,17 @@ def build_decision_evidence_matrix(
     ]
 
     total_fields = len(fields)
-    evidence_coverage = (
-        round(supported_field_count / total_fields, 3)
-        if total_fields
-        else 0.0
-    )
-
     decision_present = bool(context.get("decision"))
     options_value = context.get("options", [])
     option_count = len(options_value) if isinstance(options_value, list) else 0
     evidence_source_count = len(evidence_items)
+
+    # Coverage measures the required decision fields, not every optional
+    # analytical dimension. This prevents a simple A-vs-B decision from being
+    # permanently blocked because the user did not state seven separate fields.
+    required_present = int(decision_present) + int(option_count > 0)
+    required_total = 2
+    evidence_coverage = round(required_present / required_total, 3)
 
     decision_ready = bool(
         decision_present
@@ -9657,12 +9797,22 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — DECISION INPUT EXTRACTION
+            # ------------------------------------------------
+
+            decision_extracted_context = extract_decision_context_from_text(
+                message=message,
+                history=history,
+            )
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 4A
             # DECISION CONTEXT BUILDER
             # ------------------------------------------------
 
             decision_context = build_decision_context(
                 reasoning_context=reasoning_context,
+                extracted_context=decision_extracted_context,
             )
 
             decision_context_trace = build_decision_context_trace(
@@ -10108,6 +10258,9 @@ class handler(
                     "decision_context_trace":
                         decision_context_trace,
 
+                    "decision_extracted_context":
+                        decision_extracted_context,
+
                     "decision_context_interpretation_trace":
                         decision_context_interpretation_trace,
 
@@ -10219,8 +10372,8 @@ def evaluate_decision_readiness(decision_evidence_matrix):
         "decision_present": decision_present,
         "options_present": options_present,
         "evidence_available": evidence_source_count > 0,
-        "no_missing_information": len(missing_information) == 0,
-        "evidence_coverage_complete": evidence_coverage >= 1.0,
+        "no_blocking_missing_information": len(missing_information) == 0,
+        "required_decision_fields_complete": decision_present and options_present,
     }
 
     ready = all(checks.values())
@@ -10237,12 +10390,12 @@ def evaluate_decision_readiness(decision_evidence_matrix):
     elif not checks["evidence_available"]:
         status = "not_ready"
         reason = "evidence_missing"
-    elif not checks["no_missing_information"]:
+    elif not checks["no_blocking_missing_information"]:
         status = "not_ready"
-        reason = "missing_information"
-    elif not checks["evidence_coverage_complete"]:
+        reason = "blocking_missing_information"
+    elif not checks["required_decision_fields_complete"]:
         status = "not_ready"
-        reason = "evidence_coverage_incomplete"
+        reason = "required_decision_fields_incomplete"
     else:
         status = "not_ready"
         reason = "decision_readiness_checks_failed"
@@ -11171,6 +11324,26 @@ def validate_explicit_decision_input(
     )
 
     if not gate_capturable:
+        # A confirmed user decision is still a valid user record even when
+        # the optional decision-support chain is not fully ready. The system
+        # must never choose for the user, but it should not block the user
+        # from explicitly recording what they decided.
+        if decision_text and explicit_confirmation:
+            return {
+                "built": True,
+                "accepted": True,
+                "status": "accepted",
+                "reason": "explicit_user_decision_accepted_without_decision_support",
+                "gate_capturable": False,
+                "explicit_decision_present": True,
+                "selected_option_present": bool(selected_option),
+                "rationale_present": bool(rationale),
+                "explicit_confirmation": True,
+                "decision_recorded": False,
+                "action_created": False,
+                "recommendation_generated": False,
+            }
+
         return {
             "built": True,
             "accepted": False,
