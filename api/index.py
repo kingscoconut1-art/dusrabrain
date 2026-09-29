@@ -7422,6 +7422,258 @@ def build_reasoning_trace(
     }
 
 
+# ============================================================
+# PHASE 7 — STEP 3C
+# REASONING VERIFICATION / EVIDENCE ALIGNMENT
+# ============================================================
+
+def _reasoning_verification_tokens(value):
+    """Deterministic, conservative tokens used only for alignment checks."""
+    import re
+
+    text = str(value or "").lower()
+    tokens = re.findall(r"[a-z0-9]+", text)
+
+    stop_words = {
+        "the", "a", "an", "and", "or", "but", "is", "are", "was", "were",
+        "be", "been", "being", "to", "of", "in", "on", "for", "from", "with",
+        "as", "at", "by", "it", "this", "that", "these", "those", "my", "your",
+        "i", "we", "you", "they", "he", "she", "its", "their", "our", "has", "have",
+        "had", "do", "does", "did", "will", "would", "can", "could", "should", "may",
+        "might", "about", "into", "than", "then", "also", "be", "there", "here",
+    }
+
+    return {
+        token for token in tokens
+        if len(token) >= 4 and token not in stop_words
+    }
+
+
+def _reasoning_source_key(source_type, source_id):
+    """Normalize a source reference into one deterministic key."""
+    try:
+        source_id = int(source_id)
+    except Exception:
+        return None
+
+    allowed = {"memory", "entity", "relationship", "conversation"}
+    source_type = str(source_type or "").strip().lower()
+
+    if source_type not in allowed:
+        return None
+
+    return (source_type, source_id)
+
+
+def _reasoning_context_source_keys(reasoning_context):
+    """Build the authoritative source index from Step 3A context."""
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    index = context.get("source_index", {})
+
+    keys = set()
+
+    for value in index.get("memory_ids", []) or []:
+        key = _reasoning_source_key("memory", value)
+        if key:
+            keys.add(key)
+
+    for value in index.get("entity_ids", []) or []:
+        key = _reasoning_source_key("entity", value)
+        if key:
+            keys.add(key)
+
+    for value in index.get("relationship_ids", []) or []:
+        key = _reasoning_source_key("relationship", value)
+        if key:
+            keys.add(key)
+
+    for value in index.get("conversation_indexes", []) or []:
+        key = _reasoning_source_key("conversation", value)
+        if key:
+            keys.add(key)
+
+    return keys
+
+
+def _reasoning_evidence_text(reasoning_context, evidence_trace):
+    """Return text from the already-validated evidence sources only."""
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    evidence = evidence_trace if isinstance(evidence_trace, list) else []
+
+    memory_by_id = {
+        int(item.get("id")): item
+        for item in context.get("memories", [])
+        if isinstance(item, dict) and item.get("id") is not None
+    }
+
+    entity_by_id = {
+        int(item.get("id")): item
+        for item in context.get("entities", [])
+        if isinstance(item, dict) and item.get("id") is not None
+    }
+
+    relationship_by_id = {
+        int(item.get("id")): item
+        for item in context.get("relationships", [])
+        if isinstance(item, dict) and item.get("id") is not None
+    }
+
+    conversation = context.get("conversation", [])
+    text_parts = []
+
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+
+        source_type = str(item.get("source_type") or "").strip().lower()
+        try:
+            source_id = int(item.get("source_id"))
+        except Exception:
+            continue
+
+        source = None
+        if source_type == "memory":
+            source = memory_by_id.get(source_id)
+            if source:
+                text_parts.append(str(source.get("memory") or ""))
+        elif source_type == "entity":
+            source = entity_by_id.get(source_id)
+            if source:
+                text_parts.append(" ".join([
+                    str(source.get("name") or ""),
+                    str(source.get("description") or ""),
+                    str(source.get("entity_type") or ""),
+                ]))
+        elif source_type == "relationship":
+            source = relationship_by_id.get(source_id)
+            if source:
+                text_parts.append(" ".join([
+                    str(source.get("from") or ""),
+                    str(source.get("relationship") or ""),
+                    str(source.get("to") or ""),
+                ]))
+        elif source_type == "conversation":
+            if 0 <= source_id < len(conversation):
+                source = conversation[source_id]
+                if isinstance(source, dict):
+                    text_parts.append(" ".join([
+                        str(source.get("role") or ""),
+                        str(source.get("message") or ""),
+                    ]))
+
+    return " ".join(text_parts).strip()
+
+
+def verify_reasoning_evidence_alignment(
+    reasoning_context,
+    evidence_trace,
+    reasoned_answer,
+    fallback_answer="",
+):
+    """
+    Deterministically verify that a reasoned answer remains anchored to the
+    authoritative Step 1A evidence set.
+
+    This layer does not generate facts, create evidence, call the database,
+    or call the model. If alignment cannot be established conservatively,
+    the caller should use the already-grounded fallback answer.
+    """
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    evidence = evidence_trace if isinstance(evidence_trace, list) else []
+    answer = str(reasoned_answer or "").strip()
+    fallback = str(fallback_answer or "").strip()
+
+    authoritative_keys = _reasoning_context_source_keys(context)
+    valid_evidence = []
+    invalid_evidence = []
+    seen = set()
+
+    for item in evidence:
+        if not isinstance(item, dict):
+            invalid_evidence.append(item)
+            continue
+
+        key = _reasoning_source_key(
+            item.get("source_type"),
+            item.get("source_id")
+        )
+
+        if key is None or key not in authoritative_keys:
+            invalid_evidence.append(item)
+            continue
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        valid_evidence.append(item)
+
+    evidence_text = _reasoning_evidence_text(
+        context,
+        valid_evidence
+    )
+
+    answer_tokens = _reasoning_verification_tokens(answer)
+    evidence_tokens = _reasoning_verification_tokens(evidence_text)
+    overlap = answer_tokens.intersection(evidence_tokens)
+
+    # Conservative rule: a non-empty reasoned answer must have either
+    # authoritative evidence references and meaningful lexical alignment,
+    # or fall back to the already-grounded answer. Short answers are allowed
+    # a smaller overlap because the evidence itself may be concise.
+    if not answer:
+        verified = False
+        reason = "empty_reasoned_answer"
+    elif not valid_evidence:
+        verified = False
+        reason = "no_valid_authoritative_evidence"
+    else:
+        required_overlap = 1 if len(answer_tokens) < 8 else 2
+        verified = len(overlap) >= required_overlap
+        reason = "aligned" if verified else "insufficient_evidence_alignment"
+
+    selected_answer = answer if verified else fallback
+
+    return {
+        "verified": bool(verified),
+        "reason": reason,
+        "fallback_used": not bool(verified),
+        "valid_evidence_count": len(valid_evidence),
+        "invalid_evidence_count": len(invalid_evidence),
+        "alignment_token_count": len(overlap),
+        "answer_token_count": len(answer_tokens),
+        "authoritative_evidence_tokens": len(evidence_tokens),
+        "selected_answer": selected_answer,
+    }
+
+
+def build_reasoning_verification_trace(
+    reasoning_context,
+    verification_result,
+):
+    """Compact public verification trace for Step 3C."""
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    result = verification_result if isinstance(verification_result, dict) else {}
+    counts = context.get("source_counts", {})
+
+    return {
+        "built": bool(context),
+        "verified": bool(result.get("verified", False)),
+        "fallback_used": bool(result.get("fallback_used", False)),
+        "reason": str(result.get("reason") or "unknown"),
+        "valid_evidence_count": int(result.get("valid_evidence_count", 0) or 0),
+        "invalid_evidence_count": int(result.get("invalid_evidence_count", 0) or 0),
+        "alignment_token_count": int(result.get("alignment_token_count", 0) or 0),
+        "source_counts": {
+            "memories": int(counts.get("memories", 0) or 0),
+            "entities": int(counts.get("entities", 0) or 0),
+            "relationships": int(counts.get("relationships", 0) or 0),
+            "conversation_messages": int(counts.get("conversation_messages", 0) or 0),
+            "evidence_sources": int(counts.get("evidence_sources", 0) or 0),
+        },
+    }
+
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -8694,6 +8946,34 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 3C
+            # REASONING VERIFICATION / EVIDENCE ALIGNMENT
+            # ------------------------------------------------
+
+            reasoning_verification = verify_reasoning_evidence_alignment(
+                reasoning_context=reasoning_context,
+                evidence_trace=evidence_trace,
+                reasoned_answer=response,
+                fallback_answer=grounded_result.get(
+                    "answer",
+                    ""
+                ).strip(),
+            )
+
+            response = reasoning_verification.get(
+                "selected_answer",
+                response
+            ).strip()
+
+            reasoning_verification_trace = (
+                build_reasoning_verification_trace(
+                    reasoning_context=reasoning_context,
+                    verification_result=reasoning_verification,
+                )
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -8821,6 +9101,9 @@ class handler(
 
                     "reasoning_trace":
                         reasoning_trace,
+
+                    "reasoning_verification_trace":
+                        reasoning_verification_trace,
 
                     "session_id":
                         session_id,
