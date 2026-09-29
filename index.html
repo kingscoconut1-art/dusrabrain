@@ -1677,6 +1677,12 @@
 .decision-status { display:inline-flex; border-radius:999px; padding:3px 8px; font-size:10px; font-weight:800; background:#e5e7eb; color:#374151; }
 .decision-status.pass,.decision-status.ready,.decision-status.accepted,.decision-status.persisted,.decision-status.found { background:#dcfce7; color:#166534; }
 .decision-status.not_ready,.decision-status.not_triggered,.decision-status.fail,.decision-status.empty,.decision-status.not_persisted { background:#fef3c7; color:#92400e; }
+.decision-pipeline-name { margin-top:5px; font-size:11px; font-weight:700; line-height:1.25; color:#334155; }
+.decision-user-summary { margin-top:10px; color:#475569; line-height:1.5; font-size:13px; }
+.decision-trace-card details { margin-top:10px; }
+.decision-trace-card details[open] { background:#f8fafc; padding:8px; border-radius:8px; }
+.decision-pipeline { align-items:stretch; }
+
 .decision-kv { display:grid; grid-template-columns:145px 1fr; gap:5px 10px; font-size:12px; }
 .decision-kv .k { color:#64748b; font-weight:700; }
 .decision-kv .v { color:#1f2937; word-break:break-word; }
@@ -2338,55 +2344,55 @@
 
                 <div class="decision-hero">
                     <h2>Decision Intelligence</h2>
-                    <p>One user-facing layer for the existing Phase 7 decision pipeline — from context and evidence through readiness, synthesis, capture, history and evolution.</p>
+                    <p>A simple place to understand your decisions, review the information behind them, save decisions you explicitly confirm, and see how they change over time.</p>
                     <div class="decision-toolbar">
-                        <button class="decision-button primary" id="decisionRefreshButton">↻ Refresh View</button>
-                        <button class="decision-button secondary" id="decisionHistoryButton">View Decision History</button>
-                        <button class="decision-button secondary" id="decisionAskHistoryButton">Ask Dusra Brain About Decisions</button>
+                        <button class="decision-button primary" id="decisionRefreshButton">↻ Refresh</button>
+                        <button class="decision-button secondary" id="decisionHistoryButton">View saved decisions</button>
+                        <button class="decision-button secondary" id="decisionAskHistoryButton">Ask about my decisions</button>
                     </div>
                 </div>
 
                 <div class="decision-grid">
-                    <div class="decision-stat"><div class="decision-stat-number" id="decisionReadinessStat">—</div><div class="decision-stat-label">Decision Readiness</div></div>
-                    <div class="decision-stat"><div class="decision-stat-number" id="decisionEvidenceStat">0</div><div class="decision-stat-label">Evidence Sources</div></div>
-                    <div class="decision-stat"><div class="decision-stat-number" id="decisionOptionsStat">0</div><div class="decision-stat-label">Options</div></div>
-                    <div class="decision-stat"><div class="decision-stat-number" id="decisionHistoryStat">0</div><div class="decision-stat-label">Persisted Decisions</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionReadinessStat">—</div><div class="decision-stat-label">Can I decide with what I know?</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionEvidenceStat">0</div><div class="decision-stat-label">Supporting information</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionOptionsStat">0</div><div class="decision-stat-label">Options identified</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionHistoryStat">0</div><div class="decision-stat-label">Saved decisions</div></div>
                 </div>
 
                 <div class="decision-section">
-                    <div class="decision-section-title">Phase 7 Decision Pipeline</div>
-                    <div class="decision-section-subtitle">Live status from the latest API response. No UI inference is added.</div>
+                    <div class="decision-section-title">How Dusra Brain works with a decision</div>
+                    <div class="decision-section-subtitle">Dusra Brain first understands the situation, checks what you know, helps structure the choices, and keeps a record of decisions you explicitly confirm.</div>
                     <div id="decisionPipeline" class="decision-pipeline"></div>
                 </div>
 
                 <div class="decision-section">
-                    <div class="decision-section-title">4A → 4D · Context & Readiness</div>
-                    <div class="decision-section-subtitle">Structured decision context, interpretation, evidence matrix and readiness gate.</div>
+                    <div class="decision-section-title">Understand the situation</div>
+                    <div class="decision-section-subtitle">Dusra Brain identifies what you are trying to decide, what you want to achieve, and what information is available.</div>
                     <div id="decisionContextTraces" class="decision-trace-grid"></div>
                 </div>
 
                 <div class="decision-section">
-                    <div class="decision-section-title">4E → 4G · Analysis & Synthesis</div>
-                    <div class="decision-section-subtitle">Analysis, synthesis and quality validation supplied by the existing API.</div>
+                    <div class="decision-section-title">Explore choices</div>
+                    <div class="decision-section-subtitle">When there is enough information, Dusra Brain can compare the choices, benefits, risks and trade-offs you have provided.</div>
                     <div id="decisionAnalysisTraces" class="decision-trace-grid"></div>
                 </div>
 
                 <div class="decision-section">
-                    <div class="decision-section-title">4H → 4L · Capture & History</div>
-                    <div class="decision-section-subtitle">Explicit decision input is user-controlled. Historical decisions are never inferred from plans or memories.</div>
+                    <div class="decision-section-title">Record and revisit your decisions</div>
+                    <div class="decision-section-subtitle">You are always in control. Dusra Brain only records a decision when you explicitly confirm it, and it can later show the history and evidence behind it.</div>
                     <div id="decisionHistoryTraces" class="decision-trace-grid"></div>
                     <div id="decisionHistoryList" class="decision-history-list" style="margin-top:12px;"></div>
                 </div>
 
                 <div class="decision-section">
-                    <div class="decision-section-title">4M → 4P · Evidence, Conflict & Evolution</div>
-                    <div class="decision-section-subtitle">Historical decision evidence integration, current-plan conflict detection, evolution tracking and grounded explanation.</div>
+                    <div class="decision-section-title">See how decisions change over time</div>
+                    <div class="decision-section-subtitle">Dusra Brain can connect past decisions with current plans, identify possible changes or conflicts, and explain the evidence behind those changes.</div>
                     <div id="decisionEvolutionTraces" class="decision-trace-grid"></div>
                 </div>
 
                 <div class="decision-section">
-                    <div class="decision-section-title">Explicit Decision Capture</div>
-                    <div class="decision-section-subtitle">This form sends only an explicit user decision to the existing 4I input contract. The API gates it through 4H before persistence.</div>
+                    <div class="decision-section-title">Save a decision</div>
+                    <div class="decision-section-subtitle">Tell Dusra Brain the decision you have actually made. Nothing is saved until you explicitly confirm it.</div>
                     <div class="decision-capture">
                         <div class="full"><textarea id="decisionInputText" placeholder="Enter the decision you explicitly want Dusra Brain to capture..."></textarea></div>
                         <div><input id="decisionSelectedOption" placeholder="Selected option (optional)"></div>
@@ -3314,47 +3320,93 @@
         return String(status || "unknown");
     }
 
+    function decisionUserStatus(trace) {
+        trace = trace && typeof trace === "object" ? trace : {};
+        if (trace.status === "pass" || trace.passed) return "Verified";
+        if (trace.status === "ready" || trace.ready) return "Ready";
+        if (trace.status === "capturable") return "Ready for your confirmation";
+        if (trace.status === "accepted" || trace.accepted) return "Confirmed";
+        if (trace.status === "persisted" || trace.persisted) return "Saved";
+        if (trace.status === "not_ready") return "Not ready yet";
+        if (trace.status === "not_triggered") return "Not needed yet";
+        if (trace.status === "not_persisted") return "Not saved";
+        if (trace.status === "fail") return "Needs attention";
+        if (trace.status === "answered" || trace.answered) return "Available";
+        if (trace.detected) return "Detected";
+        return "Checked";
+    }
+
+    function decisionHumanSummary(code, trace) {
+        trace = trace && typeof trace === "object" ? trace : {};
+        var summaries = {
+            "4A": "Understand what you are trying to decide and what information is available.",
+            "4B": "Understand whether you are asking for information, planning help, or decision help.",
+            "4C": "Check which parts of the decision are supported by the information Dusra Brain has.",
+            "4D": "Check whether there is enough information to treat this as a decision-ready situation.",
+            "4E": "Compare the choices, benefits, risks, trade-offs and unknowns you have provided.",
+            "4F": "Bring the available analysis together into a clear decision summary without choosing for you.",
+            "4G": "Check that the decision summary is supported by the available evidence.",
+            "4H": "Check whether a decision can be captured safely without making one on your behalf.",
+            "4I": "Receive the decision only when you explicitly tell Dusra Brain what you decided.",
+            "4J": "Save an explicitly confirmed decision so it can be recalled later.",
+            "4K": "Find decisions you previously saved when you ask about your decision history.",
+            "4L": "Explain a saved decision using its original record and evidence.",
+            "4M": "Connect saved decisions with the memories and evidence that supported them.",
+            "4N": "Check whether a saved decision appears different from a current plan, when evidence exists.",
+            "4O": "Track how explicitly saved decisions changed or were reaffirmed over time.",
+            "4P": "Explain the evidence-backed story of how a decision evolved over time."
+        };
+        return summaries[code] || "Dusra Brain is checking this part of your decision journey.";
+    }
+
     function renderDecisionTraceCard(code, title, trace) {
         trace = trace && typeof trace === "object" ? trace : {};
-        var status = decisionStatus(trace);
-        var keys = Object.keys(trace).filter(function(k){ return k !== "built" && k !== "status"; }).slice(0, 12);
-        var kv = keys.map(function(key){
+        var status = decisionUserStatus(trace);
+        var technical = Object.keys(trace).filter(function(k){ return k !== "built"; }).slice(0, 20);
+        var kv = technical.map(function(key){
             return '<div class="k">' + brainText(key.replace(/_/g," ")) + '</div><div class="v">' + brainText(decisionValue(trace[key])) + '</div>';
         }).join("");
-        return '<div class="decision-trace-card"><div class="decision-trace-head"><div class="decision-trace-name">' + brainText(code + " · " + title) + '</div><span class="decision-status ' + brainText(status) + '">' + brainText(status) + '</span></div><div class="decision-kv">' + kv + '</div><details><summary class="decision-muted">View raw trace</summary><div class="decision-json">' + brainText(JSON.stringify(trace,null,2)) + '</div></details></div>';
+        return '<div class="decision-trace-card">' +
+            '<div class="decision-trace-head"><div class="decision-trace-name">' + brainText(title) + '</div><span class="decision-status">' + brainText(status) + '</span></div>' +
+            '<div class="decision-user-summary">' + brainText(decisionHumanSummary(code, trace)) + '</div>' +
+            '<details><summary class="decision-muted">Technical details</summary><div class="decision-kv">' + kv + '</div><div class="decision-json">' + brainText(JSON.stringify(trace,null,2)) + '</div></details>' +
+            '</div>';
     }
 
     function renderDecisionCenter(data) {
         data = data && typeof data === "object" ? data : {};
         var map = {
-            "4A": ["Decision Context", data.decision_context_trace],
-            "4B": ["Context Interpreter", data.decision_context_interpretation_trace],
-            "4C": ["Evidence Matrix", data.decision_evidence_matrix_trace],
-            "4D": ["Readiness Gate", data.decision_readiness_trace],
-            "4E": ["Decision Analysis", data.decision_analysis_trace],
-            "4F": ["Decision Synthesis", data.decision_synthesis_trace],
-            "4G": ["Synthesis Quality", data.decision_synthesis_quality_trace],
-            "4H": ["Capture & Action Gate", data.decision_capture_trace],
-            "4I": ["Explicit Decision Input", data.decision_input_trace],
-            "4J": ["Decision Persistence", data.decision_history_trace],
-            "4K": ["History Recall", data.decision_history_recall_trace],
-            "4L": ["Grounded History Answer", data.decision_history_answer_trace],
-            "4M": ["Memory / Evidence Bridge", data.decision_history_memory_evidence_trace],
-            "4N": ["Current Plan Conflict", data.decision_current_plan_conflict_trace],
-            "4O": ["Evolution Tracking", data.decision_change_evolution_trace],
-            "4P": ["Evolution Explanation", data.decision_evolution_answer_trace]
+            "4A": ["Understand the situation", data.decision_context_trace],
+            "4B": ["Understand what kind of help you need", data.decision_context_interpretation_trace],
+            "4C": ["Check the information behind the decision", data.decision_evidence_matrix_trace],
+            "4D": ["Check whether you have enough information", data.decision_readiness_trace],
+            "4E": ["Explore the available choices", data.decision_analysis_trace],
+            "4F": ["Bring the analysis together", data.decision_synthesis_trace],
+            "4G": ["Check that the answer is supported", data.decision_synthesis_quality_trace],
+            "4H": ["Check whether your decision can be saved", data.decision_capture_trace],
+            "4I": ["Receive your explicit decision", data.decision_input_trace],
+            "4J": ["Save your confirmed decision", data.decision_history_trace],
+            "4K": ["Find your saved decisions", data.decision_history_recall_trace],
+            "4L": ["Explain a saved decision", data.decision_history_answer_trace],
+            "4M": ["Connect decisions with their evidence", data.decision_history_memory_evidence_trace],
+            "4N": ["Check for changes or possible conflicts", data.decision_current_plan_conflict_trace],
+            "4O": ["Track decision changes over time", data.decision_change_evolution_trace],
+            "4P": ["Explain how a decision evolved", data.decision_evolution_answer_trace]
         };
         var pipeline = document.getElementById("decisionPipeline");
-        pipeline.innerHTML = Object.keys(map).map(function(code){ var t=map[code][1]||{}; return '<div class="decision-pipeline-item"><div class="decision-pipeline-code">'+code+'</div><div class="decision-pipeline-status">'+brainText(decisionStatus(t))+'</div></div>'; }).join("");
+        pipeline.innerHTML = Object.keys(map).map(function(code){
+            var t=map[code][1]||{};
+            return '<div class="decision-pipeline-item"><div class="decision-pipeline-name">'+brainText(map[code][0])+'</div><div class="decision-pipeline-status">'+brainText(decisionUserStatus(t))+'</div></div>';
+        }).join("");
         document.getElementById("decisionContextTraces").innerHTML = ["4A","4B","4C","4D"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionAnalysisTraces").innerHTML = ["4E","4F","4G"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionHistoryTraces").innerHTML = ["4H","4I","4J","4K","4L"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionEvolutionTraces").innerHTML = ["4M","4N","4O","4P"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         var readiness = data.decision_readiness_trace || {};
-        document.getElementById("decisionReadinessStat").textContent = readiness.status || (readiness.ready ? "ready" : "not ready");
+        document.getElementById("decisionReadinessStat").textContent = readiness.ready ? "Yes" : "Not yet";
         var matrix = data.decision_evidence_matrix_trace || {};
         document.getElementById("decisionEvidenceStat").textContent = matrix.evidence_source_count || 0;
-        document.getElementById("decisionOptionsStat").textContent = (matrix.field_presence && matrix.field_presence.options) ? 1 : 0;
+        document.getElementById("decisionOptionsStat").textContent = (matrix.field_presence && matrix.field_presence.options) ? (matrix.field_presence.options.count || 0) : 0;
         var hist = data.decision_history_recall_trace || {};
         document.getElementById("decisionHistoryStat").textContent = hist.selected_count || (data.decision_history_trace && data.decision_history_trace.persisted ? 1 : 0);
         var historyAnswer = data.decision_history_answer_trace || {};
@@ -3362,11 +3414,11 @@
         var historyBox = document.getElementById("decisionHistoryList");
         var answerText = "";
         if (historyAnswer.answered && data.response) {
-            answerText = '<div class="decision-history-card"><div class="decision-history-id">Grounded Decision History Answer</div><div class="decision-history-text">' + brainText(data.response) + '</div></div>';
+            answerText = '<div class="decision-history-card"><div class="decision-history-id">Saved decision history</div><div class="decision-history-text">' + brainText(data.response) + '</div></div>';
         } else if (evolutionAnswer.answered && data.response) {
-            answerText = '<div class="decision-history-card"><div class="decision-history-id">Grounded Decision Evolution Answer</div><div class="decision-history-text">' + brainText(data.response) + '</div></div>';
+            answerText = '<div class="decision-history-card"><div class="decision-history-id">Decision evolution</div><div class="decision-history-text">' + brainText(data.response) + '</div></div>';
         } else {
-            answerText = '<div class="decision-history-card"><div class="decision-muted">No persisted decision history was returned for the latest request. Use “View Decision History” to query the existing 4K → 4L API path.</div></div>';
+            answerText = '<div class="decision-history-card"><div class="decision-muted">No saved decision was found for the latest request. Your plans and memories are not treated as decisions unless you explicitly confirm one.</div></div>';
         }
         historyBox.innerHTML = answerText;
     }
