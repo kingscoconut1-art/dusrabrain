@@ -7145,17 +7145,13 @@
 
             const response =
                 await fetch(
-                    "/api",
+                    "/api?memory_id=" +
+                    encodeURIComponent(
+                        memoryId
+                    ),
                     {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            action: "delete_memory",
-                            id: memoryId,
-                            user_id: "default_user"
-                        })
+                        method:
+                            "DELETE"
                     }
                 );
 
@@ -7377,19 +7373,36 @@
                         await fetch(
                             "/api",
                             {
-                                method: "POST",
+                                method:
+                                    "PUT",
+
                                 headers: {
-                                    "Content-Type": "application/json"
+                                    "Content-Type":
+                                        "application/json"
                                 },
-                                body: JSON.stringify({
-                                    action: "update_memory",
-                                    id: editingMemoryId,
-                                    memory: memory,
-                                    subject: subject || "general",
-                                    category: category || "general",
-                                    importance: importance,
-                                    user_id: "default_user"
-                                })
+
+                                body:
+                                    JSON.stringify({
+
+                                        id:
+                                            editingMemoryId,
+
+                                        memory:
+                                            memory,
+
+                                        subject:
+                                            subject ||
+                                            "general",
+
+                                        category:
+                                            category ||
+                                            "general",
+
+                                        importance:
+                                            importance
+
+                                    })
+
                             }
                         );
 
