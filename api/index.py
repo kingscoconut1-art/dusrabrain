@@ -9878,6 +9878,42 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4P
+            # DECISION EVOLUTION GROUNDED CHANGE EXPLANATION
+            # ------------------------------------------------
+
+            decision_evolution_answer = (
+                build_decision_evolution_grounded_answer(
+                    evolution_result=decision_change_evolution,
+                )
+            )
+
+            decision_evolution_answer_verification = (
+                validate_decision_evolution_grounded_answer(
+                    answer_result=decision_evolution_answer,
+                    evolution_result=decision_change_evolution,
+                )
+            )
+
+            decision_evolution_answer_trace = (
+                build_decision_evolution_answer_trace(
+                    answer_result=decision_evolution_answer,
+                    verification_result=decision_evolution_answer_verification,
+                )
+            )
+
+            if (
+                decision_evolution_answer_verification.get("verified")
+                and decision_evolution_answer.get("answered")
+            ):
+                response = (
+                    decision_evolution_answer_verification
+                    .get("answer", response)
+                    .strip()
+                )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -10056,6 +10092,9 @@ class handler(
 
                     "decision_change_evolution_trace":
                         decision_change_evolution_trace,
+
+                    "decision_evolution_answer_trace":
+                        decision_evolution_answer_trace,
 
                     "session_id":
                         session_id,
@@ -12633,3 +12672,73 @@ def build_decision_change_evolution_trace(evolution_result):
         "action_created": False,
         "read_only": True,
     }
+
+
+# ============================================================
+# PHASE 7 — STEP 4P
+# DECISION EVOLUTION GROUNDED CHANGE EXPLANATION
+# ============================================================
+
+def build_decision_evolution_grounded_answer(evolution_result):
+    """Build a grounded explanation strictly from validated Step 4O output."""
+    result = evolution_result if isinstance(evolution_result, dict) else {}
+    detected = bool(result.get("detected", False))
+    chains = [item for item in result.get("chains", []) if isinstance(item, dict)][:20]
+
+    if not detected:
+        status = str(result.get("status") or "not_triggered")
+        reason = str(result.get("reason") or "no_evolution_detected")
+        if status == "not_triggered":
+            return {"built": True, "answered": False, "status": "not_triggered", "reason": reason, "answer": "", "decision_count": 0, "evolution_chain_count": 0, "decision_ids": [], "evidence": []}
+        return {
+            "built": True, "answered": True, "status": "no_change", "reason": reason,
+            "answer": "No supported decision evolution was detected in the persisted decision records available for this request.",
+            "decision_count": int(result.get("decision_count", 0) or 0),
+            "evolution_chain_count": 0,
+            "decision_ids": [item for item in result.get("decision_ids", []) if item is not None][:50],
+            "evidence": [],
+        }
+
+    lines=["Here is the grounded decision evolution found in your persisted history:"]
+    evidence=[]; decision_ids=[]
+    for chain_index, chain in enumerate(chains, start=1):
+        subject=str(chain.get("subject") or "").strip()
+        decision_ids.extend([x for x in chain.get("decision_ids", []) if x is not None])
+        lines.append("\\n"+str(chain_index)+". "+("Subject: "+subject if subject else "Decision evolution"))
+        for tr in [x for x in chain.get("transitions", []) if isinstance(x,dict)][:20]:
+            a=tr.get("from_decision_id"); b=tr.get("to_decision_id")
+            cls=str(tr.get("classification") or "insufficient_evidence").strip()
+            reason=str(tr.get("reason") or "").strip()
+            lines.append("Decision #"+str(a)+" → Decision #"+str(b)+": "+cls+".")
+            if reason: lines.append("Basis: "+reason+".")
+            evidence.append({"source_type":"decision_history","from_decision_id":a,"to_decision_id":b,"classification":cls,"reason":reason,"subject":subject})
+    unique=[]; seen=set()
+    for x in decision_ids:
+        if str(x) not in seen: seen.add(str(x)); unique.append(x)
+    return {"built":True,"answered":bool(evidence),"status":"answered" if evidence else "empty","reason":"grounded_decision_evolution_explained" if evidence else "no_evolution_transitions_available","answer":"\\n".join(lines) if evidence else "","decision_count":int(result.get("decision_count",0) or 0),"evolution_chain_count":len(chains),"decision_ids":unique[:50],"evidence":evidence[:50]}
+
+
+def validate_decision_evolution_grounded_answer(answer_result, evolution_result):
+    """Reject any explanation containing a transition absent from Step 4O."""
+    answer=answer_result if isinstance(answer_result,dict) else {}
+    evolution=evolution_result if isinstance(evolution_result,dict) else {}
+    allowed=set()
+    for chain in evolution.get("chains",[]) or []:
+        if not isinstance(chain,dict): continue
+        for tr in chain.get("transitions",[]) or []:
+            if not isinstance(tr,dict): continue
+            allowed.add((str(tr.get("from_decision_id")),str(tr.get("to_decision_id")),str(tr.get("classification") or "insufficient_evidence")))
+    valid=[]; invalid=[]
+    for item in [x for x in answer.get("evidence",[]) if isinstance(x,dict)][:50]:
+        marker=(str(item.get("from_decision_id")),str(item.get("to_decision_id")),str(item.get("classification") or "insufficient_evidence"))
+        (valid if marker in allowed else invalid).append(item)
+    answered=bool(answer.get("answered",False)); answer_text=str(answer.get("answer") or "").strip()
+    verified=bool(answer.get("built",False) and (not answered or (bool(answer_text) and bool(valid) and not invalid)))
+    return {"verified":verified,"answer":answer_text,"valid_evidence_count":len(valid),"invalid_evidence_count":len(invalid),"reason":"aligned" if verified else "invalid_or_missing_evolution_evidence"}
+
+
+def build_decision_evolution_answer_trace(answer_result, verification_result):
+    """Compact public Step 4P verification trace."""
+    answer=answer_result if isinstance(answer_result,dict) else {}
+    verification=verification_result if isinstance(verification_result,dict) else {}
+    return {"built":bool(answer.get("built",False)),"answered":bool(answer.get("answered",False)),"verified":bool(verification.get("verified",False)),"status":str(answer.get("status") or "not_triggered"),"reason":str(verification.get("reason") or answer.get("reason") or "unknown"),"decision_count":int(answer.get("decision_count",0) or 0),"evolution_chain_count":int(answer.get("evolution_chain_count",0) or 0),"valid_evidence_count":int(verification.get("valid_evidence_count",0) or 0),"invalid_evidence_count":int(verification.get("invalid_evidence_count",0) or 0),"decision_ids":[x for x in answer.get("decision_ids",[]) if x is not None][:50],"fallback_used":False,"recommendation_generated":False,"decision_modified":False,"memory_modified":False,"action_created":False,"read_only":True}
