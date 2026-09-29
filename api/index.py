@@ -7232,6 +7232,258 @@ SUPPLIED EVIDENCE:
 
 
 # ============================================================
+# PHASE 7 — STEP 4A
+# DECISION CONTEXT BUILDER
+# ============================================================
+
+def build_decision_context(
+    reasoning_context,
+):
+    """
+    Build a deterministic, read-only decision context from the already
+    validated Step 3A reasoning context.
+
+    This layer does not call the model, query the database, write memory,
+    create evidence, rank recall results, or make a decision. It only
+    surfaces decision-relevant fields that are explicitly present in the
+    supplied context and reports what is not explicitly available.
+    """
+
+    context = (
+        reasoning_context
+        if isinstance(reasoning_context, dict)
+        else {}
+    )
+
+    question = str(
+        context.get("question") or ""
+    ).strip()
+
+    intent = str(
+        context.get("intent") or "general"
+    ).strip()
+
+    source_collections = [
+        ("memory", context.get("memories", [])),
+        ("entity", context.get("entities", [])),
+        ("relationship", context.get("relationships", [])),
+        ("conversation", context.get("conversation", [])),
+    ]
+
+    field_aliases = {
+        "decision": ["decision", "decision_question", "decision_context"],
+        "options": ["options", "option", "alternatives", "alternative_options"],
+        "goals": ["goals", "goal", "objectives", "objective"],
+        "constraints": ["constraints", "constraint", "requirements", "requirement"],
+        "risks": ["risks", "risk", "risk_factors"],
+        "uncertainties": ["uncertainties", "uncertainty", "unknowns", "unknown"],
+        "tradeoffs": ["tradeoffs", "trade_offs", "tradeoff", "trade_off"],
+        "missing_information": ["missing_information", "missing", "gaps", "information_gaps"],
+    }
+
+    def normalize_values(value, limit=20):
+        if value is None:
+            return []
+
+        if isinstance(value, (list, tuple)):
+            values = list(value)
+        else:
+            values = [value]
+
+        normalized = []
+
+        for item in values[:limit]:
+            if isinstance(item, dict):
+                normalized.append(dict(item))
+                continue
+
+            text_value = str(item or "").strip()
+            if text_value:
+                normalized.append(text_value)
+
+        return normalized
+
+    def collect_explicit(field):
+        values = []
+        seen = set()
+
+        for source_type, collection in source_collections:
+            if not isinstance(collection, list):
+                continue
+
+            for item in collection:
+                if not isinstance(item, dict):
+                    continue
+
+                for alias in field_aliases[field]:
+                    if alias not in item:
+                        continue
+
+                    for value in normalize_values(item.get(alias)):
+                        try:
+                            key = json.dumps(
+                                value,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                            )
+                        except Exception:
+                            key = str(value)
+
+                        if key in seen:
+                            continue
+
+                        seen.add(key)
+                        values.append(value)
+
+                        if len(values) >= 20:
+                            return values
+
+        return values
+
+    decision_values = collect_explicit("decision")
+    options = collect_explicit("options")
+    goals = collect_explicit("goals")
+    constraints = collect_explicit("constraints")
+    risks = collect_explicit("risks")
+    uncertainties = collect_explicit("uncertainties")
+    tradeoffs = collect_explicit("tradeoffs")
+    missing_information = collect_explicit("missing_information")
+
+    if not missing_information:
+        if not decision_values:
+            missing_information.append(
+                "No explicit decision statement was found in the retrieved context."
+            )
+        if not options:
+            missing_information.append(
+                "No explicit decision options were found in the retrieved context."
+            )
+        if not goals:
+            missing_information.append(
+                "No explicit decision goals were found in the retrieved context."
+            )
+        if not constraints:
+            missing_information.append(
+                "No explicit decision constraints were found in the retrieved context."
+            )
+        if not risks:
+            missing_information.append(
+                "No explicit decision risks were found in the retrieved context."
+            )
+        if not uncertainties:
+            missing_information.append(
+                "No explicit decision uncertainties were found in the retrieved context."
+            )
+
+    source_counts = context.get(
+        "source_counts",
+        {}
+    )
+
+    return {
+        "question": question,
+        "intent": intent,
+        "decision": decision_values[:1],
+        "options": options,
+        "goals": goals,
+        "constraints": constraints,
+        "risks": risks,
+        "uncertainties": uncertainties,
+        "tradeoffs": tradeoffs,
+        "evidence_trace": [
+            dict(item)
+            for item in context.get("evidence_trace", [])[:10]
+            if isinstance(item, dict)
+        ],
+        "source_index": dict(
+            context.get("source_index", {})
+        ),
+        "source_counts": {
+            "memories": int(source_counts.get("memories", 0) or 0),
+            "entities": int(source_counts.get("entities", 0) or 0),
+            "relationships": int(source_counts.get("relationships", 0) or 0),
+            "conversation_messages": int(source_counts.get("conversation_messages", 0) or 0),
+            "evidence_sources": int(source_counts.get("evidence_sources", 0) or 0),
+        },
+        "missing_information": missing_information[:20],
+    }
+
+
+def build_decision_context_trace(
+    decision_context,
+):
+    """Return a compact public verification trace for Step 4A."""
+
+    context = (
+        decision_context
+        if isinstance(decision_context, dict)
+        else {}
+    )
+
+    source_counts = context.get(
+        "source_counts",
+        {}
+    )
+
+    return {
+        "built": bool(context),
+        "intent": str(
+            context.get("intent") or "general"
+        ),
+        "decision_present": bool(
+            context.get("decision")
+        ),
+        "option_count": len(
+            context.get("options", [])
+            if isinstance(context.get("options", []), list)
+            else []
+        ),
+        "goal_count": len(
+            context.get("goals", [])
+            if isinstance(context.get("goals", []), list)
+            else []
+        ),
+        "constraint_count": len(
+            context.get("constraints", [])
+            if isinstance(context.get("constraints", []), list)
+            else []
+        ),
+        "risk_count": len(
+            context.get("risks", [])
+            if isinstance(context.get("risks", []), list)
+            else []
+        ),
+        "uncertainty_count": len(
+            context.get("uncertainties", [])
+            if isinstance(context.get("uncertainties", []), list)
+            else []
+        ),
+        "tradeoff_count": len(
+            context.get("tradeoffs", [])
+            if isinstance(context.get("tradeoffs", []), list)
+            else []
+        ),
+        "missing_information_count": len(
+            context.get("missing_information", [])
+            if isinstance(context.get("missing_information", []), list)
+            else []
+        ),
+        "evidence_count": len(
+            context.get("evidence_trace", [])
+            if isinstance(context.get("evidence_trace", []), list)
+            else []
+        ),
+        "source_counts": {
+            "memories": int(source_counts.get("memories", 0) or 0),
+            "entities": int(source_counts.get("entities", 0) or 0),
+            "relationships": int(source_counts.get("relationships", 0) or 0),
+            "conversation_messages": int(source_counts.get("conversation_messages", 0) or 0),
+            "evidence_sources": int(source_counts.get("evidence_sources", 0) or 0),
+        },
+    }
+
+
+# ============================================================
 # PHASE 7 — STEP 3B
 # REASONING ENGINE
 # ============================================================
@@ -9100,6 +9352,20 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4A
+            # DECISION CONTEXT BUILDER
+            # ------------------------------------------------
+
+            decision_context = build_decision_context(
+                reasoning_context=reasoning_context,
+            )
+
+            decision_context_trace = build_decision_context_trace(
+                decision_context=decision_context,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9233,6 +9499,9 @@ class handler(
 
                     "reasoning_quality_trace":
                         reasoning_quality_trace,
+
+                    "decision_context_trace":
+                        decision_context_trace,
 
                     "session_id":
                         session_id,
