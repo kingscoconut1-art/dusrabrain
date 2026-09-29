@@ -6164,8 +6164,8 @@ def detect_recall_intent(message):
     if any(
         word in tokens
         for word in {
-            "plan", "planning", "strategy", "launch", "launching",
-            "roadmap", "phase", "goal", "goals", "next",
+            "plan", "plans", "planning", "strategy", "strategies",
+            "launch", "launching", "roadmap", "phase", "goal", "goals", "next",
         }
     ):
         return "planning"
