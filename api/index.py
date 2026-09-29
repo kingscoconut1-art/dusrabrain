@@ -6491,6 +6491,319 @@ def build_recall_trace(
 
 
 # ============================================================
+# PHASE 7 — STEP 3A
+# REASONING CONTEXT BUILDER
+# ============================================================
+
+def build_reasoning_context(
+    message,
+    session_id,
+    title,
+    memories,
+    brain_entities,
+    brain_relationships,
+    history,
+    recall_trace=None,
+    evidence_trace=None,
+):
+    """
+    Build a deterministic, read-only context package for the future
+    Reasoning layer.
+
+    This function does NOT call the model.
+    This function does NOT write to the database.
+    It only organizes the already-ranked context produced by Recall
+    Intelligence and the already-validated evidence produced by the
+    Grounded Answer layer.
+
+    The returned package is intentionally source-addressable so a later
+    reasoning layer can reason across memories, entities, relationships,
+    conversation history, recall, and evidence without re-querying or
+    reconstructing context.
+    """
+
+    message = str(
+        message or ""
+    ).strip()
+
+    session_id = str(
+        session_id or "default"
+    )
+
+    title = str(
+        title or "New Chat"
+    )
+
+    memories = (
+        memories
+        if isinstance(memories, list)
+        else []
+    )
+
+    brain_entities = (
+        brain_entities
+        if isinstance(brain_entities, list)
+        else []
+    )
+
+    brain_relationships = (
+        brain_relationships
+        if isinstance(brain_relationships, list)
+        else []
+    )
+
+    history = (
+        history
+        if isinstance(history, list)
+        else []
+    )
+
+    recall_trace = (
+        recall_trace
+        if isinstance(recall_trace, dict)
+        else {}
+    )
+
+    evidence_trace = (
+        evidence_trace
+        if isinstance(evidence_trace, list)
+        else []
+    )
+
+    # Keep the context deterministic and bounded.
+    selected_memories = [
+        dict(item)
+        for item in memories[:30]
+        if isinstance(item, dict)
+    ]
+
+    selected_entities = [
+        dict(item)
+        for item in brain_entities[:40]
+        if isinstance(item, dict)
+    ]
+
+    selected_relationships = [
+        dict(item)
+        for item in brain_relationships[:40]
+        if isinstance(item, dict)
+    ]
+
+    selected_history = [
+        dict(item)
+        for item in history[-20:]
+        if isinstance(item, dict)
+    ]
+
+    selected_evidence = [
+        dict(item)
+        for item in evidence_trace[:10]
+        if isinstance(item, dict)
+    ]
+
+    memory_ids = [
+        int(item["id"])
+        for item in selected_memories
+        if item.get("id") is not None
+    ]
+
+    entity_ids = [
+        int(item["id"])
+        for item in selected_entities
+        if item.get("id") is not None
+    ]
+
+    relationship_ids = [
+        int(item["id"])
+        for item in selected_relationships
+        if item.get("id") is not None
+    ]
+
+    history_indexes = list(
+        range(
+            len(selected_history)
+        )
+    )
+
+    return {
+        "question": message,
+
+        "session": {
+            "id": session_id,
+            "title": title,
+        },
+
+        "intent": str(
+            recall_trace.get(
+                "intent",
+                "general"
+            )
+            or "general"
+        ),
+
+        "memories": selected_memories,
+
+        "entities": selected_entities,
+
+        "relationships": selected_relationships,
+
+        "conversation": selected_history,
+
+        "recall_trace": dict(
+            recall_trace
+        ),
+
+        "evidence_trace": selected_evidence,
+
+        "source_index": {
+            "memory_ids": memory_ids,
+            "entity_ids": entity_ids,
+            "relationship_ids": relationship_ids,
+            "conversation_indexes": history_indexes,
+        },
+
+        "source_counts": {
+            "memories": len(
+                selected_memories
+            ),
+            "entities": len(
+                selected_entities
+            ),
+            "relationships": len(
+                selected_relationships
+            ),
+            "conversation_messages": len(
+                selected_history
+            ),
+            "evidence_sources": len(
+                selected_evidence
+            ),
+        },
+    }
+
+
+def build_reasoning_context_trace(
+    context
+):
+    """
+    Return a compact, safe verification trace for the frontend/API.
+
+    The full reasoning context remains an internal backend structure.
+    The trace exposes only counts and source IDs needed to verify that
+    Step 3A assembled the expected context.
+    """
+
+    if not isinstance(
+        context,
+        dict
+    ):
+        return {
+            "built": False,
+            "source_counts": {},
+            "source_index": {},
+        }
+
+    source_counts = context.get(
+        "source_counts",
+        {}
+    )
+
+    source_index = context.get(
+        "source_index",
+        {}
+    )
+
+    return {
+        "built": True,
+
+        "intent": str(
+            context.get(
+                "intent",
+                "general"
+            )
+            or "general"
+        ),
+
+        "source_counts": {
+            "memories": int(
+                source_counts.get(
+                    "memories",
+                    0
+                )
+                or 0
+            ),
+            "entities": int(
+                source_counts.get(
+                    "entities",
+                    0
+                )
+                or 0
+            ),
+            "relationships": int(
+                source_counts.get(
+                    "relationships",
+                    0
+                )
+                or 0
+            ),
+            "conversation_messages": int(
+                source_counts.get(
+                    "conversation_messages",
+                    0
+                )
+                or 0
+            ),
+            "evidence_sources": int(
+                source_counts.get(
+                    "evidence_sources",
+                    0
+                )
+                or 0
+            ),
+        },
+
+        "source_index": {
+            "memory_ids": [
+                int(item)
+                for item in source_index.get(
+                    "memory_ids",
+                    []
+                )
+                if item is not None
+            ][:30],
+
+            "entity_ids": [
+                int(item)
+                for item in source_index.get(
+                    "entity_ids",
+                    []
+                )
+                if item is not None
+            ][:40],
+
+            "relationship_ids": [
+                int(item)
+                for item in source_index.get(
+                    "relationship_ids",
+                    []
+                )
+                if item is not None
+            ][:40],
+
+            "conversation_indexes": [
+                int(item)
+                for item in source_index.get(
+                    "conversation_indexes",
+                    []
+                )
+                if item is not None
+            ][:20],
+        },
+    }
+
+
+
+# ============================================================
 # PHASE 7 — STEP 1A
 # GROUNDED ANSWER EVIDENCE TRACE
 # ============================================================
@@ -8132,6 +8445,30 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 3A
+            # REASONING CONTEXT BUILDER
+            # ------------------------------------------------
+
+            reasoning_context = build_reasoning_context(
+                message=message,
+                session_id=session_id,
+                title=title,
+                memories=memories,
+                brain_entities=brain_entities,
+                brain_relationships=brain_relationships,
+                history=history,
+                recall_trace=recall_trace,
+                evidence_trace=evidence_trace,
+            )
+
+            reasoning_context_trace = (
+                build_reasoning_context_trace(
+                    reasoning_context
+                )
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -8253,6 +8590,9 @@ class handler(
 
                     "recall_trace":
                         recall_trace,
+
+                    "reasoning_context_trace":
+                        reasoning_context_trace,
 
                     "session_id":
                         session_id,
