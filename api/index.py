@@ -8263,132 +8263,6 @@ def build_decision_evidence_matrix_trace(
     }
 
 
-def is_fast_decision_history_request(message, body):
-    """Return True when a request can use the deterministic decision fast path."""
-    if isinstance(body, dict) and isinstance(body.get("decision_input"), dict):
-        payload = body.get("decision_input") or {}
-        if any(str(payload.get(k) or "").strip() for k in (
-            "decision", "selected_option", "rationale"
-        )):
-            return False
-
-    text = str(message or "").strip()
-    if not text:
-        return False
-
-    return bool(detect_decision_history_recall(text))
-
-
-def build_fast_path_trace(reason):
-    """Compact trace for modules intentionally skipped by fast routing."""
-    return {
-        "built": True,
-        "fast_path": True,
-        "status": "skipped",
-        "reason": str(reason),
-        "read_only": True,
-        "recommendation_generated": False,
-        "decision_modified": False,
-        "memory_modified": False,
-        "action_created": False,
-    }
-
-
-def is_fast_general_chat_request(message, body):
-    """Return True for ordinary chat that only needs one grounded LLM call.
-
-    Fast chat deliberately avoids the expensive reasoning/decision pipeline and
-    automatic extraction passes. Explicit memory/decision capture and complex
-    planning/analysis requests continue through the full pipeline.
-    """
-    if isinstance(body, dict) and isinstance(body.get("decision_input"), dict):
-        payload = body.get("decision_input") or {}
-        if any(str(payload.get(k) or "").strip() for k in (
-            "decision", "selected_option", "rationale"
-        )):
-            return False
-
-    text = str(message or "").strip()
-    if not text:
-        return False
-
-    lowered = text.lower()
-
-    # Decision/history queries have their own deterministic fast path.
-    if detect_decision_history_recall(text):
-        return False
-
-    heavy_terms = (
-        "decision", "decide", "choose", "should i", "which should",
-        "compare", "comparison", "pros and cons", "trade-off",
-        "strategy", "strategic", "roadmap", "business plan",
-        "plan for", "planning", "analyze", "analysis", "evaluate",
-        "recommend", "recommendation", "risk", "budget", "investment",
-        "roi", "forecast", "what should", "how should", "why should",
-        "remember", "memory", "save this", "forget this",
-        "i am", "i'm", "my name", "i have", "i own", "i prefer",
-        "i like", "i want", "i work", "i live", "i need you to remember",
-    )
-
-    if any(term in lowered for term in heavy_terms):
-        return False
-
-    # Keep long/complex prompts on the full pipeline.
-    if len(text) > 450:
-        return False
-
-    return True
-
-
-def get_fast_chat_memories(user_id, message, session_id="default", limit=20):
-    """Retrieve useful memory for fast chat using DB-only matching.
-
-    This intentionally avoids detect_subject(), which uses an additional LLM
-    call. Exact subject mentions are resolved locally.
-    """
-    base = get_memories(
-        user_id,
-        message=message,
-        session_id=session_id,
-        limit=limit,
-    )
-
-    try:
-        subjects = get_memory_subjects(user_id)
-    except Exception:
-        subjects = []
-
-    lowered = str(message or "").strip().lower()
-    matched = []
-
-    for subject in subjects:
-        value = str(subject or "").strip()
-        if value and value.lower() in lowered:
-            matched.extend(
-                get_subject_memories(
-                    user_id,
-                    value,
-                    session_id=session_id,
-                    limit=20,
-                )
-            )
-
-    combined = []
-    seen = set()
-
-    for item in matched + base:
-        item_id = item.get("id") if isinstance(item, dict) else None
-        key = item_id if item_id is not None else repr(item)
-        if key in seen:
-            continue
-        seen.add(key)
-        combined.append(item)
-        if len(combined) >= limit:
-            break
-
-    return combined
-
-
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -9262,6 +9136,104 @@ class handler(
 
                 return
 
+            # ------------------------------------------------
+            # BACKWARD-COMPATIBLE MEMORY EDIT/DELETE ACTIONS
+            # ------------------------------------------------
+            # The Memory UI sends POST /api actions. Keep these aliases
+            # ahead of the normal message validation so memory operations
+            # do not require a chat message. Edits use the versioned update
+            # path so existing memory history/versioning is preserved.
+            # ------------------------------------------------
+            if action == "update_memory":
+
+                memory_id = body.get("id")
+
+                if memory_id is None:
+                    send_json(
+                        self,
+                        {"updated": False, "error": "Memory ID is required"},
+                        400
+                    )
+                    return
+
+                try:
+                    result = update_memory_with_version(
+                        user_id=user_id,
+                        memory_id=int(memory_id),
+                        memory=body.get("memory"),
+                        category=body.get("category"),
+                        importance=body.get("importance"),
+                        subject=body.get("subject"),
+                        session_id=body.get("session_id"),
+                        change_reason=str(
+                            body.get("change_reason", "memory_updated")
+                            or "memory_updated"
+                        ),
+                    )
+
+                    send_json(
+                        self,
+                        result,
+                        200 if result.get("updated") or result.get("changed") is False else 400
+                    )
+                except Exception as error:
+                    send_json(
+                        self,
+                        {"updated": False, "error": str(error)},
+                        500
+                    )
+
+                return
+
+
+            if action == "delete_memory":
+
+                memory_id = body.get("id")
+
+                if memory_id is None:
+                    send_json(
+                        self,
+                        {"success": False, "error": "Memory ID is required"},
+                        400
+                    )
+                    return
+
+                try:
+                    with get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                DELETE FROM memories
+                                WHERE id = %s AND user_id = %s
+                                RETURNING id
+                                """,
+                                (int(memory_id), user_id)
+                            )
+                            deleted = cur.fetchone()
+                        conn.commit()
+
+                    if not deleted:
+                        send_json(
+                            self,
+                            {"success": False, "error": "Memory not found"},
+                            404
+                        )
+                        return
+
+                    send_json(
+                        self,
+                        {"success": True, "deleted_id": deleted[0]}
+                    )
+                except Exception as error:
+                    send_json(
+                        self,
+                        {"success": False, "error": str(error)},
+                        500
+                    )
+
+                return
+
+
             if action == "update_memory_version":
 
                 memory_id = body.get(
@@ -9455,305 +9427,6 @@ class handler(
                 session_id,
                 title
             )
-
-
-            # ------------------------------------------------
-            # PERFORMANCE PATCH — FAST DECISION HISTORY ROUTE
-            # ------------------------------------------------
-            # Deterministic read-only decision recall bypasses the general
-            # memory/Groq/reasoning pipeline and uses 4K -> 4O -> 4P only.
-            # Explicit decision capture is never routed here.
-            # ------------------------------------------------
-            if is_fast_decision_history_request(message, body):
-
-                fast_recall = recall_decision_history(
-                    user_id=user_id,
-                    query=message,
-                    limit=body.get("decision_history_limit", 10),
-                )
-
-                fast_recall_trace = build_decision_history_recall_trace(
-                    recall_result=fast_recall,
-                )
-
-                fast_history_answer = build_decision_history_grounded_answer(
-                    recall_result=fast_recall,
-                )
-
-                fast_history_verification = (
-                    validate_decision_history_grounded_answer(
-                        answer_result=fast_history_answer,
-                        recall_result=fast_recall,
-                    )
-                )
-
-                fast_evolution = detect_decision_change_evolution(
-                    recall_result=fast_recall,
-                )
-
-                fast_evolution_answer = (
-                    build_decision_evolution_grounded_answer(
-                        evolution_result=fast_evolution,
-                    )
-                )
-
-                fast_evolution_verification = (
-                    validate_decision_evolution_grounded_answer(
-                        answer_result=fast_evolution_answer,
-                        evolution_result=fast_evolution,
-                    )
-                )
-
-                response = (
-                    fast_history_verification.get("answer", "").strip()
-                    if fast_history_verification.get("verified")
-                    else fast_history_answer.get("answer", "").strip()
-                )
-
-                if (
-                    fast_evolution_verification.get("verified")
-                    and fast_evolution_answer.get("answered")
-                ):
-                    response = fast_evolution_verification.get(
-                        "answer", response
-                    ).strip()
-
-                save_conversation(
-                    user_id,
-                    "assistant",
-                    response,
-                    session_id,
-                    title
-                )
-
-                send_json(
-                    self,
-                    {
-                        "response": response,
-                        "evidence_trace": fast_history_answer.get(
-                            "decision_evidence", []
-                        ),
-                        "evidence_count": len(
-                            fast_history_answer.get("decision_evidence", [])
-                        ),
-                        "grounded": True,
-                        "recall_trace": build_fast_path_trace(
-                            "general_recall_skipped_for_decision_history"
-                        ),
-                        "reasoning_context_trace": build_fast_path_trace(
-                            "reasoning_skipped_for_deterministic_decision_history"
-                        ),
-                        "reasoning_trace": build_fast_path_trace(
-                            "reasoning_skipped_for_deterministic_decision_history"
-                        ),
-                        "reasoning_verification_trace": build_fast_path_trace(
-                            "reasoning_verification_skipped_for_fast_path"
-                        ),
-                        "reasoning_quality_trace": build_fast_path_trace(
-                            "reasoning_quality_skipped_for_fast_path"
-                        ),
-                        "decision_context_trace": build_fast_path_trace(
-                            "decision_context_skipped_for_history_recall"
-                        ),
-                        "decision_context_interpretation_trace": build_fast_path_trace(
-                            "decision_interpretation_skipped_for_history_recall"
-                        ),
-                        "decision_evidence_matrix_trace": build_fast_path_trace(
-                            "decision_evidence_matrix_skipped_for_history_recall"
-                        ),
-                        "decision_readiness_trace": build_fast_path_trace(
-                            "decision_readiness_skipped_for_history_recall"
-                        ),
-                        "decision_analysis_trace": build_fast_path_trace(
-                            "decision_analysis_skipped_for_history_recall"
-                        ),
-                        "decision_synthesis_trace": build_fast_path_trace(
-                            "decision_synthesis_skipped_for_history_recall"
-                        ),
-                        "decision_synthesis_quality_trace": build_fast_path_trace(
-                            "decision_synthesis_quality_skipped_for_history_recall"
-                        ),
-                        "decision_capture_trace": build_fast_path_trace(
-                            "decision_capture_skipped_for_history_recall"
-                        ),
-                        "decision_input_trace": build_fast_path_trace(
-                            "decision_input_skipped_for_history_recall"
-                        ),
-                        "decision_history_trace": build_fast_path_trace(
-                            "decision_persistence_skipped_for_read_only_history_recall"
-                        ),
-                        "decision_history_recall_trace": fast_recall_trace,
-                        "decision_history_answer_trace": build_decision_history_answer_trace(
-                            answer_result=fast_history_answer,
-                            verification_result=fast_history_verification,
-                        ),
-                        "decision_history_memory_evidence_trace": build_fast_path_trace(
-                            "memory_evidence_bridge_skipped_for_fast_path"
-                        ),
-                        "decision_current_plan_conflict_trace": build_fast_path_trace(
-                            "plan_conflict_detection_skipped_for_fast_path"
-                        ),
-                        "decision_change_evolution_trace": build_decision_change_evolution_trace(
-                            evolution_result=fast_evolution,
-                        ),
-                        "decision_evolution_answer_trace": build_decision_evolution_answer_trace(
-                            answer_result=fast_evolution_answer,
-                            verification_result=fast_evolution_verification,
-                        ),
-                        "decision_outcome_trace": {
-                            "built": True,
-                            "accepted": False,
-                            "persisted": False,
-                            "status": "not_triggered",
-                            "reason": "outcome_requires_explicit_user_capture",
-                            "decision_id": None,
-                            "outcome_id": None,
-                            "duplicate": False,
-                            "outcome_recorded": False,
-                            "recommendation_generated": False,
-                            "decision_modified": False,
-                            "action_created": False,
-                            "read_only": True,
-                        },
-                        "performance_trace": {
-                            "fast_path": True,
-                            "route": "decision_history",
-                            "llm_calls": 0,
-                            "skipped": [
-                                "memory_retrieval",
-                                "grounded_answer_generation",
-                                "reasoning_engine",
-                                "decision_analysis_pipeline",
-                                "memory_extraction",
-                                "brain_structure_extraction",
-                            ],
-                        },
-                        "session_id": session_id,
-                        "title": title,
-                    },
-                    200,
-                )
-
-                return
-
-
-            # ------------------------------------------------
-            # PERFORMANCE PATCH — FAST GENERAL CHAT ROUTE
-            # ------------------------------------------------
-            # Ordinary short chat uses one grounded Groq call only. This avoids
-            # the extra subject-detection, reasoning, decision-analysis,
-            # memory-extraction and brain-extraction model calls that made a
-            # fresh chat feel slow. Complex/explicit-memory/decision requests
-            # continue through the existing full pipeline.
-            # ------------------------------------------------
-            if is_fast_general_chat_request(message, body):
-
-                fast_history = get_conversation_history(
-                    user_id,
-                    session_id=session_id,
-                    limit=10,
-                )
-
-                fast_memories = get_fast_chat_memories(
-                    user_id,
-                    message,
-                    session_id=session_id,
-                    limit=20,
-                )
-
-                fast_grounded = generate_grounded_answer(
-                    message=message,
-                    session_id=session_id,
-                    title=title,
-                    memories=fast_memories,
-                    brain_entities=[],
-                    brain_relationships=[],
-                    history=fast_history,
-                )
-
-                response = str(
-                    fast_grounded.get("answer") or
-                    "I don't have enough stored information to answer that reliably."
-                ).strip()
-
-                evidence_trace = fast_grounded.get(
-                    "evidence_trace", []
-                )
-
-                save_conversation(
-                    user_id,
-                    "assistant",
-                    response,
-                    session_id,
-                    title
-                )
-
-                skipped = build_fast_path_trace(
-                    "fast_general_chat_single_llm_call"
-                )
-
-                send_json(
-                    self,
-                    {
-                        "response": response,
-                        "evidence_trace": evidence_trace,
-                        "evidence_count": len(evidence_trace),
-                        "grounded": bool(fast_grounded.get("grounded", False)),
-                        "recall_trace": skipped,
-                        "reasoning_context_trace": skipped,
-                        "reasoning_trace": skipped,
-                        "reasoning_verification_trace": skipped,
-                        "reasoning_quality_trace": skipped,
-                        "decision_context_trace": skipped,
-                        "decision_context_interpretation_trace": skipped,
-                        "decision_evidence_matrix_trace": skipped,
-                        "decision_readiness_trace": skipped,
-                        "decision_analysis_trace": skipped,
-                        "decision_synthesis_trace": skipped,
-                        "decision_synthesis_quality_trace": skipped,
-                        "decision_capture_trace": skipped,
-                        "decision_input_trace": skipped,
-                        "decision_history_trace": skipped,
-                        "decision_history_recall_trace": skipped,
-                        "decision_history_answer_trace": skipped,
-                        "decision_history_memory_evidence_trace": skipped,
-                        "decision_current_plan_conflict_trace": skipped,
-                        "decision_change_evolution_trace": skipped,
-                        "decision_evolution_answer_trace": skipped,
-                        "decision_outcome_trace": {
-                            "built": True,
-                            "accepted": False,
-                            "persisted": False,
-                            "status": "not_triggered",
-                            "reason": "outcome_requires_explicit_user_capture",
-                            "decision_id": None,
-                            "outcome_id": None,
-                            "duplicate": False,
-                            "outcome_recorded": False,
-                            "recommendation_generated": False,
-                            "decision_modified": False,
-                            "action_created": False,
-                            "read_only": True,
-                        },
-                        "performance_trace": {
-                            "fast_path": True,
-                            "route": "general_chat",
-                            "llm_calls": 1,
-                            "skipped": [
-                                "subject_detection_llm",
-                                "reasoning_engine",
-                                "decision_analysis_pipeline",
-                                "memory_extraction",
-                                "brain_structure_extraction",
-                            ],
-                        },
-                        "session_id": session_id,
-                        "title": title,
-                    },
-                    200,
-                )
-
-                return
 
 
             # ------------------------------------------------
@@ -12124,30 +11797,6 @@ def ensure_decision_history_table():
                 """
             )
 
-            # Repair legacy generic decision subjects from the persisted
-            # conversation title for the same user/session. This changes
-            # metadata only; decision content remains immutable.
-            cur.execute(
-                """
-                UPDATE decision_history AS dh
-                SET title = src.title
-                FROM (
-                    SELECT
-                        user_id,
-                        session_id,
-                        MAX(title) AS title
-                    FROM conversations
-                    WHERE title IS NOT NULL
-                      AND TRIM(title) <> ''
-                      AND LOWER(TRIM(title)) <> 'new chat'
-                    GROUP BY user_id, session_id
-                ) AS src
-                WHERE dh.user_id = src.user_id
-                  AND dh.session_id = src.session_id
-                  AND LOWER(TRIM(COALESCE(dh.title, ''))) = 'new chat'
-                """
-            )
-
         conn.commit()
 
 
@@ -12213,45 +11862,6 @@ def persist_explicit_decision(
     decision = str(payload.get("decision") or "").strip()
     selected_option = str(payload.get("selected_option") or "").strip()
     rationale = str(payload.get("rationale") or "").strip()
-
-    # Step 4J subject propagation:
-    # Prefer an explicit client-supplied decision subject, then the active
-    # session title. Never persist the generic "New Chat" label when a real
-    # session title can be recovered from the conversation store.
-    decision_subject = str(payload.get("decision_subject") or "").strip()
-    effective_title = decision_subject or str(title or "").strip()
-
-    generic_titles = {"", "new chat", "new conversation", "default"}
-    if effective_title.lower() in generic_titles:
-        effective_title = ""
-
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT title
-                    FROM conversations
-                    WHERE user_id = %s
-                      AND session_id = %s
-                      AND title IS NOT NULL
-                      AND TRIM(title) <> ''
-                      AND LOWER(TRIM(title)) NOT IN
-                          ('new chat', 'new conversation', 'default')
-                    ORDER BY id DESC
-                    LIMIT 1
-                    """,
-                    (
-                        str(user_id),
-                        str(session_id or "default"),
-                    )
-                )
-                row = cur.fetchone()
-
-        if row and str(row[0] or "").strip():
-            effective_title = str(row[0]).strip()
-
-    if not effective_title:
-        effective_title = "New Chat"
 
     if not decision or not bool(payload.get("confirmed", False)):
         return {
@@ -12347,7 +11957,7 @@ def persist_explicit_decision(
                 (
                     str(user_id),
                     str(session_id or "default"),
-                    effective_title,
+                    str(title or "New Chat"),
                     decision,
                     selected_option,
                     rationale,
@@ -13302,7 +12912,7 @@ def build_decision_evolution_grounded_answer(evolution_result):
     for chain_index, chain in enumerate(chains, start=1):
         subject=str(chain.get("subject") or "").strip()
         decision_ids.extend([x for x in chain.get("decision_ids", []) if x is not None])
-        lines.append("\n"+str(chain_index)+". "+("Subject: "+subject if subject else "Decision evolution"))
+        lines.append("\\n"+str(chain_index)+". "+("Subject: "+subject if subject else "Decision evolution"))
         for tr in [x for x in chain.get("transitions", []) if isinstance(x,dict)][:20]:
             a=tr.get("from_decision_id"); b=tr.get("to_decision_id")
             cls=str(tr.get("classification") or "insufficient_evidence").strip()
@@ -13313,7 +12923,7 @@ def build_decision_evolution_grounded_answer(evolution_result):
     unique=[]; seen=set()
     for x in decision_ids:
         if str(x) not in seen: seen.add(str(x)); unique.append(x)
-    return {"built":True,"answered":bool(evidence),"status":"answered" if evidence else "empty","reason":"grounded_decision_evolution_explained" if evidence else "no_evolution_transitions_available","answer":"\n".join(lines) if evidence else "","decision_count":int(result.get("decision_count",0) or 0),"evolution_chain_count":len(chains),"decision_ids":unique[:50],"evidence":evidence[:50]}
+    return {"built":True,"answered":bool(evidence),"status":"answered" if evidence else "empty","reason":"grounded_decision_evolution_explained" if evidence else "no_evolution_transitions_available","answer":"\\n".join(lines) if evidence else "","decision_count":int(result.get("decision_count",0) or 0),"evolution_chain_count":len(chains),"decision_ids":unique[:50],"evidence":evidence[:50]}
 
 
 def validate_decision_evolution_grounded_answer(answer_result, evolution_result):
