@@ -9677,6 +9677,25 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4G
+            # DECISION SYNTHESIS QUALITY GATE
+            # ------------------------------------------------
+
+            decision_synthesis_quality = evaluate_decision_synthesis_quality_gate(
+                decision_readiness=decision_readiness,
+                decision_analysis=decision_analysis,
+                decision_synthesis=decision_synthesis,
+            )
+
+            decision_synthesis_quality_trace = build_decision_synthesis_quality_trace(
+                decision_readiness=decision_readiness,
+                decision_analysis=decision_analysis,
+                decision_synthesis=decision_synthesis,
+                quality_result=decision_synthesis_quality,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9828,6 +9847,9 @@ class handler(
 
                     "decision_synthesis_trace":
                         decision_synthesis_trace,
+
+                    "decision_synthesis_quality_trace":
+                        decision_synthesis_quality_trace,
 
                     "session_id":
                         session_id,
@@ -10091,6 +10113,141 @@ def build_decision_analysis_trace(decision_readiness, analysis_result):
         "unresolved_question_count": len(unresolved),
         "evidence_source_count": int(analysis.get("evidence_source_count", 0) or 0),
     }
+
+# ============================================================
+# PHASE 7 — STEP 4G
+# DECISION SYNTHESIS QUALITY GATE
+# ============================================================
+
+def evaluate_decision_synthesis_quality_gate(
+    decision_readiness,
+    decision_analysis,
+    decision_synthesis,
+):
+    """
+    Deterministically verify the Step 4F synthesis before it is treated as
+    a valid decision-support artifact.
+
+    This layer does not call the model, query the database, write memory,
+    create evidence, choose an option, or generate a recommendation.
+    It validates only the already-built 4D/4E/4F outputs.
+    """
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    analysis_result = decision_analysis if isinstance(decision_analysis, dict) else {}
+    synthesis_result = decision_synthesis if isinstance(decision_synthesis, dict) else {}
+
+    ready = bool(readiness.get("ready", False))
+    analyzed = bool(analysis_result.get("analyzed", False))
+    synthesized = bool(synthesis_result.get("synthesized", False))
+
+    synthesis = synthesis_result.get("synthesis", {})
+    synthesis = synthesis if isinstance(synthesis, dict) else {}
+
+    summary = str(synthesis.get("synthesis_summary") or "").strip()
+    comparison = synthesis.get("option_comparison", [])
+    comparison = comparison if isinstance(comparison, list) else []
+    unresolved = synthesis.get("unresolved_questions", [])
+    unresolved = unresolved if isinstance(unresolved, list) else []
+    recommendation = str(synthesis.get("recommendation") or "").strip()
+
+    analysis = analysis_result.get("analysis", {})
+    analysis = analysis if isinstance(analysis, dict) else {}
+    analyzed_options = analysis.get("option_analysis", [])
+    analyzed_options = analyzed_options if isinstance(analyzed_options, list) else []
+    allowed_options = {
+        str(item.get("option") or "").strip()
+        for item in analyzed_options
+        if isinstance(item, dict) and str(item.get("option") or "").strip()
+    }
+    compared_options = {
+        str(item.get("option") or "").strip()
+        for item in comparison
+        if isinstance(item, dict) and str(item.get("option") or "").strip()
+    }
+
+    invalid_option_count = 0
+    for item in comparison:
+        if not isinstance(item, dict):
+            invalid_option_count += 1
+            continue
+        option = str(item.get("option") or "").strip()
+        if not option or (allowed_options and option not in allowed_options):
+            invalid_option_count += 1
+
+    checks = {
+        "readiness_ready": ready,
+        "analysis_available": analyzed,
+        "synthesis_built": bool(synthesis_result.get("built", False)),
+        "synthesis_completed": synthesized,
+        "summary_present": bool(summary),
+        "option_references_valid": invalid_option_count == 0,
+        "recommendation_absent": not bool(recommendation),
+    }
+
+    passed = all(checks.values())
+
+    if not ready:
+        status = "not_ready"
+        reason = str(readiness.get("reason") or "decision_not_ready")
+    elif not analyzed:
+        status = "not_ready"
+        reason = "decision_analysis_unavailable"
+    elif not synthesized:
+        status = "fail"
+        reason = str(synthesis_result.get("reason") or "decision_synthesis_failed")
+    elif invalid_option_count > 0:
+        status = "fail"
+        reason = "invalid_option_reference"
+    elif recommendation:
+        status = "fail"
+        reason = "recommendation_present"
+    elif not summary:
+        status = "fail"
+        reason = "synthesis_summary_missing"
+    else:
+        status = "pass"
+        reason = "decision_synthesis_verified"
+
+    return {
+        "passed": bool(passed),
+        "status": status,
+        "reason": reason,
+        "checks": checks,
+        "option_comparison_count": len(comparison),
+        "unresolved_question_count": len(unresolved),
+        "analyzed_option_count": len(allowed_options),
+        "invalid_option_count": invalid_option_count,
+        "recommendation_generated": bool(recommendation),
+        "compared_option_count": len(compared_options),
+    }
+
+
+def build_decision_synthesis_quality_trace(
+    decision_readiness,
+    decision_analysis,
+    decision_synthesis,
+    quality_result,
+):
+    """Compact public verification trace for Step 4G."""
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    analysis = decision_analysis if isinstance(decision_analysis, dict) else {}
+    synthesis = decision_synthesis if isinstance(decision_synthesis, dict) else {}
+    result = quality_result if isinstance(quality_result, dict) else {}
+
+    return {
+        "built": True,
+        "passed": bool(result.get("passed", False)),
+        "status": str(result.get("status") or "fail"),
+        "reason": str(result.get("reason") or "unknown"),
+        "readiness_status": str(readiness.get("status") or "not_ready"),
+        "analysis_status": str(analysis.get("status") or "unknown"),
+        "synthesis_status": str(synthesis.get("status") or "unknown"),
+        "option_comparison_count": int(result.get("option_comparison_count", 0) or 0),
+        "unresolved_question_count": int(result.get("unresolved_question_count", 0) or 0),
+        "invalid_option_count": int(result.get("invalid_option_count", 0) or 0),
+        "recommendation_generated": bool(result.get("recommendation_generated", False)),
+    }
+
 
 # ============================================================
 # PHASE 7 — STEP 4F
