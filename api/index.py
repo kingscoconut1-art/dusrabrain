@@ -9627,6 +9627,21 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4D
+            # DECISION READINESS GATE
+            # ------------------------------------------------
+
+            decision_readiness = evaluate_decision_readiness(
+                decision_evidence_matrix=decision_evidence_matrix,
+            )
+
+            decision_readiness_trace = build_decision_readiness_trace(
+                decision_evidence_matrix=decision_evidence_matrix,
+                readiness_result=decision_readiness,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9770,6 +9785,9 @@ class handler(
                     "decision_evidence_matrix_trace":
                         decision_evidence_matrix_trace,
 
+                    "decision_readiness_trace":
+                        decision_readiness_trace,
+
                     "session_id":
                         session_id,
 
@@ -9790,6 +9808,92 @@ class handler(
                 500
             )
 
+
+
+# ============================================================
+# PHASE 7 — STEP 4D
+# DECISION READINESS GATE
+# ============================================================
+
+def evaluate_decision_readiness(decision_evidence_matrix):
+    """Deterministically gate whether the supplied decision context is ready.
+
+    This layer does not call the model, query the database, write memory,
+    create evidence, or recommend a decision. It evaluates only the
+    already-built Step 4C matrix.
+    """
+    matrix = decision_evidence_matrix if isinstance(decision_evidence_matrix, dict) else {}
+
+    field_status = matrix.get("field_status", {})
+    decision_present = bool(field_status.get("decision", {}).get("present"))
+    options_present = bool(field_status.get("options", {}).get("present"))
+    evidence_source_count = int(matrix.get("evidence_source_count", 0) or 0)
+    missing_information = matrix.get("missing_information", [])
+    missing_information = missing_information if isinstance(missing_information, list) else []
+    evidence_coverage = float(matrix.get("evidence_coverage", 0.0) or 0.0)
+
+    checks = {
+        "decision_present": decision_present,
+        "options_present": options_present,
+        "evidence_available": evidence_source_count > 0,
+        "no_missing_information": len(missing_information) == 0,
+        "evidence_coverage_complete": evidence_coverage >= 1.0,
+    }
+
+    ready = all(checks.values())
+
+    if ready:
+        status = "ready"
+        reason = "sufficient_explicit_decision_evidence"
+    elif not checks["decision_present"]:
+        status = "not_ready"
+        reason = "decision_missing"
+    elif not checks["options_present"]:
+        status = "not_ready"
+        reason = "options_missing"
+    elif not checks["evidence_available"]:
+        status = "not_ready"
+        reason = "evidence_missing"
+    elif not checks["no_missing_information"]:
+        status = "not_ready"
+        reason = "missing_information"
+    elif not checks["evidence_coverage_complete"]:
+        status = "not_ready"
+        reason = "evidence_coverage_incomplete"
+    else:
+        status = "not_ready"
+        reason = "decision_readiness_checks_failed"
+
+    missing_requirements = [
+        key for key, passed in checks.items()
+        if not passed
+    ]
+
+    return {
+        "ready": bool(ready),
+        "status": status,
+        "reason": reason,
+        "checks": checks,
+        "missing_requirements": missing_requirements,
+        "evidence_coverage": evidence_coverage,
+        "evidence_source_count": evidence_source_count,
+    }
+
+
+def build_decision_readiness_trace(decision_evidence_matrix, readiness_result):
+    """Compact public verification trace for Step 4D."""
+    matrix = decision_evidence_matrix if isinstance(decision_evidence_matrix, dict) else {}
+    result = readiness_result if isinstance(readiness_result, dict) else {}
+
+    return {
+        "built": bool(matrix),
+        "ready": bool(result.get("ready", False)),
+        "status": str(result.get("status") or "not_ready"),
+        "reason": str(result.get("reason") or "unknown"),
+        "missing_requirements": list(result.get("missing_requirements", []) or []),
+        "evidence_coverage": float(result.get("evidence_coverage", 0.0) or 0.0),
+        "evidence_source_count": int(result.get("evidence_source_count", 0) or 0),
+    }
 
     # ========================================================
     # PUT
