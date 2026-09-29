@@ -1645,6 +1645,56 @@
 }
 </style>
 
+
+<style>
+/* ========================================================
+   PHASE 7 — DECISION INTELLIGENCE UI — 4A → 4P
+   Read-only visualization of the existing API intelligence chain.
+   ======================================================== */
+.decision-dashboard { max-width: 1180px; margin: 0 auto; padding-bottom: 40px; }
+.decision-hero { background: linear-gradient(135deg,#111827,#1f2937); color:#fff; border-radius:16px; padding:24px; margin-bottom:18px; }
+.decision-hero h2 { margin:0 0 7px; font-size:25px; }
+.decision-hero p { margin:0; color:#d1d5db; line-height:1.55; }
+.decision-toolbar { display:flex; gap:9px; flex-wrap:wrap; margin-top:17px; }
+.decision-button { border:0; border-radius:9px; padding:9px 13px; cursor:pointer; font-weight:700; background:#fff; color:#111827; }
+.decision-button.secondary { background:#e5e7eb; }
+.decision-button.primary { background:#111827; color:#fff; }
+.decision-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+.decision-stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:15px; }
+.decision-stat-number { font-size:22px; font-weight:800; color:#111827; }
+.decision-stat-label { margin-top:4px; color:#64748b; font-size:12px; font-weight:700; }
+.decision-section { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:17px; margin-bottom:15px; }
+.decision-section-title { font-size:17px; font-weight:800; color:#111827; margin-bottom:4px; }
+.decision-section-subtitle { color:#64748b; font-size:12px; margin-bottom:13px; }
+.decision-pipeline { display:grid; grid-template-columns:repeat(8,minmax(90px,1fr)); gap:7px; overflow:auto; padding-bottom:4px; }
+.decision-pipeline-item { min-width:90px; border:1px solid #e5e7eb; border-radius:9px; padding:9px; text-align:center; background:#f8fafc; }
+.decision-pipeline-code { font-weight:900; font-size:12px; }
+.decision-pipeline-status { font-size:10px; color:#64748b; margin-top:4px; word-break:break-word; }
+.decision-trace-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.decision-trace-card { border:1px solid #e5e7eb; border-radius:10px; padding:12px; background:#fafafa; }
+.decision-trace-head { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px; }
+.decision-trace-name { font-weight:800; color:#111827; }
+.decision-status { display:inline-flex; border-radius:999px; padding:3px 8px; font-size:10px; font-weight:800; background:#e5e7eb; color:#374151; }
+.decision-status.pass,.decision-status.ready,.decision-status.accepted,.decision-status.persisted,.decision-status.found { background:#dcfce7; color:#166534; }
+.decision-status.not_ready,.decision-status.not_triggered,.decision-status.fail,.decision-status.empty,.decision-status.not_persisted { background:#fef3c7; color:#92400e; }
+.decision-kv { display:grid; grid-template-columns:145px 1fr; gap:5px 10px; font-size:12px; }
+.decision-kv .k { color:#64748b; font-weight:700; }
+.decision-kv .v { color:#1f2937; word-break:break-word; }
+.decision-json { margin-top:9px; background:#111827; color:#e5e7eb; border-radius:9px; padding:10px; font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; max-height:210px; overflow:auto; white-space:pre-wrap; }
+.decision-history-list { display:grid; gap:10px; }
+.decision-history-card { border:1px solid #e5e7eb; border-radius:10px; padding:13px; }
+.decision-history-id { font-size:11px; font-weight:800; color:#4338ca; }
+.decision-history-text { font-weight:800; margin-top:5px; color:#111827; }
+.decision-history-meta { font-size:11px; color:#64748b; margin-top:6px; line-height:1.5; }
+.decision-capture { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.decision-capture textarea,.decision-capture input { width:100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius:9px; padding:10px; font:inherit; }
+.decision-capture textarea { min-height:90px; resize:vertical; }
+.decision-capture .full { grid-column:1/-1; }
+.decision-checkbox { display:flex; gap:8px; align-items:center; font-size:12px; color:#374151; }
+.decision-muted { color:#64748b; font-size:12px; }
+@media(max-width:900px){.decision-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.decision-trace-grid{grid-template-columns:1fr}.decision-pipeline{grid-template-columns:repeat(8,100px)} }
+@media(max-width:600px){.decision-grid{grid-template-columns:1fr}.decision-capture{grid-template-columns:1fr}.decision-capture .full{grid-column:auto}}
+</style>
 </head>
 
 <body>
@@ -1680,6 +1730,13 @@
                 id="brainButton"
             >
                 🕸️ Brain Explorer
+            </button>
+
+            <button
+                class="header-button"
+                id="decisionButton"
+            >
+                🎯 Decisions
             </button>
 
         </div>
@@ -2266,10 +2323,85 @@
 
         </div>
 
+
+
+
+        <!-- =================================================
+             PHASE 7 — DECISION CENTER — 4A → 4P
+        ================================================= -->
+        <div id="decisionView" class="view">
+            <div class="decision-dashboard">
+                <div class="dashboard-header">
+                    <h2>🎯 Decision Center</h2>
+                    <button class="back-button" id="decisionBackButton">← Back to Chat</button>
+                </div>
+
+                <div class="decision-hero">
+                    <h2>Decision Intelligence</h2>
+                    <p>One user-facing layer for the existing Phase 7 decision pipeline — from context and evidence through readiness, synthesis, capture, history and evolution.</p>
+                    <div class="decision-toolbar">
+                        <button class="decision-button primary" id="decisionRefreshButton">↻ Refresh View</button>
+                        <button class="decision-button secondary" id="decisionHistoryButton">View Decision History</button>
+                        <button class="decision-button secondary" id="decisionAskHistoryButton">Ask Dusra Brain About Decisions</button>
+                    </div>
+                </div>
+
+                <div class="decision-grid">
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionReadinessStat">—</div><div class="decision-stat-label">Decision Readiness</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionEvidenceStat">0</div><div class="decision-stat-label">Evidence Sources</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionOptionsStat">0</div><div class="decision-stat-label">Options</div></div>
+                    <div class="decision-stat"><div class="decision-stat-number" id="decisionHistoryStat">0</div><div class="decision-stat-label">Persisted Decisions</div></div>
+                </div>
+
+                <div class="decision-section">
+                    <div class="decision-section-title">Phase 7 Decision Pipeline</div>
+                    <div class="decision-section-subtitle">Live status from the latest API response. No UI inference is added.</div>
+                    <div id="decisionPipeline" class="decision-pipeline"></div>
+                </div>
+
+                <div class="decision-section">
+                    <div class="decision-section-title">4A → 4D · Context & Readiness</div>
+                    <div class="decision-section-subtitle">Structured decision context, interpretation, evidence matrix and readiness gate.</div>
+                    <div id="decisionContextTraces" class="decision-trace-grid"></div>
+                </div>
+
+                <div class="decision-section">
+                    <div class="decision-section-title">4E → 4G · Analysis & Synthesis</div>
+                    <div class="decision-section-subtitle">Analysis, synthesis and quality validation supplied by the existing API.</div>
+                    <div id="decisionAnalysisTraces" class="decision-trace-grid"></div>
+                </div>
+
+                <div class="decision-section">
+                    <div class="decision-section-title">4H → 4L · Capture & History</div>
+                    <div class="decision-section-subtitle">Explicit decision input is user-controlled. Historical decisions are never inferred from plans or memories.</div>
+                    <div id="decisionHistoryTraces" class="decision-trace-grid"></div>
+                    <div id="decisionHistoryList" class="decision-history-list" style="margin-top:12px;"></div>
+                </div>
+
+                <div class="decision-section">
+                    <div class="decision-section-title">4M → 4P · Evidence, Conflict & Evolution</div>
+                    <div class="decision-section-subtitle">Historical decision evidence integration, current-plan conflict detection, evolution tracking and grounded explanation.</div>
+                    <div id="decisionEvolutionTraces" class="decision-trace-grid"></div>
+                </div>
+
+                <div class="decision-section">
+                    <div class="decision-section-title">Explicit Decision Capture</div>
+                    <div class="decision-section-subtitle">This form sends only an explicit user decision to the existing 4I input contract. The API gates it through 4H before persistence.</div>
+                    <div class="decision-capture">
+                        <div class="full"><textarea id="decisionInputText" placeholder="Enter the decision you explicitly want Dusra Brain to capture..."></textarea></div>
+                        <div><input id="decisionSelectedOption" placeholder="Selected option (optional)"></div>
+                        <div><input id="decisionRationale" placeholder="Rationale (optional)"></div>
+                        <label class="decision-checkbox full"><input type="checkbox" id="decisionConfirmed"> I explicitly confirm that this is my decision.</label>
+                        <div class="full"><button class="decision-button primary" id="decisionSubmitButton">Submit Explicit Decision</button> <span id="decisionSubmitStatus" class="decision-muted"></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
 
-<script>
+    <script>
 
     // ========================================================
     // GLOBAL STATE
@@ -2574,6 +2706,11 @@
     }
 
 
+    // ========================================================
+    // PHASE 7 — DECISION CENTER STATE
+    // ========================================================
+    let lastDecisionApiResponse = null;
+
     async function sendMessage() {
 
         const message =
@@ -2654,6 +2791,8 @@
 
             const data =
                 await response.json();
+
+            lastDecisionApiResponse = data;
 
 
             if (!response.ok) {
@@ -3053,6 +3192,8 @@
         );
 
 
+    const decisionView = document.getElementById("decisionView");
+
     // ========================================================
     // VIEW MANAGEMENT
     // ========================================================
@@ -3074,6 +3215,10 @@
         );
 
         brainExplorerView.classList.remove(
+            "active"
+        );
+
+        decisionView.classList.remove(
             "active"
         );
 
@@ -3153,6 +3298,116 @@
         );
 
 
+
+    // ========================================================
+    // DECISION CENTER
+    // ========================================================
+    function decisionValue(value) {
+        if (value === null || value === undefined) return "—";
+        if (Array.isArray(value)) return value.length ? value.map(function(v){ return typeof v === "object" ? JSON.stringify(v) : String(v); }).join(" · ") : "—";
+        if (typeof value === "object") return JSON.stringify(value);
+        return String(value);
+    }
+
+    function decisionStatus(trace) {
+        var status = trace && (trace.status || (trace.passed ? "pass" : trace.ready ? "ready" : trace.accepted ? "accepted" : trace.persisted ? "persisted" : "built"));
+        return String(status || "unknown");
+    }
+
+    function renderDecisionTraceCard(code, title, trace) {
+        trace = trace && typeof trace === "object" ? trace : {};
+        var status = decisionStatus(trace);
+        var keys = Object.keys(trace).filter(function(k){ return k !== "built" && k !== "status"; }).slice(0, 12);
+        var kv = keys.map(function(key){
+            return '<div class="k">' + brainText(key.replace(/_/g," ")) + '</div><div class="v">' + brainText(decisionValue(trace[key])) + '</div>';
+        }).join("");
+        return '<div class="decision-trace-card"><div class="decision-trace-head"><div class="decision-trace-name">' + brainText(code + " · " + title) + '</div><span class="decision-status ' + brainText(status) + '">' + brainText(status) + '</span></div><div class="decision-kv">' + kv + '</div><details><summary class="decision-muted">View raw trace</summary><div class="decision-json">' + brainText(JSON.stringify(trace,null,2)) + '</div></details></div>';
+    }
+
+    function renderDecisionCenter(data) {
+        data = data && typeof data === "object" ? data : {};
+        var map = {
+            "4A": ["Decision Context", data.decision_context_trace],
+            "4B": ["Context Interpreter", data.decision_context_interpretation_trace],
+            "4C": ["Evidence Matrix", data.decision_evidence_matrix_trace],
+            "4D": ["Readiness Gate", data.decision_readiness_trace],
+            "4E": ["Decision Analysis", data.decision_analysis_trace],
+            "4F": ["Decision Synthesis", data.decision_synthesis_trace],
+            "4G": ["Synthesis Quality", data.decision_synthesis_quality_trace],
+            "4H": ["Capture & Action Gate", data.decision_capture_trace],
+            "4I": ["Explicit Decision Input", data.decision_input_trace],
+            "4J": ["Decision Persistence", data.decision_history_trace],
+            "4K": ["History Recall", data.decision_history_recall_trace],
+            "4L": ["Grounded History Answer", data.decision_history_answer_trace],
+            "4M": ["Memory / Evidence Bridge", data.decision_history_memory_evidence_trace],
+            "4N": ["Current Plan Conflict", data.decision_current_plan_conflict_trace],
+            "4O": ["Evolution Tracking", data.decision_change_evolution_trace],
+            "4P": ["Evolution Explanation", data.decision_evolution_answer_trace]
+        };
+        var pipeline = document.getElementById("decisionPipeline");
+        pipeline.innerHTML = Object.keys(map).map(function(code){ var t=map[code][1]||{}; return '<div class="decision-pipeline-item"><div class="decision-pipeline-code">'+code+'</div><div class="decision-pipeline-status">'+brainText(decisionStatus(t))+'</div></div>'; }).join("");
+        document.getElementById("decisionContextTraces").innerHTML = ["4A","4B","4C","4D"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
+        document.getElementById("decisionAnalysisTraces").innerHTML = ["4E","4F","4G"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
+        document.getElementById("decisionHistoryTraces").innerHTML = ["4H","4I","4J","4K","4L"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
+        document.getElementById("decisionEvolutionTraces").innerHTML = ["4M","4N","4O","4P"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
+        var readiness = data.decision_readiness_trace || {};
+        document.getElementById("decisionReadinessStat").textContent = readiness.status || (readiness.ready ? "ready" : "not ready");
+        var matrix = data.decision_evidence_matrix_trace || {};
+        document.getElementById("decisionEvidenceStat").textContent = matrix.evidence_source_count || 0;
+        document.getElementById("decisionOptionsStat").textContent = (matrix.field_presence && matrix.field_presence.options) ? 1 : 0;
+        var hist = data.decision_history_recall_trace || {};
+        document.getElementById("decisionHistoryStat").textContent = hist.selected_count || (data.decision_history_trace && data.decision_history_trace.persisted ? 1 : 0);
+        var historyAnswer = data.decision_history_answer_trace || {};
+        var evolutionAnswer = data.decision_evolution_answer_trace || {};
+        var historyBox = document.getElementById("decisionHistoryList");
+        var answerText = "";
+        if (historyAnswer.answered && data.response) {
+            answerText = '<div class="decision-history-card"><div class="decision-history-id">Grounded Decision History Answer</div><div class="decision-history-text">' + brainText(data.response) + '</div></div>';
+        } else if (evolutionAnswer.answered && data.response) {
+            answerText = '<div class="decision-history-card"><div class="decision-history-id">Grounded Decision Evolution Answer</div><div class="decision-history-text">' + brainText(data.response) + '</div></div>';
+        } else {
+            answerText = '<div class="decision-history-card"><div class="decision-muted">No persisted decision history was returned for the latest request. Use “View Decision History” to query the existing 4K → 4L API path.</div></div>';
+        }
+        historyBox.innerHTML = answerText;
+    }
+
+    function openDecisionCenter() {
+        showView(decisionView);
+        if (lastDecisionApiResponse) renderDecisionCenter(lastDecisionApiResponse);
+        else renderDecisionCenter({});
+    }
+
+    async function askDecisionHistory() {
+        var input = document.getElementById("messageInput");
+        input.value = "What decisions have I made?";
+        showView(chatView);
+        await sendMessage();
+        openDecisionCenter();
+    }
+
+    async function submitExplicitDecision() {
+        var decision = document.getElementById("decisionInputText").value.trim();
+        var selected = document.getElementById("decisionSelectedOption").value.trim();
+        var rationale = document.getElementById("decisionRationale").value.trim();
+        var confirmed = document.getElementById("decisionConfirmed").checked;
+        var status = document.getElementById("decisionSubmitStatus");
+        if (!decision || !confirmed) { status.textContent = "Enter a decision and explicitly confirm it."; return; }
+        status.textContent = "Submitting explicit decision through 4H → 4I → 4J...";
+        try {
+            var response = await fetch("/api", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:"Capture my explicit decision.", user_id:"default_user", session_id:activeSessionId, title:activeSessionTitle, decision_input:{decision:decision, selected_option:selected, rationale:rationale, confirmed:true}})});
+            var data = await response.json();
+            lastDecisionApiResponse = data;
+            renderDecisionCenter(data);
+            status.textContent = data.decision_history_trace && data.decision_history_trace.persisted ? "Decision persisted." : ((data.decision_input_trace && data.decision_input_trace.reason) || "Decision was not persisted.");
+        } catch (error) { status.textContent = "Unable to submit decision: " + error.message; }
+    }
+
+    document.getElementById("decisionButton").addEventListener("click", openDecisionCenter);
+    document.getElementById("decisionBackButton").addEventListener("click", function(){ showView(chatView); });
+    document.getElementById("decisionRefreshButton").addEventListener("click", function(){ if(lastDecisionApiResponse) renderDecisionCenter(lastDecisionApiResponse); });
+    document.getElementById("decisionHistoryButton").addEventListener("click", askDecisionHistory);
+    document.getElementById("decisionAskHistoryButton").addEventListener("click", askDecisionHistory);
+    document.getElementById("decisionSubmitButton").addEventListener("click", submitExplicitDecision);
 
     // ========================================================
     // BRAIN EXPLORER
