@@ -9659,6 +9659,24 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4F
+            # DECISION SYNTHESIS ENGINE
+            # ------------------------------------------------
+
+            decision_synthesis = generate_decision_synthesis(
+                decision_context=decision_context,
+                decision_readiness=decision_readiness,
+                decision_analysis=decision_analysis,
+            )
+
+            decision_synthesis_trace = build_decision_synthesis_trace(
+                decision_readiness=decision_readiness,
+                analysis_result=decision_analysis,
+                synthesis_result=decision_synthesis,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9807,6 +9825,9 @@ class handler(
 
                     "decision_analysis_trace":
                         decision_analysis_trace,
+
+                    "decision_synthesis_trace":
+                        decision_synthesis_trace,
 
                     "session_id":
                         session_id,
@@ -10070,6 +10091,204 @@ def build_decision_analysis_trace(decision_readiness, analysis_result):
         "unresolved_question_count": len(unresolved),
         "evidence_source_count": int(analysis.get("evidence_source_count", 0) or 0),
     }
+
+# ============================================================
+# PHASE 7 — STEP 4F
+# DECISION SYNTHESIS ENGINE
+# ============================================================
+
+def validate_decision_synthesis_result(result, decision_analysis):
+    """Deterministically validate synthesis against the already-built analysis."""
+    if not isinstance(result, dict):
+        return {"synthesis": {}}
+
+    analysis = decision_analysis if isinstance(decision_analysis, dict) else {}
+    source = analysis.get("analysis", {})
+    source = source if isinstance(source, dict) else {}
+
+    allowed_options = []
+    raw_options = source.get("option_analysis", [])
+    if isinstance(raw_options, list):
+        for item in raw_options[:20]:
+            if isinstance(item, dict):
+                name = str(item.get("option") or "").strip()
+                if name:
+                    allowed_options.append(name)
+
+    raw_comparison = result.get("option_comparison", [])
+    raw_comparison = raw_comparison if isinstance(raw_comparison, list) else []
+    clean_comparison = []
+    seen = set()
+    for item in raw_comparison[:20]:
+        if not isinstance(item, dict):
+            continue
+        option = str(item.get("option") or "").strip()
+        if not option or (allowed_options and option not in allowed_options):
+            continue
+        if option in seen:
+            continue
+        seen.add(option)
+        clean_comparison.append({
+            "option": option,
+            "supported_factors": [
+                str(x).strip() for x in (item.get("supported_factors", []) if isinstance(item.get("supported_factors", []), list) else [])[:20]
+                if str(x).strip()
+            ],
+            "risks": [
+                str(x).strip() for x in (item.get("risks", []) if isinstance(item.get("risks", []), list) else [])[:20]
+                if str(x).strip()
+            ],
+            "tradeoffs": [
+                str(x).strip() for x in (item.get("tradeoffs", []) if isinstance(item.get("tradeoffs", []), list) else [])[:20]
+                if str(x).strip()
+            ],
+            "unknowns": [
+                str(x).strip() for x in (item.get("unknowns", []) if isinstance(item.get("unknowns", []), list) else [])[:20]
+                if str(x).strip()
+            ],
+        })
+
+    return {
+        "synthesis_summary": str(result.get("synthesis_summary") or "").strip(),
+        "option_comparison": clean_comparison,
+        "key_tradeoffs": [
+            str(x).strip() for x in (result.get("key_tradeoffs", []) if isinstance(result.get("key_tradeoffs", []), list) else [])[:20]
+            if str(x).strip()
+        ],
+        "key_risks": [
+            str(x).strip() for x in (result.get("key_risks", []) if isinstance(result.get("key_risks", []), list) else [])[:20]
+            if str(x).strip()
+        ],
+        "uncertainties": [
+            str(x).strip() for x in (result.get("uncertainties", []) if isinstance(result.get("uncertainties", []), list) else [])[:20]
+            if str(x).strip()
+        ],
+        "unresolved_questions": [
+            str(x).strip() for x in (result.get("unresolved_questions", []) if isinstance(result.get("unresolved_questions", []), list) else [])[:20]
+            if str(x).strip()
+        ],
+        "recommendation": "",
+    }
+
+
+def generate_decision_synthesis(decision_context, decision_readiness, decision_analysis):
+    """Synthesize only a successfully analyzed, evidence-grounded decision context.
+
+    This layer does not make a decision or recommend an option. It only
+    organizes the validated analysis into a compact decision-support synthesis.
+    """
+    context = decision_context if isinstance(decision_context, dict) else {}
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    analysis_result = decision_analysis if isinstance(decision_analysis, dict) else {}
+
+    if not bool(readiness.get("ready", False)):
+        return {
+            "built": True,
+            "synthesized": False,
+            "status": "not_ready",
+            "reason": str(readiness.get("reason") or "decision_not_ready"),
+            "synthesis": {},
+        }
+
+    if not bool(analysis_result.get("analyzed", False)):
+        return {
+            "built": True,
+            "synthesized": False,
+            "status": "analysis_unavailable",
+            "reason": "decision_analysis_unavailable",
+            "synthesis": {},
+        }
+
+    analysis = analysis_result.get("analysis", {})
+    analysis = analysis if isinstance(analysis, dict) else {}
+
+    supplied = {
+        "decision": context.get("decision", []),
+        "goals": context.get("goals", []),
+        "constraints": context.get("constraints", []),
+        "analysis": analysis,
+    }
+
+    system_prompt = f"""You are the Decision Synthesis Engine for Dusra Brain.
+
+Synthesize ONLY the supplied decision context and validated analysis.
+Do not invent facts, options, risks, benefits, numbers, dates, or relationships.
+Do not choose an option and do not recommend an option.
+Preserve uncertainty and unresolved questions.
+
+SUPPLIED DATA:
+{supplied}
+
+Return ONLY valid JSON:
+{{
+  "synthesis_summary": "",
+  "option_comparison": [
+    {{
+      "option": "",
+      "supported_factors": [],
+      "risks": [],
+      "tradeoffs": [],
+      "unknowns": []
+    }}
+  ],
+  "key_tradeoffs": [],
+  "key_risks": [],
+  "uncertainties": [],
+  "unresolved_questions": []
+}}
+"""
+
+    try:
+        raw = groq_request(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "Synthesize the validated decision analysis."},
+            ],
+            temperature=0,
+        )
+        parsed = json.loads(clean_json_response(raw))
+        synthesis = validate_decision_synthesis_result(parsed, analysis_result)
+        return {
+            "built": True,
+            "synthesized": True,
+            "status": "synthesized",
+            "reason": "decision_analysis_synthesized",
+            "synthesis": synthesis,
+        }
+    except Exception:
+        return {
+            "built": True,
+            "synthesized": False,
+            "status": "failed",
+            "reason": "decision_synthesis_failed",
+            "synthesis": {},
+        }
+
+
+def build_decision_synthesis_trace(decision_readiness, analysis_result, synthesis_result):
+    """Compact public verification trace for Step 4F."""
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    analysis = analysis_result if isinstance(analysis_result, dict) else {}
+    result = synthesis_result if isinstance(synthesis_result, dict) else {}
+    synthesis = result.get("synthesis", {})
+    synthesis = synthesis if isinstance(synthesis, dict) else {}
+    comparison = synthesis.get("option_comparison", [])
+    comparison = comparison if isinstance(comparison, list) else []
+    unresolved = synthesis.get("unresolved_questions", [])
+    unresolved = unresolved if isinstance(unresolved, list) else []
+
+    return {
+        "built": bool(result.get("built", False)),
+        "synthesized": bool(result.get("synthesized", False)),
+        "status": str(result.get("status") or "failed"),
+        "reason": str(result.get("reason") or "unknown"),
+        "readiness_status": str(readiness.get("status") or "not_ready"),
+        "analysis_status": str(analysis.get("status") or "unknown"),
+        "option_comparison_count": len(comparison),
+        "unresolved_question_count": len(unresolved),
+        "recommendation_generated": False,
+    }
+
 
     # ========================================================
     # PUT
