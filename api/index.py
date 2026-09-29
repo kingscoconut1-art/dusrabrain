@@ -9785,6 +9785,22 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4K
+            # DECISION HISTORY RECALL & RETRIEVAL
+            # ------------------------------------------------
+
+            decision_history_recall = recall_decision_history(
+                user_id=user_id,
+                query=message,
+                limit=body.get("decision_history_limit", 10),
+            )
+
+            decision_history_recall_trace = build_decision_history_recall_trace(
+                recall_result=decision_history_recall,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9949,6 +9965,8 @@ class handler(
                     "decision_history_trace":
                         decision_history_trace,
 
+                    "decision_history_recall_trace":
+                        decision_history_recall_trace,
 
                     "session_id":
                         session_id,
@@ -11080,6 +11098,162 @@ def build_explicit_decision_input_trace(
         "recommendation_generated": False,
     }
 
+
+
+# ============================================================
+# PHASE 7 — STEP 4K
+# DECISION HISTORY RECALL & RETRIEVAL
+# ============================================================
+
+def detect_decision_history_recall(message):
+    """Deterministically detect requests to recall persisted decisions."""
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+
+    normalized = re.sub(r"[^a-z0-9]+", " ", text)
+    tokens = set(normalized.split())
+
+    decision_terms = {
+        "decision", "decisions", "decided", "decide",
+        "chose", "chosen", "selected", "selection",
+    }
+    history_terms = {
+        "history", "previous", "earlier", "past", "made",
+        "recorded", "records", "remember",
+    }
+
+    explicit_phrases = {
+        "what did i decide",
+        "what decisions have i made",
+        "what have i decided",
+        "show my decisions",
+        "show decision history",
+        "decision history",
+        "my decision history",
+        "decisions i made",
+        "decisions about",
+        "what was my decision",
+    }
+
+    if any(phrase in normalized for phrase in explicit_phrases):
+        return True
+
+    return bool(
+        tokens.intersection(decision_terms)
+        and tokens.intersection(history_terms)
+    )
+
+
+def _decision_recall_tokens(value):
+    text = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower())
+    stop_words = {
+        "the", "and", "for", "with", "about", "what", "when",
+        "where", "which", "who", "did", "have", "has", "are",
+        "was", "were", "you", "your", "my", "our", "this", "that",
+        "show", "tell", "remember", "history", "previous", "earlier",
+        "past", "made", "decision", "decisions", "decide", "decided",
+        "i", "me", "of", "to", "on", "in", "from", "any", "all",
+    }
+    return {
+        token for token in text.split()
+        if len(token) >= 3 and token not in stop_words
+    }
+
+
+def rank_decision_history(query, history, limit=10):
+    """Rank persisted decisions deterministically; never invents records."""
+    rows = history if isinstance(history, list) else []
+    query_tokens = _decision_recall_tokens(query)
+
+    ranked = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        searchable = " ".join([
+            str(row.get("title") or ""),
+            str(row.get("decision") or ""),
+            str(row.get("selected_option") or ""),
+            str(row.get("rationale") or ""),
+        ])
+        row_tokens = _decision_recall_tokens(searchable)
+        overlap = query_tokens.intersection(row_tokens)
+
+        score = len(overlap)
+        if query_tokens and not overlap:
+            continue
+
+        ranked.append({
+            **row,
+            "recall_score": score,
+            "matched_tokens": sorted(overlap)[:20],
+        })
+
+    ranked.sort(
+        key=lambda item: (
+            int(item.get("recall_score", 0) or 0),
+            str(item.get("created_at") or ""),
+            int(item.get("id", 0) or 0),
+        ),
+        reverse=True,
+    )
+
+    return ranked[:max(1, min(int(limit or 10), 20))]
+
+
+def recall_decision_history(user_id, query, limit=10):
+    """Retrieve only persisted decisions relevant to the user's query."""
+    if not detect_decision_history_recall(query):
+        return {
+            "built": True,
+            "triggered": False,
+            "status": "not_triggered",
+            "reason": "not_a_decision_history_query",
+            "query": str(query or "").strip(),
+            "candidate_count": 0,
+            "selected_count": 0,
+            "decisions": [],
+        }
+
+    history = get_decision_history(
+        user_id=user_id,
+        limit=100,
+    )
+    selected = rank_decision_history(
+        query=query,
+        history=history,
+        limit=limit,
+    )
+
+    return {
+        "built": True,
+        "triggered": True,
+        "status": "found" if selected else "empty",
+        "reason": "persisted_decisions_retrieved" if selected else "no_matching_persisted_decisions",
+        "query": str(query or "").strip(),
+        "candidate_count": len(history),
+        "selected_count": len(selected),
+        "decisions": selected,
+    }
+
+
+def build_decision_history_recall_trace(recall_result):
+    """Compact public Step 4K verification trace."""
+    result = recall_result if isinstance(recall_result, dict) else {}
+    return {
+        "built": bool(result.get("built", False)),
+        "triggered": bool(result.get("triggered", False)),
+        "status": str(result.get("status") or "not_triggered"),
+        "reason": str(result.get("reason") or "unknown"),
+        "candidate_count": int(result.get("candidate_count", 0) or 0),
+        "selected_count": int(result.get("selected_count", 0) or 0),
+        "decision_ids": [
+            item.get("id")
+            for item in result.get("decisions", [])
+            if isinstance(item, dict) and item.get("id") is not None
+        ][:20],
+    }
 
 # ============================================================
 # PHASE 7 — STEP 4J
