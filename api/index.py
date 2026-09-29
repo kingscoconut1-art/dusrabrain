@@ -9801,6 +9801,33 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4L
+            # DECISION HISTORY GROUNDED ANSWER / RECALL
+            # ------------------------------------------------
+
+            decision_history_answer = build_decision_history_grounded_answer(
+                recall_result=decision_history_recall,
+            )
+
+            decision_history_answer_verification = (
+                validate_decision_history_grounded_answer(
+                    answer_result=decision_history_answer,
+                    recall_result=decision_history_recall,
+                )
+            )
+
+            decision_history_answer_trace = (
+                build_decision_history_answer_trace(
+                    answer_result=decision_history_answer,
+                    verification_result=decision_history_answer_verification,
+                )
+            )
+
+            if decision_history_answer_verification.get("verified") and decision_history_answer.get("answered"):
+                response = decision_history_answer_verification.get("answer", response).strip()
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9967,6 +9994,9 @@ class handler(
 
                     "decision_history_recall_trace":
                         decision_history_recall_trace,
+
+                    "decision_history_answer_trace":
+                        decision_history_answer_trace,
 
                     "session_id":
                         session_id,
@@ -11254,6 +11284,170 @@ def build_decision_history_recall_trace(recall_result):
             if isinstance(item, dict) and item.get("id") is not None
         ][:20],
     }
+
+# ============================================================
+# PHASE 7 — STEP 4L
+# DECISION HISTORY GROUNDED ANSWER / RECALL
+# ============================================================
+
+def build_decision_history_grounded_answer(recall_result):
+    """
+    Build a deterministic user-facing answer from ONLY persisted decision
+    records returned by Step 4K. No model call, no new records, and no
+    inference beyond the stored decision fields.
+    """
+    result = recall_result if isinstance(recall_result, dict) else {}
+    triggered = bool(result.get("triggered", False))
+    decisions = result.get("decisions", [])
+    decisions = [item for item in decisions if isinstance(item, dict)]
+
+    if not triggered:
+        return {
+            "built": True,
+            "answered": False,
+            "status": "not_triggered",
+            "reason": "not_a_decision_history_query",
+            "answer": "",
+            "decision_count": 0,
+            "decision_ids": [],
+            "decision_evidence": [],
+        }
+
+    if not decisions:
+        return {
+            "built": True,
+            "answered": True,
+            "status": "empty",
+            "reason": "no_matching_persisted_decisions",
+            "answer": "I don't have any matching persisted decisions for that request.",
+            "decision_count": 0,
+            "decision_ids": [],
+            "decision_evidence": [],
+        }
+
+    lines = [
+        "Here are the persisted decisions matching your request:"
+    ]
+    evidence = []
+    ids = []
+
+    for index, item in enumerate(decisions[:20], start=1):
+        decision_id = item.get("id")
+        if decision_id is not None:
+            ids.append(decision_id)
+
+        decision = str(item.get("decision") or "").strip()
+        selected = str(item.get("selected_option") or "").strip()
+        rationale = str(item.get("rationale") or "").strip()
+        created_at = str(item.get("created_at") or "").strip()
+        session_id = str(item.get("session_id") or "").strip()
+
+        lines.append("\n" + str(index) + ". Decision #" + str(decision_id))
+        if decision:
+            lines.append("Decision: " + decision)
+        if selected:
+            lines.append("Selected option: " + selected)
+        if rationale:
+            lines.append("Rationale: " + rationale)
+        if created_at:
+            lines.append("Recorded: " + created_at)
+
+        evidence.append({
+            "source_type": "decision_history",
+            "source_id": decision_id,
+            "label": "Decision #" + str(decision_id),
+            "decision": decision,
+            "selected_option": selected,
+            "rationale": rationale,
+            "created_at": created_at,
+            "session_id": session_id,
+        })
+
+    return {
+        "built": True,
+        "answered": True,
+        "status": "answered",
+        "reason": "persisted_decisions_grounded_answer",
+        "answer": "\n".join(lines).strip(),
+        "decision_count": len(evidence),
+        "decision_ids": ids[:20],
+        "decision_evidence": evidence,
+    }
+
+
+def validate_decision_history_grounded_answer(answer_result, recall_result):
+    """Deterministically verify that every cited decision exists in Step 4K."""
+    result = answer_result if isinstance(answer_result, dict) else {}
+    recall = recall_result if isinstance(recall_result, dict) else {}
+    recalled = recall.get("decisions", [])
+    recalled_ids = {
+        item.get("id")
+        for item in recalled
+        if isinstance(item, dict) and item.get("id") is not None
+    }
+    evidence = result.get("decision_evidence", [])
+    evidence = evidence if isinstance(evidence, list) else []
+
+    valid = []
+    invalid = []
+    seen = set()
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        source_id = item.get("source_id")
+        if source_id in seen:
+            continue
+        seen.add(source_id)
+        if source_id in recalled_ids:
+            valid.append(item)
+        else:
+            invalid.append(item)
+
+    answered = bool(result.get("answered", False))
+    verified = (
+        not answered
+        or (bool(result.get("answer")) and bool(valid) and not invalid)
+    )
+
+    return {
+        "built": True,
+        "verified": bool(verified),
+        "status": "pass" if verified else "fail",
+        "reason": (
+            "decision_history_answer_verified"
+            if verified and answered
+            else "not_triggered"
+            if not answered
+            else "invalid_decision_history_evidence"
+        ),
+        "valid_evidence_count": len(valid),
+        "invalid_evidence_count": len(invalid),
+        "decision_ids": [item.get("source_id") for item in valid][:20],
+        "answer": str(result.get("answer") or "").strip(),
+        "fallback_used": False,
+    }
+
+
+def build_decision_history_answer_trace(answer_result, verification_result):
+    """Compact public Step 4L verification trace."""
+    result = answer_result if isinstance(answer_result, dict) else {}
+    verified = verification_result if isinstance(verification_result, dict) else {}
+    return {
+        "built": bool(result.get("built", False)),
+        "answered": bool(result.get("answered", False)),
+        "verified": bool(verified.get("verified", False)),
+        "status": str(verified.get("status") or result.get("status") or "not_triggered"),
+        "reason": str(verified.get("reason") or result.get("reason") or "unknown"),
+        "decision_count": int(result.get("decision_count", 0) or 0),
+        "valid_evidence_count": int(verified.get("valid_evidence_count", 0) or 0),
+        "invalid_evidence_count": int(verified.get("invalid_evidence_count", 0) or 0),
+        "decision_ids": [
+            item for item in verified.get("decision_ids", [])
+            if item is not None
+        ][:20],
+        "fallback_used": bool(verified.get("fallback_used", False)),
+    }
+
 
 # ============================================================
 # PHASE 7 — STEP 4J
