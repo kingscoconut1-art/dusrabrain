@@ -9828,6 +9828,23 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4M
+            # DECISION HISTORY ↔ MEMORY / EVIDENCE INTEGRATION
+            # ------------------------------------------------
+
+            decision_history_memory_evidence = build_decision_history_memory_evidence_bridge(
+                recall_result=decision_history_recall,
+                reasoning_context=reasoning_context,
+            )
+
+            decision_history_memory_evidence_trace = (
+                build_decision_history_memory_evidence_trace(
+                    bridge_result=decision_history_memory_evidence,
+                )
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9997,6 +10014,9 @@ class handler(
 
                     "decision_history_answer_trace":
                         decision_history_answer_trace,
+
+                    "decision_history_memory_evidence_trace":
+                        decision_history_memory_evidence_trace,
 
                     "session_id":
                         session_id,
@@ -11765,4 +11785,178 @@ def build_decision_history_trace(persistence_result):
         "duplicate": bool(result.get("duplicate", False)),
         "decision_recorded": bool(result.get("decision_recorded", False)),
         "history_available": bool(result.get("history_available", False)),
+    }
+
+
+# ============================================================
+# PHASE 7 — STEP 4M
+# DECISION HISTORY ↔ MEMORY / EVIDENCE INTEGRATION
+# ============================================================
+
+def _decision_history_source_key(source_type, source_id):
+    """Return a normalized source key for evidence provenance checks."""
+    normalized_type = str(source_type or "").strip().lower()
+    try:
+        normalized_id = int(source_id)
+    except Exception:
+        return None
+
+    if normalized_type not in {
+        "memory",
+        "entity",
+        "relationship",
+        "conversation",
+    }:
+        return None
+
+    return (normalized_type, normalized_id)
+
+
+def build_decision_history_memory_evidence_bridge(
+    recall_result,
+    reasoning_context,
+):
+    """
+    Deterministically bridge persisted decision provenance to the currently
+    retrieved memory/Brain/conversation evidence.
+
+    This is read-only. It does not modify decision history, memories,
+    relationships, or evidence. A historical decision remains a distinct
+    decision-history record; this helper only validates and exposes the
+    evidence that was stored with that decision and is still addressable in
+    the current retrieved context.
+    """
+    recall = recall_result if isinstance(recall_result, dict) else {}
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+
+    triggered = bool(recall.get("triggered", False))
+    decisions = recall.get("decisions", [])
+    decisions = [item for item in decisions if isinstance(item, dict)]
+
+    source_index = context.get("source_index", {})
+    source_index = source_index if isinstance(source_index, dict) else {}
+
+    available = set()
+    for source_type, index_key in (
+        ("memory", "memory_ids"),
+        ("entity", "entity_ids"),
+        ("relationship", "relationship_ids"),
+        ("conversation", "conversation_indexes"),
+    ):
+        values = source_index.get(index_key, [])
+        values = values if isinstance(values, list) else []
+        for value in values:
+            key = _decision_history_source_key(source_type, value)
+            if key is not None:
+                available.add(key)
+
+    if not triggered:
+        return {
+            "built": True,
+            "integrated": False,
+            "status": "not_triggered",
+            "reason": "not_a_decision_history_query",
+            "decision_count": 0,
+            "linked_decision_count": 0,
+            "linked_evidence_count": 0,
+            "orphaned_evidence_count": 0,
+            "decision_ids": [],
+            "bridges": [],
+        }
+
+    bridges = []
+    linked_decision_count = 0
+    linked_evidence_count = 0
+    orphaned_evidence_count = 0
+
+    for decision in decisions[:20]:
+        decision_id = decision.get("id")
+        raw_evidence = decision.get("evidence_trace", [])
+        raw_evidence = raw_evidence if isinstance(raw_evidence, list) else []
+
+        linked = []
+        orphaned = []
+        seen = set()
+
+        for evidence in raw_evidence[:20]:
+            if not isinstance(evidence, dict):
+                continue
+
+            source_type = str(evidence.get("source_type") or "").strip().lower()
+            source_id = evidence.get("source_id")
+            key = _decision_history_source_key(source_type, source_id)
+
+            if key is None or key in seen:
+                continue
+
+            seen.add(key)
+            normalized = {
+                "source_type": key[0],
+                "source_id": key[1],
+                "label": str(evidence.get("label") or "").strip(),
+            }
+
+            if key in available:
+                linked.append(normalized)
+            else:
+                orphaned.append(normalized)
+
+        if linked:
+            linked_decision_count += 1
+            linked_evidence_count += len(linked)
+        orphaned_evidence_count += len(orphaned)
+
+        bridges.append({
+            "decision_id": decision_id,
+            "linked_evidence": linked,
+            "orphaned_evidence": orphaned,
+            "linked": bool(linked),
+            "provenance_complete": bool(linked) and not orphaned,
+        })
+
+    integrated = bool(bridges and linked_evidence_count > 0)
+
+    return {
+        "built": True,
+        "integrated": integrated,
+        "status": "integrated" if integrated else "no_linked_evidence",
+        "reason": (
+            "decision_history_evidence_linked"
+            if integrated
+            else "no_current_context_evidence_matches"
+        ),
+        "decision_count": len(decisions[:20]),
+        "linked_decision_count": linked_decision_count,
+        "linked_evidence_count": linked_evidence_count,
+        "orphaned_evidence_count": orphaned_evidence_count,
+        "decision_ids": [
+            item.get("id")
+            for item in decisions[:20]
+            if item.get("id") is not None
+        ],
+        "bridges": bridges,
+    }
+
+
+def build_decision_history_memory_evidence_trace(bridge_result):
+    """Compact public Step 4M provenance/integration trace."""
+    result = bridge_result if isinstance(bridge_result, dict) else {}
+
+    return {
+        "built": bool(result.get("built", False)),
+        "integrated": bool(result.get("integrated", False)),
+        "status": str(result.get("status") or "not_triggered"),
+        "reason": str(result.get("reason") or "unknown"),
+        "decision_count": int(result.get("decision_count", 0) or 0),
+        "linked_decision_count": int(result.get("linked_decision_count", 0) or 0),
+        "linked_evidence_count": int(result.get("linked_evidence_count", 0) or 0),
+        "orphaned_evidence_count": int(result.get("orphaned_evidence_count", 0) or 0),
+        "decision_ids": [
+            item for item in result.get("decision_ids", [])
+            if item is not None
+        ][:20],
+        "read_only": True,
+        "decision_history_modified": False,
+        "memory_modified": False,
+        "evidence_created": False,
     }
