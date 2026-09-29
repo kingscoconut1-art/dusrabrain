@@ -7674,6 +7674,113 @@ def build_reasoning_verification_trace(
     }
 
 
+# ============================================================
+# PHASE 7 — STEP 3D
+# REASONING QUALITY GATE
+# ============================================================
+
+def evaluate_reasoning_quality_gate(
+    reasoning_context,
+    reasoning_trace,
+    reasoning_verification_trace,
+    evidence_trace,
+    response,
+):
+    """
+    Deterministically gate the final answer after reasoning verification.
+
+    This layer does not call the model, query the database, create evidence,
+    or change Recall Intelligence. It checks that the final response has a
+    usable grounded basis and that the preceding reasoning/verification
+    layers completed coherently.
+    """
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    rtrace = reasoning_trace if isinstance(reasoning_trace, dict) else {}
+    vtrace = (
+        reasoning_verification_trace
+        if isinstance(reasoning_verification_trace, dict)
+        else {}
+    )
+    evidence = evidence_trace if isinstance(evidence_trace, list) else []
+    answer = str(response or "").strip()
+
+    counts = context.get("source_counts", {})
+    evidence_sources = int(counts.get("evidence_sources", 0) or 0)
+    valid_evidence = int(vtrace.get("valid_evidence_count", 0) or 0)
+    invalid_evidence = int(vtrace.get("invalid_evidence_count", 0) or 0)
+    verified = bool(vtrace.get("verified", False))
+    verification_fallback = bool(vtrace.get("fallback_used", False))
+    reasoning_built = bool(rtrace.get("built", False))
+    reasoning_used = bool(rtrace.get("used", False))
+
+    checks = {
+        "answer_present": bool(answer),
+        "reasoning_context_built": bool(context),
+        "reasoning_trace_built": reasoning_built,
+        "evidence_available": bool(evidence) and evidence_sources > 0,
+        "evidence_authoritative": valid_evidence > 0 and invalid_evidence == 0,
+        "reasoning_verified_or_grounded_fallback": verified or verification_fallback,
+    }
+
+    passed = all(checks.values())
+
+    if not answer:
+        status = "fail"
+        reason = "empty_response"
+    elif not checks["evidence_available"]:
+        status = "fail"
+        reason = "no_grounding_evidence"
+    elif not checks["evidence_authoritative"]:
+        status = "fail"
+        reason = "invalid_or_missing_authoritative_evidence"
+    elif verified and reasoning_used:
+        status = "pass"
+        reason = "reasoned_answer_verified"
+    elif verification_fallback and valid_evidence > 0:
+        status = "pass"
+        reason = "grounded_fallback_verified"
+    else:
+        status = "fail"
+        reason = "reasoning_quality_checks_failed"
+
+    return {
+        "passed": bool(passed),
+        "status": status,
+        "reason": reason,
+        "checks": checks,
+        "evidence_count": len(evidence),
+        "valid_evidence_count": valid_evidence,
+        "invalid_evidence_count": invalid_evidence,
+        "reasoning_used": reasoning_used,
+        "verification_fallback_used": verification_fallback,
+    }
+
+
+def build_reasoning_quality_trace(
+    reasoning_context,
+    quality_result,
+):
+    """Compact public verification trace for Step 3D."""
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    result = quality_result if isinstance(quality_result, dict) else {}
+
+    return {
+        "built": bool(context),
+        "passed": bool(result.get("passed", False)),
+        "status": str(result.get("status") or "fail"),
+        "reason": str(result.get("reason") or "unknown"),
+        "evidence_count": int(result.get("evidence_count", 0) or 0),
+        "valid_evidence_count": int(result.get("valid_evidence_count", 0) or 0),
+        "invalid_evidence_count": int(result.get("invalid_evidence_count", 0) or 0),
+        "reasoning_used": bool(result.get("reasoning_used", False)),
+        "verification_fallback_used": bool(
+            result.get("verification_fallback_used", False)
+        ),
+    }
+
+
+
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -8974,6 +9081,25 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 3D
+            # REASONING QUALITY GATE
+            # ------------------------------------------------
+
+            reasoning_quality = evaluate_reasoning_quality_gate(
+                reasoning_context=reasoning_context,
+                reasoning_trace=reasoning_trace,
+                reasoning_verification_trace=reasoning_verification_trace,
+                evidence_trace=evidence_trace,
+                response=response,
+            )
+
+            reasoning_quality_trace = build_reasoning_quality_trace(
+                reasoning_context=reasoning_context,
+                quality_result=reasoning_quality,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9104,6 +9230,9 @@ class handler(
 
                     "reasoning_verification_trace":
                         reasoning_verification_trace,
+
+                    "reasoning_quality_trace":
+                        reasoning_quality_trace,
 
                     "session_id":
                         session_id,
