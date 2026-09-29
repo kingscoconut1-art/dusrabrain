@@ -1906,7 +1906,56 @@
 .decision-stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:15px; }
 .decision-stat-number { font-size:22px; font-weight:800; color:#111827; }
 .decision-stat-label { margin-top:4px; color:#64748b; font-size:12px; font-weight:700; }
-.decision-next-step { background:#f8fafc; border:1px solid #dbe3ee; border-radius:14px; padding:16px 17px; margin-bottom:18px; }
+.decision-snapshot {
+            margin: 18px 0;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .decision-snapshot-title {
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: #334155;
+        }
+
+        .decision-snapshot-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .decision-snapshot-grid > div {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 9px;
+            padding: 11px;
+        }
+
+        .decision-snapshot-grid span {
+            display: block;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .decision-snapshot-grid strong {
+            display: block;
+            color: #1f2937;
+            line-height: 1.45;
+            font-size: 13px;
+        }
+
+        @media (max-width: 700px) {
+            .decision-snapshot-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .decision-next-step { background:#f8fafc; border:1px solid #dbe3ee; border-radius:14px; padding:16px 17px; margin-bottom:18px; }
 .decision-next-step-title { font-size:16px; font-weight:800; color:#111827; margin-bottom:5px; }
 .decision-next-step-text { color:#475569; font-size:13px; line-height:1.55; margin-bottom:12px; }
 .decision-section { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:17px; margin-bottom:15px; }
@@ -2612,6 +2661,16 @@
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionEvidenceStat">0</div><div class="decision-stat-label">Supporting information</div></div>
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionOptionsStat">0</div><div class="decision-stat-label">Options identified</div></div>
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionHistoryStat">0</div><div class="decision-stat-label">Saved decisions</div></div>
+                </div>
+
+                <div class="decision-snapshot" id="decisionSnapshot" style="display:none;">
+                    <div class="decision-snapshot-title">Current decision snapshot</div>
+                    <div class="decision-snapshot-grid">
+                        <div><span>Decision</span><strong id="decisionSnapshotQuestion">—</strong></div>
+                        <div><span>Options</span><strong id="decisionSnapshotOptions">—</strong></div>
+                        <div><span>Goals</span><strong id="decisionSnapshotGoals">—</strong></div>
+                        <div><span>Constraints</span><strong id="decisionSnapshotConstraints">—</strong></div>
+                    </div>
                 </div>
 
                 <div class="decision-next-step" id="decisionNextStep">
@@ -3757,7 +3816,7 @@
         if (code === "4E") return trace.analyzed ? "Analysis available" : "Waiting for enough information";
         if (code === "4F") return trace.synthesized ? "Summary available" : "Waiting for analysis";
         if (code === "4G") return trace.passed ? "Quality check passed" : "Quality check pending";
-        if (code === "4H") return trace.capturable ? "Ready for confirmation" : "Waiting for validated decision support";
+        if (code === "4H") return trace.capturable ? "Ready for confirmation" : "Decision can still be saved explicitly";
         if (code === "4I") return trace.accepted ? "Decision received" : "Waiting for your confirmation";
         if (code === "4J") return trace.persisted ? "Saved" : "Not saved";
         if (code === "4K") return trace.triggered ? "History searched" : "Not needed for this request";
@@ -3849,6 +3908,23 @@
         document.getElementById("decisionEvolutionTraces").innerHTML = ["4M","4N","4O","4P"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         var readiness = data.decision_readiness_trace || {};
         document.getElementById("decisionReadinessStat").textContent = readiness.ready ? "Ready" : "Not ready yet";
+
+        var snapshot = document.getElementById("decisionSnapshot");
+        var extracted = data.decision_extracted_context || {};
+        var snapshotDecision = extracted.decision || [];
+        var snapshotOptions = extracted.options || [];
+        var snapshotGoals = extracted.goals || [];
+        var snapshotConstraints = extracted.constraints || [];
+
+        if (snapshot && (snapshotDecision.length || snapshotOptions.length || snapshotGoals.length || snapshotConstraints.length)) {
+            snapshot.style.display = "block";
+            document.getElementById("decisionSnapshotQuestion").textContent = decisionValue(snapshotDecision);
+            document.getElementById("decisionSnapshotOptions").textContent = decisionValue(snapshotOptions);
+            document.getElementById("decisionSnapshotGoals").textContent = decisionValue(snapshotGoals);
+            document.getElementById("decisionSnapshotConstraints").textContent = decisionValue(snapshotConstraints);
+        } else if (snapshot) {
+            snapshot.style.display = "none";
+        }
 
         var nextStepText = document.getElementById("decisionNextStepText");
         var nextStepButton = document.getElementById("decisionNextStepButton");
@@ -4036,7 +4112,9 @@
             if (data.decision_history_trace && data.decision_history_trace.persisted) {
                 await loadSavedDecisionHistory();
             }
-            status.textContent = data.decision_history_trace && data.decision_history_trace.persisted ? "Decision persisted." : ((data.decision_input_trace && data.decision_input_trace.reason) || "Decision was not persisted.");
+            status.textContent = data.decision_history_trace && data.decision_history_trace.persisted
+                ? "Decision persisted successfully."
+                : ((data.decision_input_trace && data.decision_input_trace.reason) || "Decision was not persisted.");
         } catch (error) { status.textContent = "Unable to submit decision: " + error.message; }
     }
 
