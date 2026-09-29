@@ -6076,6 +6076,435 @@ Return ONLY JSON:
         "auto_saved": False,
     }
 
+
+# ============================================================
+# PHASE 7 — STEP 1A
+# GROUNDED ANSWER EVIDENCE TRACE
+# ============================================================
+
+def build_grounded_answer_context(
+    memories,
+    brain_entities,
+    brain_relationships,
+    history
+):
+    """
+    Build deterministic, ID-addressable evidence context.
+    No AI call.
+    No database write.
+    """
+
+    sources = {
+        "memory": {},
+        "entity": {},
+        "relationship": {},
+        "conversation": {},
+    }
+
+    memory_lines = []
+
+    for item in memories or []:
+
+        try:
+            source_id = int(item.get("id"))
+        except Exception:
+            continue
+
+        memory_text = str(
+            item.get("memory") or ""
+        ).strip()
+
+        if not memory_text:
+            continue
+
+        sources["memory"][source_id] = {
+            "source_type": "memory",
+            "source_id": source_id,
+            "label": "Memory #" + str(source_id),
+            "text": memory_text,
+            "subject": str(
+                item.get("subject") or ""
+            ),
+            "category": str(
+                item.get("category") or ""
+            ),
+        }
+
+        memory_lines.append(
+            "[MEMORY "
+            + str(source_id)
+            + "] "
+            + memory_text
+            + " | subject: "
+            + str(item.get("subject") or "")
+            + " | category: "
+            + str(item.get("category") or "")
+        )
+
+    entity_lines = []
+
+    for item in brain_entities or []:
+
+        try:
+            source_id = int(item.get("id"))
+        except Exception:
+            continue
+
+        name = str(
+            item.get("name") or ""
+        ).strip()
+
+        description = str(
+            item.get("description") or ""
+        ).strip()
+
+        if not name:
+            continue
+
+        sources["entity"][source_id] = {
+            "source_type": "entity",
+            "source_id": source_id,
+            "label": "Entity #" + str(source_id),
+            "text": (
+                name
+                + (
+                    " — " + description
+                    if description
+                    else ""
+                )
+            ),
+        }
+
+        entity_lines.append(
+            "[ENTITY "
+            + str(source_id)
+            + "] "
+            + name
+            + " | type: "
+            + str(item.get("entity_type") or "")
+            + " | description: "
+            + description
+        )
+
+    relationship_lines = []
+
+    for item in brain_relationships or []:
+
+        try:
+            source_id = int(item.get("id"))
+        except Exception:
+            continue
+
+        from_name = str(
+            item.get("from") or ""
+        ).strip()
+
+        relationship_name = str(
+            item.get("relationship") or ""
+        ).strip()
+
+        to_name = str(
+            item.get("to") or ""
+        ).strip()
+
+        if not from_name or not relationship_name or not to_name:
+            continue
+
+        relation_text = (
+            from_name
+            + " -> "
+            + relationship_name
+            + " -> "
+            + to_name
+        )
+
+        sources["relationship"][source_id] = {
+            "source_type": "relationship",
+            "source_id": source_id,
+            "label": "Relationship #" + str(source_id),
+            "text": relation_text,
+        }
+
+        relationship_lines.append(
+            "[RELATIONSHIP "
+            + str(source_id)
+            + "] "
+            + relation_text
+        )
+
+    conversation_lines = []
+
+    for index, item in enumerate(history or []):
+
+        role = str(
+            item.get("role") or ""
+        ).strip()
+
+        message_text = str(
+            item.get("message") or ""
+        ).strip()
+
+        if not message_text:
+            continue
+
+        sources["conversation"][index] = {
+            "source_type": "conversation",
+            "source_id": index,
+            "label": "Conversation #" + str(index + 1),
+            "text": (
+                role
+                + ": "
+                + message_text
+            ),
+        }
+
+        conversation_lines.append(
+            "[CONVERSATION "
+            + str(index)
+            + "] "
+            + role
+            + ": "
+            + message_text
+        )
+
+    context = (
+        "STORED MEMORIES:\n"
+        + (
+            "\n".join(memory_lines)
+            if memory_lines
+            else "None"
+        )
+        + "\n\nSTRUCTURED ENTITIES:\n"
+        + (
+            "\n".join(entity_lines)
+            if entity_lines
+            else "None"
+        )
+        + "\n\nSTRUCTURED RELATIONSHIPS:\n"
+        + (
+            "\n".join(relationship_lines)
+            if relationship_lines
+            else "None"
+        )
+        + "\n\nCURRENT CONVERSATION:\n"
+        + (
+            "\n".join(conversation_lines)
+            if conversation_lines
+            else "None"
+        )
+    )
+
+    return context, sources
+
+
+def validate_grounded_answer_trace(
+    result,
+    sources
+):
+    """
+    Accept only evidence references that actually exist
+    in the supplied context.
+    """
+
+    if not isinstance(result, dict):
+        return {
+            "answer": "",
+            "evidence_trace": [],
+            "grounded": False,
+        }
+
+    answer = str(
+        result.get("answer") or ""
+    ).strip()
+
+    raw_evidence = result.get(
+        "evidence",
+        []
+    )
+
+    if not isinstance(raw_evidence, list):
+        raw_evidence = []
+
+    evidence_trace = []
+    seen = set()
+
+    for item in raw_evidence:
+
+        if not isinstance(item, dict):
+            continue
+
+        source_type = str(
+            item.get("source_type") or ""
+        ).strip().lower()
+
+        if source_type not in sources:
+            continue
+
+        try:
+            source_id = int(
+                item.get("source_id")
+            )
+        except Exception:
+            continue
+
+        key = (
+            source_type,
+            source_id
+        )
+
+        if key in seen:
+            continue
+
+        source = sources[source_type].get(
+            source_id
+        )
+
+        if not source:
+            continue
+
+        seen.add(key)
+
+        evidence_trace.append({
+            "source_type": source["source_type"],
+            "source_id": source["source_id"],
+            "label": source["label"],
+            "text": source["text"],
+        })
+
+    return {
+        "answer": answer,
+        "evidence_trace": evidence_trace[:10],
+        "grounded": bool(
+            answer
+            and evidence_trace
+        ),
+    }
+
+
+def generate_grounded_answer(
+    message,
+    session_id,
+    title,
+    memories,
+    brain_entities,
+    brain_relationships,
+    history
+):
+    """
+    Generate the answer and evidence references
+    in ONE AI call.
+    """
+
+    context, sources = build_grounded_answer_context(
+        memories=memories,
+        brain_entities=brain_entities,
+        brain_relationships=brain_relationships,
+        history=history,
+    )
+
+    system_prompt = f"""
+You are Dusra Brain, a personal AI brain and memory assistant.
+
+Your job is to answer the user's question using ONLY the supplied evidence.
+
+Current session:
+{session_id}
+
+Current session title:
+{title}
+
+GROUNDING RULES:
+
+1. Stored memories are facts explicitly provided by the user.
+2. Never invent personal facts.
+3. Prefer directly relevant evidence.
+4. Use current conversation when the question refers to it.
+5. Use stored memories for stored user facts.
+6. Use structured entities and relationships when relevant.
+7. Do not mix unrelated project or business memories.
+8. If the evidence is insufficient, explicitly say so.
+9. Never manufacture a source ID.
+10. Every evidence reference must point to a source in the supplied context.
+11. Prefer the smallest set of evidence needed to support the answer.
+12. Do not cite a source only because it contains a generic shared word.
+
+OUTPUT FORMAT:
+
+Return ONLY valid JSON.
+
+{{
+  "answer": "normal user-facing answer",
+  "evidence": [
+    {{
+      "source_type": "memory",
+      "source_id": 123
+    }}
+  ]
+}}
+
+ALLOWED source_type values:
+
+memory
+entity
+relationship
+conversation
+
+For conversation evidence, source_id is the exact CONVERSATION index shown
+in the supplied context.
+
+If there is not enough evidence:
+
+{{
+  "answer": "I don't have enough stored information to answer that reliably.",
+  "evidence": []
+}}
+
+SUPPLIED EVIDENCE:
+
+{context}
+"""
+
+    try:
+
+        raw = groq_request(
+            [
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": message,
+                },
+            ],
+            temperature=0.1,
+        )
+
+        cleaned = clean_json_response(
+            raw
+        )
+
+        result = json.loads(
+            cleaned
+        )
+
+        return validate_grounded_answer_trace(
+            result,
+            sources
+        )
+
+    except Exception:
+
+        return {
+            "answer": (
+                "I couldn't generate a grounded answer "
+                "from the available stored information."
+            ),
+            "evidence_trace": [],
+            "grounded": False,
+        }
+
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -7221,85 +7650,35 @@ class handler(
 
 
             # ------------------------------------------------
-            # SYSTEM PROMPT
+            # PHASE 7 — STEP 1A
+            # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
 
-            system_prompt = f"""
-You are Dusra Brain, a personal AI brain and memory assistant.
+            grounded_result = generate_grounded_answer(
+                message=message,
+                session_id=session_id,
+                title=title,
+                memories=memories,
+                brain_entities=brain_entities,
+                brain_relationships=brain_relationships,
+                history=history,
+            )
 
-Current session:
-{session_id}
+            response = grounded_result.get(
+                "answer",
+                ""
+            ).strip()
 
-Current session title:
-{title}
+            evidence_trace = grounded_result.get(
+                "evidence_trace",
+                []
+            )
 
-MEMORY RULES:
-
-1. Stored memories are facts explicitly provided by the user.
-
-2. Never invent personal facts.
-
-3. Prefer memories from the current session when available.
-
-4. If a question clearly refers to a known subject,
-use ALL relevant memories for that subject, even if
-those memories were created in another conversation.
-
-5. Do not mix unrelated project or business memories.
-
-6. Use the current conversation history.
-
-7. Use structured entities and relationships when they
-are relevant to the user's question.
-
-8. Do not claim to remember something that is not available.
-
-9. If information is missing, say you do not have enough
-stored information.
-
-10. Keep answers natural and useful.
-
-STORED MEMORIES:
-
-{memory_text}
-
-STRUCTURED ENTITIES:
-
-{entity_text}
-
-STRUCTURED RELATIONSHIPS:
-
-{relationship_text}
-
-CURRENT CONVERSATION:
-
-{history_text}
-"""
-
-
-            # ------------------------------------------------
-            # GROQ RESPONSE
-            # ------------------------------------------------
-
-            response = groq_request(
-                [
-                    {
-                        "role":
-                            "system",
-
-                        "content":
-                            system_prompt
-                    },
-
-                    {
-                        "role":
-                            "user",
-
-                        "content":
-                            message
-                    }
-                ],
-                temperature=0.2
+            grounded = bool(
+                grounded_result.get(
+                    "grounded",
+                    False
+                )
             )
 
 
@@ -7411,6 +7790,17 @@ CURRENT CONVERSATION:
                 {
                     "response":
                         response,
+
+                    "evidence_trace":
+                        evidence_trace,
+
+                    "evidence_count":
+                        len(
+                            evidence_trace
+                        ),
+
+                    "grounded":
+                        grounded,
 
                     "session_id":
                         session_id,
