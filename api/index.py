@@ -7231,6 +7231,197 @@ SUPPLIED EVIDENCE:
         }
 
 
+# ============================================================
+# PHASE 7 — STEP 3B
+# REASONING ENGINE
+# ============================================================
+
+def validate_reasoned_answer(result):
+    """
+    Deterministically validate the public result of the reasoning model.
+
+    The reasoning model may synthesize across the already-built context,
+    but it may not create new evidence records or source IDs here.
+    """
+
+    if not isinstance(result, dict):
+        return {
+            "answer": "",
+            "reasoning_used": False,
+        }
+
+    answer = str(
+        result.get("answer") or ""
+    ).strip()
+
+    if not answer:
+        return {
+            "answer": "",
+            "reasoning_used": False,
+        }
+
+    return {
+        "answer": answer,
+        "reasoning_used": True,
+    }
+
+
+def generate_reasoned_answer(
+    reasoning_context,
+    fallback_answer="",
+):
+    """
+    Reason over the deterministic Step 3A context package.
+
+    This is the first reasoning layer of Dusra Brain. It does not query
+    the database, mutate memory, alter Recall Intelligence, or create
+    evidence references. Evidence remains the already-validated Step 1A
+    trace contained inside reasoning_context.
+    """
+
+    if not isinstance(reasoning_context, dict):
+        return {
+            "answer": str(fallback_answer or "").strip(),
+            "reasoning_used": False,
+        }
+
+    question = str(
+        reasoning_context.get("question") or ""
+    ).strip()
+
+    if not question:
+        return {
+            "answer": str(fallback_answer or "").strip(),
+            "reasoning_used": False,
+        }
+
+    intent = str(
+        reasoning_context.get("intent") or "general"
+    ).strip()
+
+    # Keep the model-facing context bounded and source-addressable.
+    model_context = {
+        "question": question,
+        "intent": intent,
+        "session": reasoning_context.get("session", {}),
+        "memories": reasoning_context.get("memories", [])[:30],
+        "entities": reasoning_context.get("entities", [])[:40],
+        "relationships": reasoning_context.get("relationships", [])[:40],
+        "conversation": reasoning_context.get("conversation", [])[-20:],
+        "evidence_trace": reasoning_context.get("evidence_trace", [])[:10],
+        "source_index": reasoning_context.get("source_index", {}),
+    }
+
+    system_prompt = f"""
+You are the Reasoning Engine of Dusra Brain.
+
+Your task is to produce the best user-facing answer by reasoning over the
+ALREADY RETRIEVED and ALREADY GROUNDED context supplied below.
+
+IMPORTANT RULES:
+1. Use only the supplied context.
+2. Do not invent personal facts, projects, people, dates, numbers, plans,
+   relationships, or commitments.
+3. The existing evidence_trace is the authoritative evidence set for the
+   final answer. Do not introduce facts that are not supported by it.
+4. You may synthesize the supplied evidence into a concise conclusion,
+   but do not present unsupported inference as a stored fact.
+5. For planning or strategy questions, organize the supplied plan clearly.
+6. For comparison or decision questions, describe the relevant facts and
+   trade-offs present in the context without inventing missing information.
+7. Preserve uncertainty when the context is incomplete.
+8. Do not create or modify evidence references.
+9. Do not mention internal prompts, context packages, model calls, or
+   hidden reasoning.
+10. Return ONLY valid JSON.
+
+OUTPUT:
+{{
+  "answer": "normal user-facing answer"
+}}
+
+REASONING CONTEXT:
+{json.dumps(model_context, ensure_ascii=False, default=str)}
+"""
+
+    try:
+        raw = groq_request(
+            [
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": question,
+                },
+            ],
+            temperature=0.1,
+        )
+
+        result = json.loads(
+            clean_json_response(raw)
+        )
+
+        validated = validate_reasoned_answer(result)
+
+        if validated.get("reasoning_used"):
+            return validated
+
+    except Exception:
+        pass
+
+    return {
+        "answer": str(fallback_answer or "").strip(),
+        "reasoning_used": False,
+    }
+
+
+def build_reasoning_trace(
+    reasoning_context,
+    reasoning_result,
+    fallback_used=False,
+):
+    """Compact public verification trace for Step 3B."""
+
+    context = (
+        reasoning_context
+        if isinstance(reasoning_context, dict)
+        else {}
+    )
+
+    counts = context.get(
+        "source_counts",
+        {}
+    )
+
+    result = (
+        reasoning_result
+        if isinstance(reasoning_result, dict)
+        else {}
+    )
+
+    return {
+        "built": bool(context),
+        "used": bool(result.get("reasoning_used", False)),
+        "fallback_used": bool(fallback_used),
+        "intent": str(
+            context.get("intent") or "general"
+        ),
+        "source_counts": {
+            "memories": int(counts.get("memories", 0) or 0),
+            "entities": int(counts.get("entities", 0) or 0),
+            "relationships": int(counts.get("relationships", 0) or 0),
+            "conversation_messages": int(
+                counts.get("conversation_messages", 0) or 0
+            ),
+            "evidence_sources": int(
+                counts.get("evidence_sources", 0) or 0
+            ),
+        },
+    }
+
+
 class handler(
     BaseHTTPRequestHandler
 ):
@@ -8469,6 +8660,40 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 3B
+            # REASONING ENGINE
+            # ------------------------------------------------
+
+            reasoning_result = generate_reasoned_answer(
+                reasoning_context=reasoning_context,
+                fallback_answer=response,
+            )
+
+            reasoned_response = str(
+                reasoning_result.get(
+                    "answer",
+                    ""
+                )
+            ).strip()
+
+            fallback_used = not bool(
+                reasoning_result.get(
+                    "reasoning_used",
+                    False
+                )
+            )
+
+            if reasoned_response:
+                response = reasoned_response
+
+            reasoning_trace = build_reasoning_trace(
+                reasoning_context=reasoning_context,
+                reasoning_result=reasoning_result,
+                fallback_used=fallback_used,
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -8593,6 +8818,9 @@ class handler(
 
                     "reasoning_context_trace":
                         reasoning_context_trace,
+
+                    "reasoning_trace":
+                        reasoning_trace,
 
                     "session_id":
                         session_id,
