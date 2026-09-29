@@ -6078,6 +6078,419 @@ Return ONLY JSON:
 
 
 # ============================================================
+# PHASE 7 — STEP 2
+# RECALL INTELLIGENCE LAYER
+# ============================================================
+
+def normalize_recall_text(value):
+    value = str(value or "").lower()
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    return " ".join(value.split())
+
+
+def recall_tokens(value):
+    text = normalize_recall_text(value)
+    tokens = [
+        token
+        for token in text.split()
+        if len(token) >= 3
+    ]
+    stop_words = {
+        "the", "and", "for", "with", "about", "what", "when",
+        "where", "which", "who", "does", "did", "this", "that",
+        "from", "into", "have", "has", "are", "was", "were",
+        "you", "your", "how", "why", "can", "could", "would",
+        "should", "tell", "remember", "know", "there", "their",
+        "our", "its", "all", "any", "some", "more", "than",
+    }
+    return set(
+        token
+        for token in tokens
+        if token not in stop_words
+    )
+
+
+def detect_recall_intent(message):
+    """Deterministic recall intent; no AI call and no database write."""
+    text = normalize_recall_text(message)
+    tokens = recall_tokens(message)
+
+    if any(
+        word in tokens
+        for word in {
+            "relationship", "connected", "connection", "linked",
+            "partner", "partnership", "collaborate", "collaboration",
+        }
+    ):
+        return "relationship"
+
+    if any(
+        word in tokens
+        for word in {
+            "timeline", "history", "earlier", "previous", "before",
+            "initially", "originally", "started", "latest", "recent",
+        }
+    ):
+        return "timeline"
+
+    if any(
+        word in tokens
+        for word in {
+            "person", "people", "founder", "founders", "ceo", "director",
+            "partner", "manager", "wife", "brother", "contact",
+        }
+    ):
+        return "person"
+
+    if any(
+        word in tokens
+        for word in {
+            "product", "products", "machine", "technology", "software",
+            "platform", "lubricant", "lubricants", "app", "service",
+        }
+    ):
+        return "product"
+
+    if any(
+        word in tokens
+        for word in {
+            "business", "businesses", "company", "companies", "venture",
+            "project", "projects", "startup", "investment", "investor",
+            "funding", "budget", "sales", "revenue", "commercial",
+        }
+    ):
+        return "business"
+
+    if any(
+        word in tokens
+        for word in {
+            "plan", "planning", "strategy", "launch", "launching",
+            "roadmap", "phase", "goal", "goals", "next",
+        }
+    ):
+        return "planning"
+
+    if text:
+        return "general"
+
+    return "general"
+
+
+def recall_subject_match(message, subject):
+    query = normalize_recall_text(message)
+    subject_text = normalize_recall_text(subject)
+
+    if not query or not subject_text:
+        return False
+
+    if subject_text in query:
+        return True
+
+    query_words = recall_tokens(message)
+    subject_words = recall_tokens(subject)
+
+    if not subject_words:
+        return False
+
+    return len(query_words.intersection(subject_words)) >= max(
+        1,
+        min(2, len(subject_words))
+    )
+
+
+def recall_category_match(intent, category):
+    category_text = normalize_recall_text(category)
+
+    mappings = {
+        "business": {
+            "business", "project", "startup", "investment", "finance",
+            "sales", "commercial", "venture", "company",
+        },
+        "product": {
+            "product", "technology", "software", "service", "platform",
+        },
+        "person": {
+            "person", "people", "contact", "relationship",
+        },
+        "relationship": {
+            "relationship", "partnership", "people", "collaboration",
+        },
+        "timeline": {
+            "history", "timeline", "general",
+        },
+        "planning": {
+            "planning", "project", "business", "strategy", "general",
+        },
+    }
+
+    return category_text in mappings.get(intent, set())
+
+
+def recall_recency_score(created_at):
+    if not created_at:
+        return 0.0
+
+    try:
+        from datetime import datetime, timezone
+
+        value = str(created_at).replace("Z", "+00:00")
+        created = datetime.fromisoformat(value)
+
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        age_days = max(
+            0.0,
+            (now - created.astimezone(timezone.utc)).total_seconds()
+            / 86400.0
+        )
+
+        return max(
+            0.0,
+            1.0 - min(age_days, 3650.0) / 3650.0
+        )
+
+    except Exception:
+        return 0.0
+
+
+def score_recall_memory(message, memory, session_id, intent):
+    query_tokens = recall_tokens(message)
+    memory_text = str(memory.get("memory") or "")
+    memory_tokens = recall_tokens(memory_text)
+
+    overlap = query_tokens.intersection(memory_tokens)
+    token_score = (
+        min(
+            1.0,
+            len(overlap) / max(1, min(6, len(query_tokens)))
+        )
+        if query_tokens
+        else 0.0
+    )
+
+    subject_match = recall_subject_match(
+        message,
+        memory.get("subject")
+    )
+
+    category_match = recall_category_match(
+        intent,
+        memory.get("category")
+    )
+
+    session_match = (
+        str(memory.get("session_id") or "")
+        == str(session_id or "")
+    )
+
+    importance = max(
+        0.0,
+        min(
+            1.0,
+            float(memory.get("importance") or 5) / 10.0
+        )
+    )
+
+    recency = recall_recency_score(
+        memory.get("created_at")
+    )
+
+    score = (
+        token_score * 40.0
+        + (30.0 if subject_match else 0.0)
+        + (10.0 if category_match else 0.0)
+        + (8.0 if session_match else 0.0)
+        + importance * 7.0
+        + recency * 5.0
+    )
+
+    reasons = []
+
+    if subject_match:
+        reasons.append("subject match")
+    if overlap:
+        reasons.append("keyword overlap")
+    if category_match:
+        reasons.append("category match")
+    if session_match:
+        reasons.append("current session")
+    if importance >= 0.8:
+        reasons.append("high importance")
+    if recency >= 0.8:
+        reasons.append("recent")
+
+    return score, reasons
+
+
+def rank_recall_memories(
+    message,
+    memories,
+    session_id="default",
+    limit=30
+):
+    """Rank already-retrieved memories without changing stored data."""
+    intent = detect_recall_intent(message)
+    scored = []
+
+    for memory in memories or []:
+        score, reasons = score_recall_memory(
+            message,
+            memory,
+            session_id,
+            intent
+        )
+
+        item = dict(memory)
+        item["recall_score"] = round(score, 2)
+        item["recall_reasons"] = reasons
+        scored.append(item)
+
+    scored.sort(
+        key=lambda item: (
+            float(item.get("recall_score") or 0),
+            int(item.get("importance") or 0),
+            str(item.get("created_at") or ""),
+        ),
+        reverse=True
+    )
+
+    selected = scored[:max(1, int(limit or 30))]
+
+    return selected, {
+        "intent": intent,
+        "candidate_count": len(scored),
+        "selected_count": len(selected),
+    }
+
+
+def score_recall_entity(message, entity):
+    query_tokens = recall_tokens(message)
+    entity_text = " ".join([
+        str(entity.get("name") or ""),
+        str(entity.get("description") or ""),
+        str(entity.get("entity_type") or ""),
+    ])
+    overlap = query_tokens.intersection(
+        recall_tokens(entity_text)
+    )
+
+    direct_name = recall_subject_match(
+        message,
+        entity.get("name")
+    )
+
+    score = min(
+        1.0,
+        len(overlap) / max(1, min(5, len(query_tokens)))
+    ) * 70.0
+
+    if direct_name:
+        score += 30.0
+
+    return score
+
+
+def score_recall_relationship(message, relationship):
+    text = " ".join([
+        str(relationship.get("from") or ""),
+        str(relationship.get("relationship") or ""),
+        str(relationship.get("to") or ""),
+    ])
+
+    query_tokens = recall_tokens(message)
+    overlap = query_tokens.intersection(
+        recall_tokens(text)
+    )
+
+    score = min(
+        1.0,
+        len(overlap) / max(1, min(6, len(query_tokens)))
+    ) * 100.0
+
+    return score
+
+
+def rank_recall_brain_context(
+    message,
+    entities,
+    relationships,
+    entity_limit=40,
+    relationship_limit=40
+):
+    """Keep the most relevant structured Brain context for the answer model."""
+    ranked_entities = []
+
+    for item in entities or []:
+        value = dict(item)
+        value["recall_score"] = round(
+            score_recall_entity(message, item),
+            2
+        )
+        ranked_entities.append(value)
+
+    ranked_entities.sort(
+        key=lambda item: float(item.get("recall_score") or 0),
+        reverse=True
+    )
+
+    ranked_relationships = []
+
+    for item in relationships or []:
+        value = dict(item)
+        value["recall_score"] = round(
+            score_recall_relationship(message, item),
+            2
+        )
+        ranked_relationships.append(value)
+
+    ranked_relationships.sort(
+        key=lambda item: float(item.get("recall_score") or 0),
+        reverse=True
+    )
+
+    return (
+        ranked_entities[:max(1, int(entity_limit or 40))],
+        ranked_relationships[:max(1, int(relationship_limit or 40))]
+    )
+
+
+def build_recall_trace(
+    message,
+    memories,
+    brain_entities,
+    brain_relationships,
+    recall_meta
+):
+    """Small read-only trace for live verification; no sensitive extra data."""
+    return {
+        "intent": recall_meta.get("intent", "general"),
+        "candidate_count": int(
+            recall_meta.get("candidate_count", 0)
+        ),
+        "selected_count": int(
+            recall_meta.get("selected_count", 0)
+        ),
+        "memory_ids": [
+            int(item["id"])
+            for item in memories[:10]
+            if item.get("id") is not None
+        ],
+        "entity_ids": [
+            int(item["id"])
+            for item in brain_entities[:10]
+            if item.get("id") is not None
+        ],
+        "relationship_ids": [
+            int(item["id"])
+            for item in brain_relationships[:10]
+            if item.get("id") is not None
+        ],
+    }
+
+
+# ============================================================
 # PHASE 7 — STEP 1A
 # GROUNDED ANSWER EVIDENCE TRACE
 # ============================================================
@@ -7524,6 +7937,19 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 2
+            # RECALL INTELLIGENCE — MEMORY RANKING
+            # ------------------------------------------------
+
+            memories, recall_meta = rank_recall_memories(
+                message=message,
+                memories=memories,
+                session_id=session_id,
+                limit=30
+            )
+
+
+            # ------------------------------------------------
             # MEMORY TEXT
             # ------------------------------------------------
 
@@ -7577,6 +8003,29 @@ class handler(
                 brain_entities = []
 
                 brain_relationships = []
+
+
+            # ------------------------------------------------
+            # PHASE 7 — STEP 2
+            # RECALL INTELLIGENCE — BRAIN RANKING
+            # ------------------------------------------------
+
+            brain_entities, brain_relationships = rank_recall_brain_context(
+                message=message,
+                entities=brain_entities,
+                relationships=brain_relationships,
+                entity_limit=40,
+                relationship_limit=40
+            )
+
+
+            recall_trace = build_recall_trace(
+                message=message,
+                memories=memories,
+                brain_entities=brain_entities,
+                brain_relationships=brain_relationships,
+                recall_meta=recall_meta
+            )
 
 
             if brain_entities:
@@ -7801,6 +8250,9 @@ class handler(
 
                     "grounded":
                         grounded,
+
+                    "recall_trace":
+                        recall_trace,
 
                     "session_id":
                         session_id,
