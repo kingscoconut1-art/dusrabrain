@@ -9862,6 +9862,22 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4O
+            # DECISION CHANGE DETECTION & EVOLUTION TRACKING
+            # ------------------------------------------------
+
+            decision_change_evolution = detect_decision_change_evolution(
+                recall_result=decision_history_recall,
+            )
+
+            decision_change_evolution_trace = (
+                build_decision_change_evolution_trace(
+                    evolution_result=decision_change_evolution,
+                )
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -10037,6 +10053,9 @@ class handler(
 
                     "decision_current_plan_conflict_trace":
                         decision_current_plan_conflict_trace,
+
+                    "decision_change_evolution_trace":
+                        decision_change_evolution_trace,
 
                     "session_id":
                         session_id,
@@ -12233,6 +12252,383 @@ def build_decision_current_plan_conflict_trace(conflict_result):
         ][:20],
         "recommendation_generated": False,
         "decision_modified": False,
+        "memory_modified": False,
+        "action_created": False,
+        "read_only": True,
+    }
+
+
+# ============================================================
+# PHASE 7 — STEP 4O
+# DECISION CHANGE DETECTION & EVOLUTION TRACKING
+# ============================================================
+
+def _decision_evolution_normalize_text(value):
+    """Normalize decision text for deterministic evolution comparison."""
+    text = str(value or "").lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
+
+
+def _decision_evolution_tokens(value):
+    """Return conservative content tokens used only for overlap checks."""
+    normalized = _decision_evolution_normalize_text(value)
+    return {
+        token
+        for token in normalized.split()
+        if len(token) >= 4
+    }
+
+
+def _decision_evolution_text(decision):
+    """Build comparison text strictly from persisted decision fields."""
+    item = decision if isinstance(decision, dict) else {}
+    parts = []
+
+    for key in (
+        "decision",
+        "selected_option",
+        "rationale",
+    ):
+        value = item.get(key)
+
+        if isinstance(value, list):
+            parts.extend(
+                str(part).strip()
+                for part in value
+                if str(part or "").strip()
+            )
+        elif str(value or "").strip():
+            parts.append(str(value).strip())
+
+    return " ".join(parts).strip()
+
+
+def _decision_evolution_subject(decision):
+    """Return the strongest stored grouping label for a decision."""
+    item = decision if isinstance(decision, dict) else {}
+
+    for key in (
+        "subject",
+        "title",
+        "session_title",
+    ):
+        value = str(item.get(key) or "").strip()
+
+        if value:
+            return _decision_evolution_normalize_text(value)
+
+    return ""
+
+
+def _decision_evolution_timestamp(decision):
+    """Return a sortable stored timestamp without inventing one."""
+    item = decision if isinstance(decision, dict) else {}
+
+    for key in (
+        "created_at",
+        "recorded_at",
+        "timestamp",
+    ):
+        value = item.get(key)
+
+        if value is None:
+            continue
+
+        text = str(value).strip()
+
+        if text:
+            return text
+
+    return ""
+
+
+def _decision_evolution_id(decision):
+    """Return a stable persisted decision ID when available."""
+    item = decision if isinstance(decision, dict) else {}
+
+    value = item.get("id")
+
+    if value is None:
+        value = item.get("decision_id")
+
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _classify_decision_evolution(previous, current):
+    """
+    Deterministically classify two persisted decisions.
+
+    This function describes observable stored-data changes only.
+    It never decides which version is correct.
+    """
+    previous_text = _decision_evolution_text(previous)
+    current_text = _decision_evolution_text(current)
+
+    previous_normalized = _decision_evolution_normalize_text(previous_text)
+    current_normalized = _decision_evolution_normalize_text(current_text)
+
+    if not previous_normalized or not current_normalized:
+        return {
+            "classification": "insufficient_evidence",
+            "reason": "decision_text_missing",
+            "shared_terms": [],
+        }
+
+    if previous_normalized == current_normalized:
+        return {
+            "classification": "reaffirmed",
+            "reason": "decision_content_unchanged",
+            "shared_terms": sorted(
+                _decision_evolution_tokens(current_text)
+            )[:20],
+        }
+
+    previous_tokens = _decision_evolution_tokens(previous_text)
+    current_tokens = _decision_evolution_tokens(current_text)
+    shared = previous_tokens.intersection(current_tokens)
+
+    # A meaningful overlap indicates that the two records concern related
+    # decision content; a changed normalized text indicates the later record
+    # is not identical to the earlier one.
+    if len(shared) >= 2:
+        return {
+            "classification": "modified",
+            "reason": "related_decision_content_changed",
+            "shared_terms": sorted(shared)[:20],
+        }
+
+    return {
+        "classification": "insufficient_evidence",
+        "reason": "insufficient_overlap_for_evolution_link",
+        "shared_terms": sorted(shared)[:20],
+    }
+
+
+def detect_decision_change_evolution(recall_result):
+    """
+    Detect observable evolution among persisted decisions returned by Step 4K.
+
+    Rules:
+    - Only persisted decisions supplied by Step 4K are considered.
+    - No decision is inferred from ordinary memories or plans.
+    - No decision is changed, superseded, deleted, or recommended.
+    - No database write occurs.
+    """
+    recall = recall_result if isinstance(recall_result, dict) else {}
+    triggered = bool(recall.get("triggered", False))
+
+    decisions = recall.get("decisions", [])
+    decisions = [
+        item for item in decisions
+        if isinstance(item, dict)
+    ][:50]
+
+    if not triggered:
+        return {
+            "built": True,
+            "detected": False,
+            "status": "not_triggered",
+            "reason": "not_a_decision_history_query",
+            "decision_count": 0,
+            "evolution_chain_count": 0,
+            "reaffirmed_count": 0,
+            "modified_count": 0,
+            "superseded_count": 0,
+            "insufficient_evidence_count": 0,
+            "decision_ids": [],
+            "chains": [],
+        }
+
+    if not decisions:
+        return {
+            "built": True,
+            "detected": False,
+            "status": "no_decisions",
+            "reason": "no_persisted_decisions_available",
+            "decision_count": 0,
+            "evolution_chain_count": 0,
+            "reaffirmed_count": 0,
+            "modified_count": 0,
+            "superseded_count": 0,
+            "insufficient_evidence_count": 0,
+            "decision_ids": [],
+            "chains": [],
+        }
+
+    # Group only by an explicit stored subject/title. Decisions without a
+    # grouping label are kept isolated rather than being guessed together.
+    groups = {}
+
+    for decision in decisions:
+        subject = _decision_evolution_subject(decision)
+
+        if not subject:
+            continue
+
+        groups.setdefault(subject, []).append(decision)
+
+    chains = []
+    reaffirmed_count = 0
+    modified_count = 0
+    superseded_count = 0
+    insufficient_count = 0
+
+    for subject, group in groups.items():
+        if len(group) < 2:
+            continue
+
+        ordered = sorted(
+            group,
+            key=lambda item: (
+                _decision_evolution_timestamp(item),
+                _decision_evolution_id(item) or 0,
+            ),
+        )
+
+        transitions = []
+
+        for index in range(1, len(ordered)):
+            previous = ordered[index - 1]
+            current = ordered[index]
+
+            classification = _classify_decision_evolution(
+                previous,
+                current,
+            )
+
+            transition = {
+                "from_decision_id": _decision_evolution_id(previous),
+                "to_decision_id": _decision_evolution_id(current),
+                "classification": classification["classification"],
+                "reason": classification["reason"],
+                "shared_terms": classification["shared_terms"],
+            }
+
+            transitions.append(transition)
+
+            if transition["classification"] == "reaffirmed":
+                reaffirmed_count += 1
+            elif transition["classification"] == "modified":
+                modified_count += 1
+            else:
+                insufficient_count += 1
+
+        # "Superseded" is deliberately not inferred from mere modification.
+        # It requires an explicit stored status marker on the later decision.
+        for index, transition in enumerate(transitions):
+            current = ordered[index + 1]
+            explicit_status = str(
+                current.get("status")
+                or current.get("decision_status")
+                or ""
+            ).strip().lower()
+
+            if (
+                transition["classification"] == "modified"
+                and explicit_status in {
+                    "superseded",
+                    "replaced",
+                }
+            ):
+                transition["classification"] = "superseded"
+                transition["reason"] = (
+                    "later_decision_explicitly_marked_superseded_or_replaced"
+                )
+                modified_count = max(0, modified_count - 1)
+                superseded_count += 1
+
+        if transitions:
+            chains.append({
+                "subject": subject,
+                "decision_ids": [
+                    _decision_evolution_id(item)
+                    for item in ordered
+                    if _decision_evolution_id(item) is not None
+                ],
+                "transitions": transitions,
+            })
+
+    detected = bool(chains)
+
+    return {
+        "built": True,
+        "detected": detected,
+        "status": "detected" if detected else "no_evolution_detected",
+        "reason": (
+            "decision_evolution_detected"
+            if detected
+            else "no_comparable_decision_versions_found"
+        ),
+        "decision_count": len(decisions),
+        "evolution_chain_count": len(chains),
+        "reaffirmed_count": reaffirmed_count,
+        "modified_count": modified_count,
+        "superseded_count": superseded_count,
+        "insufficient_evidence_count": insufficient_count,
+        "decision_ids": [
+            _decision_evolution_id(item)
+            for item in decisions
+            if _decision_evolution_id(item) is not None
+        ][:50],
+        "chains": chains,
+    }
+
+
+def build_decision_change_evolution_trace(evolution_result):
+    """Compact public Step 4O verification trace."""
+    result = (
+        evolution_result
+        if isinstance(evolution_result, dict)
+        else {}
+    )
+
+    return {
+        "built": bool(result.get("built", False)),
+        "detected": bool(result.get("detected", False)),
+        "status": str(
+            result.get("status")
+            or "not_triggered"
+        ),
+        "reason": str(
+            result.get("reason")
+            or "unknown"
+        ),
+        "decision_count": int(
+            result.get("decision_count", 0)
+            or 0
+        ),
+        "evolution_chain_count": int(
+            result.get("evolution_chain_count", 0)
+            or 0
+        ),
+        "reaffirmed_count": int(
+            result.get("reaffirmed_count", 0)
+            or 0
+        ),
+        "modified_count": int(
+            result.get("modified_count", 0)
+            or 0
+        ),
+        "superseded_count": int(
+            result.get("superseded_count", 0)
+            or 0
+        ),
+        "insufficient_evidence_count": int(
+            result.get("insufficient_evidence_count", 0)
+            or 0
+        ),
+        "decision_ids": [
+            item
+            for item in result.get("decision_ids", [])
+            if item is not None
+        ][:50],
+        "recommendation_generated": False,
+        "decision_modified": False,
+        "decision_deleted": False,
         "memory_modified": False,
         "action_created": False,
         "read_only": True,
