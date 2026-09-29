@@ -610,6 +610,100 @@ def get_memory_subjects(user_id):
     ]
 
 
+
+# ============================================================
+# PHASE 7 — STEP 4B
+# DECISION CONTEXT INTERPRETER
+# ============================================================
+
+def interpret_decision_context(decision_context):
+    """
+    Deterministically interpret the already-built Step 4A decision context.
+
+    This layer does not call the model, query the database, write memory,
+    create evidence, rank recall results, or recommend a decision. It only
+    classifies the supplied context using explicit fields already present.
+    """
+    context = decision_context if isinstance(decision_context, dict) else {}
+
+    intent = str(context.get("intent") or "general").strip().lower()
+    decision = context.get("decision", [])
+    options = context.get("options", [])
+    goals = context.get("goals", [])
+    constraints = context.get("constraints", [])
+    risks = context.get("risks", [])
+    uncertainties = context.get("uncertainties", [])
+    tradeoffs = context.get("tradeoffs", [])
+    missing = context.get("missing_information", [])
+
+    decision_present = isinstance(decision, list) and bool(decision)
+    option_count = len(options) if isinstance(options, list) else 0
+    goal_count = len(goals) if isinstance(goals, list) else 0
+    constraint_count = len(constraints) if isinstance(constraints, list) else 0
+    risk_count = len(risks) if isinstance(risks, list) else 0
+    uncertainty_count = len(uncertainties) if isinstance(uncertainties, list) else 0
+    tradeoff_count = len(tradeoffs) if isinstance(tradeoffs, list) else 0
+    missing_count = len(missing) if isinstance(missing, list) else 0
+
+    decision_signal = decision_present or option_count > 0 or tradeoff_count > 0
+    planning_signal = intent in {"planning", "plan", "strategy", "strategic"} or goal_count > 0 or constraint_count > 0
+
+    if decision_signal and planning_signal:
+        context_type = "mixed"
+    elif decision_signal:
+        context_type = "decision"
+    elif planning_signal:
+        context_type = "planning"
+    else:
+        context_type = "informational"
+
+    return {
+        "context_type": context_type,
+        "decision_relevance": bool(decision_present or option_count > 0),
+        "goal_relevance": bool(goal_count > 0),
+        "option_relevance": bool(option_count > 0),
+        "risk_relevance": bool(risk_count > 0),
+        "constraint_relevance": bool(constraint_count > 0),
+        "tradeoff_relevance": bool(tradeoff_count > 0),
+        "uncertainty_relevance": bool(uncertainty_count > 0),
+        "information_gap": bool(missing_count > 0),
+        "source_intent": intent or "general",
+        "counts": {
+            "decisions": 1 if decision_present else 0,
+            "options": option_count,
+            "goals": goal_count,
+            "constraints": constraint_count,
+            "risks": risk_count,
+            "uncertainties": uncertainty_count,
+            "tradeoffs": tradeoff_count,
+            "missing_information": missing_count,
+        },
+    }
+
+
+def build_decision_context_interpretation_trace(
+    decision_context,
+    interpretation,
+):
+    """Compact public verification trace for Step 4B."""
+    context = decision_context if isinstance(decision_context, dict) else {}
+    result = interpretation if isinstance(interpretation, dict) else {}
+
+    return {
+        "built": bool(context),
+        "interpreted": bool(result),
+        "context_type": str(result.get("context_type") or "informational"),
+        "decision_relevance": bool(result.get("decision_relevance", False)),
+        "planning_relevance": str(result.get("context_type") or "") in {"planning", "mixed"},
+        "option_relevance": bool(result.get("option_relevance", False)),
+        "goal_relevance": bool(result.get("goal_relevance", False)),
+        "risk_relevance": bool(result.get("risk_relevance", False)),
+        "information_gap": bool(result.get("information_gap", False)),
+        "source_intent": str(result.get("source_intent") or "general"),
+        "counts": dict(result.get("counts", {})) if isinstance(result.get("counts", {}), dict) else {},
+    }
+
+
 # ============================================================
 # SUBJECT DETECTION
 # ============================================================
@@ -9366,6 +9460,23 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4B
+            # DECISION CONTEXT INTERPRETER
+            # ------------------------------------------------
+
+            decision_context_interpretation = interpret_decision_context(
+                decision_context=decision_context,
+            )
+
+            decision_context_interpretation_trace = (
+                build_decision_context_interpretation_trace(
+                    decision_context=decision_context,
+                    interpretation=decision_context_interpretation,
+                )
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -9502,6 +9613,9 @@ class handler(
 
                     "decision_context_trace":
                         decision_context_trace,
+
+                    "decision_context_interpretation_trace":
+                        decision_context_interpretation_trace,
 
                     "session_id":
                         session_id,
