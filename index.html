@@ -1875,6 +1875,25 @@
             .brain-review-history-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
         }
 
+
+
+        /* =====================================================
+           PHASE 7 — STEP 4Q — DECISION OUTCOME & LEARNING LOOP
+        ===================================================== */
+        .decision-outcome-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+        .decision-outcome-card { border:1px solid #e5e7eb; border-radius:12px; padding:14px; background:#fff; }
+        .decision-outcome-card.full { grid-column:1/-1; }
+        .decision-outcome-card h4 { margin:0 0 6px; color:#111827; }
+        .decision-outcome-card p { margin:0 0 10px; color:#64748b; font-size:13px; line-height:1.5; }
+        .decision-outcome-card select,.decision-outcome-card textarea { width:100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius:9px; padding:10px; font:inherit; background:#fff; }
+        .decision-outcome-card textarea { min-height:92px; resize:vertical; }
+        .decision-outcome-history { display:grid; gap:10px; margin-top:12px; }
+        .decision-outcome-history-item { border:1px solid #e5e7eb; border-radius:11px; padding:12px; background:#f8fafc; }
+        .decision-outcome-badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:11px; font-weight:800; text-transform:capitalize; background:#eef2ff; color:#3730a3; }
+        .decision-outcome-meta { margin-top:6px; color:#64748b; font-size:11px; }
+        .decision-outcome-body { margin-top:8px; color:#334155; line-height:1.5; white-space:pre-wrap; }
+        @media(max-width:700px){ .decision-outcome-grid{grid-template-columns:1fr;} }
+
 </style>
 
 <style>
@@ -1906,56 +1925,7 @@
 .decision-stat { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:15px; }
 .decision-stat-number { font-size:22px; font-weight:800; color:#111827; }
 .decision-stat-label { margin-top:4px; color:#64748b; font-size:12px; font-weight:700; }
-.decision-snapshot {
-            margin: 18px 0;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 16px;
-        }
-
-        .decision-snapshot-title {
-            font-weight: 800;
-            margin-bottom: 12px;
-            color: #334155;
-        }
-
-        .decision-snapshot-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-        }
-
-        .decision-snapshot-grid > div {
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            border-radius: 9px;
-            padding: 11px;
-        }
-
-        .decision-snapshot-grid span {
-            display: block;
-            color: #64748b;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-        }
-
-        .decision-snapshot-grid strong {
-            display: block;
-            color: #1f2937;
-            line-height: 1.45;
-            font-size: 13px;
-        }
-
-        @media (max-width: 700px) {
-            .decision-snapshot-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .decision-next-step { background:#f8fafc; border:1px solid #dbe3ee; border-radius:14px; padding:16px 17px; margin-bottom:18px; }
+.decision-next-step { background:#f8fafc; border:1px solid #dbe3ee; border-radius:14px; padding:16px 17px; margin-bottom:18px; }
 .decision-next-step-title { font-size:16px; font-weight:800; color:#111827; margin-bottom:5px; }
 .decision-next-step-text { color:#475569; font-size:13px; line-height:1.55; margin-bottom:12px; }
 .decision-section { background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:17px; margin-bottom:15px; }
@@ -2663,16 +2633,6 @@
                     <div class="decision-stat"><div class="decision-stat-number" id="decisionHistoryStat">0</div><div class="decision-stat-label">Saved decisions</div></div>
                 </div>
 
-                <div class="decision-snapshot" id="decisionSnapshot" style="display:none;">
-                    <div class="decision-snapshot-title">Current decision snapshot</div>
-                    <div class="decision-snapshot-grid">
-                        <div><span>Decision</span><strong id="decisionSnapshotQuestion">—</strong></div>
-                        <div><span>Options</span><strong id="decisionSnapshotOptions">—</strong></div>
-                        <div><span>Goals</span><strong id="decisionSnapshotGoals">—</strong></div>
-                        <div><span>Constraints</span><strong id="decisionSnapshotConstraints">—</strong></div>
-                    </div>
-                </div>
-
                 <div class="decision-next-step" id="decisionNextStep">
                     <div class="decision-next-step-title">What should I do next?</div>
                     <div class="decision-next-step-text" id="decisionNextStepText">Dusra Brain is ready to help. Tell it what decision you are trying to make.</div>
@@ -2710,9 +2670,50 @@
                     <div id="decisionEvolutionTraces" class="decision-trace-grid"></div>
                 </div>
 
+
+                <div class="decision-section">
+                    <div class="decision-section-title">What happened after your decision?</div>
+                    <div class="decision-section-subtitle">When you have a real outcome to report, tell Dusra Brain what happened. Nothing is inferred from your plans, memories or conversations.</div>
+                    <div class="decision-outcome-grid">
+                        <div class="decision-outcome-card">
+                            <h4>Saved decision</h4>
+                            <p>Select a decision you previously confirmed.</p>
+                            <select id="decisionOutcomeDecisionId"><option value="">Loading saved decisions…</option></select>
+                        </div>
+                        <div class="decision-outcome-card">
+                            <h4>Outcome</h4>
+                            <p>Describe the result using your own words.</p>
+                            <select id="decisionOutcomeStatus">
+                                <option value="positive">Positive</option>
+                                <option value="negative">Negative</option>
+                                <option value="mixed">Mixed</option>
+                                <option value="neutral">Neutral</option>
+                                <option value="unknown">Unknown</option>
+                            </select>
+                        </div>
+                        <div class="decision-outcome-card full">
+                            <h4>What happened?</h4>
+                            <textarea id="decisionOutcomeText" placeholder="Describe what actually happened…"></textarea>
+                        </div>
+                        <div class="decision-outcome-card">
+                            <h4>What did you expect?</h4>
+                            <textarea id="decisionExpectedOutcome" placeholder="Optional — what did you expect to happen?"></textarea>
+                        </div>
+                        <div class="decision-outcome-card">
+                            <h4>What did you learn?</h4>
+                            <textarea id="decisionOutcomeLearning" placeholder="Optional — what would you carry forward?"></textarea>
+                        </div>
+                        <div class="decision-outcome-card full">
+                            <label class="decision-checkbox"><input type="checkbox" id="decisionOutcomeConfirmed"> I explicitly confirm that this outcome is what I want Dusra Brain to record.</label>
+                            <div style="margin-top:10px;"><button class="decision-button primary" id="decisionOutcomeSubmitButton" type="button">Save this outcome</button> <span id="decisionOutcomeSubmitStatus" class="decision-muted"></span></div>
+                        </div>
+                    </div>
+                    <div id="decisionOutcomeHistory" class="decision-outcome-history"></div>
+                </div>
+
                 <div class="decision-section">
                     <div class="decision-section-title">Save a decision</div>
-                    <div class="decision-section-subtitle">Tell Dusra Brain the decision you have actually made. Nothing is saved until you explicitly confirm it.</div>
+                    <div class="decision-section-subtitle">Tell Dusra Brain the decision you have actually made. Nothing is saved until you explicitly confirm it. If decision-support validation has not passed, Dusra Brain can still record your explicitly confirmed decision as a historical record without treating it as validated advice.</div>
                     <div class="decision-capture">
                         <div class="full"><textarea id="decisionInputText" placeholder="Enter the decision you explicitly want Dusra Brain to capture..."></textarea></div>
                         <div><input id="decisionSelectedOption" placeholder="Selected option (optional)"></div>
@@ -3816,7 +3817,7 @@
         if (code === "4E") return trace.analyzed ? "Analysis available" : "Waiting for enough information";
         if (code === "4F") return trace.synthesized ? "Summary available" : "Waiting for analysis";
         if (code === "4G") return trace.passed ? "Quality check passed" : "Quality check pending";
-        if (code === "4H") return trace.capturable ? "Ready for confirmation" : "Decision can still be saved explicitly";
+        if (code === "4H") return trace.capturable ? "Ready for confirmation" : "Waiting for validated decision support";
         if (code === "4I") return trace.accepted ? "Decision received" : "Waiting for your confirmation";
         if (code === "4J") return trace.persisted ? "Saved" : "Not saved";
         if (code === "4K") return trace.triggered ? "History searched" : "Not needed for this request";
@@ -3825,6 +3826,7 @@
         if (code === "4N") return trace.detected ? "Comparison available" : "Not needed for this request";
         if (code === "4O") return trace.detected ? "Change found" : "Not needed for this request";
         if (code === "4P") return trace.answered ? "Explanation available" : "Not needed for this request";
+        if (code === "4Q") return trace.outcome_recorded ? "Outcome recorded" : "Waiting for an outcome";
 
         if (trace.status === "pass" || trace.passed) return "Verified";
         if (trace.status === "ready" || trace.ready) return "Ready";
@@ -3858,7 +3860,8 @@
             "4M": "Connect saved decisions with the memories and evidence that supported them.",
             "4N": "Check whether a saved decision appears different from a current plan, when evidence exists.",
             "4O": "Track how explicitly saved decisions changed or were reaffirmed over time.",
-            "4P": "Explain the evidence-backed story of how a decision evolved over time."
+            "4P": "Explain the evidence-backed story of how a decision evolved over time.",
+            "4Q": "Record what happened after a saved decision and what you learned, only when you explicitly provide it."
         };
         return summaries[code] || "Dusra Brain is checking this part of your decision journey.";
     }
@@ -3895,7 +3898,8 @@
             "4M": ["Connect decisions with their evidence", data.decision_history_memory_evidence_trace],
             "4N": ["Check for changes or possible conflicts", data.decision_current_plan_conflict_trace],
             "4O": ["Track decision changes over time", data.decision_change_evolution_trace],
-            "4P": ["Explain how a decision evolved", data.decision_evolution_answer_trace]
+            "4P": ["Explain how a decision evolved", data.decision_evolution_answer_trace],
+            "4Q": ["Record what happened after a decision", data.decision_outcome_trace]
         };
         var pipeline = document.getElementById("decisionPipeline");
         pipeline.innerHTML = Object.keys(map).map(function(code){
@@ -3905,26 +3909,9 @@
         document.getElementById("decisionContextTraces").innerHTML = ["4A","4B","4C","4D"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionAnalysisTraces").innerHTML = ["4E","4F","4G"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         document.getElementById("decisionHistoryTraces").innerHTML = ["4H","4I","4J","4K","4L"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
-        document.getElementById("decisionEvolutionTraces").innerHTML = ["4M","4N","4O","4P"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
+        document.getElementById("decisionEvolutionTraces").innerHTML = ["4M","4N","4O","4P","4Q"].map(function(c){return renderDecisionTraceCard(c,map[c][0],map[c][1]);}).join("");
         var readiness = data.decision_readiness_trace || {};
         document.getElementById("decisionReadinessStat").textContent = readiness.ready ? "Ready" : "Not ready yet";
-
-        var snapshot = document.getElementById("decisionSnapshot");
-        var extracted = data.decision_extracted_context || {};
-        var snapshotDecision = extracted.decision || [];
-        var snapshotOptions = extracted.options || [];
-        var snapshotGoals = extracted.goals || [];
-        var snapshotConstraints = extracted.constraints || [];
-
-        if (snapshot && (snapshotDecision.length || snapshotOptions.length || snapshotGoals.length || snapshotConstraints.length)) {
-            snapshot.style.display = "block";
-            document.getElementById("decisionSnapshotQuestion").textContent = decisionValue(snapshotDecision);
-            document.getElementById("decisionSnapshotOptions").textContent = decisionValue(snapshotOptions);
-            document.getElementById("decisionSnapshotGoals").textContent = decisionValue(snapshotGoals);
-            document.getElementById("decisionSnapshotConstraints").textContent = decisionValue(snapshotConstraints);
-        } else if (snapshot) {
-            snapshot.style.display = "none";
-        }
 
         var nextStepText = document.getElementById("decisionNextStepText");
         var nextStepButton = document.getElementById("decisionNextStepButton");
@@ -3951,22 +3938,7 @@
         document.getElementById("decisionEvidenceStat").textContent = matrix.evidence_source_count || 0;
         document.getElementById("decisionOptionsStat").textContent = (matrix.field_presence && matrix.field_presence.options) ? (matrix.field_presence.options.count || 0) : 0;
         var hist = data.decision_history_recall_trace || {};
-        var historyStat = document.getElementById("decisionHistoryStat");
-
-        /*
-         * IMPORTANT:
-         * The saved-decision count is authoritative only when it comes
-         * from the database-backed get_decision_history call.
-         *
-         * Do NOT overwrite it with the temporary analysis response.
-         * Otherwise a page refresh can visually jump 2 → 0 → 2.
-         */
-        if (historyStat && window.dusraSavedDecisionCount !== undefined &&
-            window.dusraSavedDecisionCount !== null) {
-            historyStat.textContent = String(window.dusraSavedDecisionCount);
-        } else if (historyStat && typeof hist.selected_count === "number") {
-            historyStat.textContent = String(hist.selected_count);
-        }
+        document.getElementById("decisionHistoryStat").textContent = hist.selected_count || (data.decision_history_trace && data.decision_history_trace.persisted ? 1 : 0);
         var historyAnswer = data.decision_history_answer_trace || {};
         var evolutionAnswer = data.decision_evolution_answer_trace || {};
         var historyBox = document.getElementById("decisionHistoryList");
@@ -4024,9 +3996,6 @@
             renderDecisionCenter({});
         }
 
-        // Always reconcile the visible saved-count/history with the database.
-        loadSavedDecisionHistory();
-
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -4036,12 +4005,6 @@
 
         box.innerHTML =
             '<div class="decision-history-card"><div class="decision-muted">Loading saved decisions...</div></div>';
-
-        var loadingCount = document.getElementById("decisionHistoryStat");
-        if (loadingCount && (window.dusraSavedDecisionCount === undefined ||
-                             window.dusraSavedDecisionCount === null)) {
-            loadingCount.textContent = "…";
-        }
 
         try {
             const response = await fetch("/api", {
@@ -4068,15 +4031,6 @@
             const history = Array.isArray(data.history)
                 ? data.history
                 : [];
-
-            // The saved-decision count must come from the database,
-            // not from the last decision-analysis response.
-            window.dusraSavedDecisionCount = history.length;
-
-            var savedCount = document.getElementById("decisionHistoryStat");
-            if (savedCount) {
-                savedCount.textContent = String(history.length);
-            }
 
             if (!history.length) {
                 box.innerHTML =
@@ -4129,6 +4083,60 @@
         openDecisionCenter();
     }
 
+
+    async function loadDecisionOutcomeDecisions() {
+        const select = document.getElementById("decisionOutcomeDecisionId");
+        if (!select) return;
+        try {
+            const response = await fetch("/api", {method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"get_decision_history",user_id:"default_user",limit:100})});
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Unable to load saved decisions.");
+            const history = Array.isArray(data.history) ? data.history : [];
+            select.innerHTML = history.length ? '<option value="">Select a saved decision</option>' + history.map(function(item){
+                return '<option value="'+brainText(String(item.id||""))+'">#'+brainText(String(item.id||""))+' — '+brainText(String(item.decision||"").slice(0,90))+'</option>';
+            }).join("") : '<option value="">No saved decisions yet</option>';
+        } catch(error) {
+            select.innerHTML = '<option value="">Unable to load saved decisions</option>';
+        }
+    }
+
+    async function loadDecisionOutcomeHistory() {
+        const box=document.getElementById("decisionOutcomeHistory");
+        const select=document.getElementById("decisionOutcomeDecisionId");
+        if(!box || !select || !select.value){ if(box) box.innerHTML=""; return; }
+        box.innerHTML='<div class="decision-muted">Loading outcome history…</div>';
+        try {
+            const response=await fetch("/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"get_decision_outcomes",user_id:"default_user",decision_id:Number(select.value),limit:100})});
+            const data=await response.json();
+            if(!response.ok) throw new Error(data.error || "Unable to load outcome history.");
+            const outcomes=Array.isArray(data.outcomes)?data.outcomes:[];
+            if(!outcomes.length){box.innerHTML='<div class="decision-muted">No outcome has been recorded for this decision yet.</div>';return;}
+            box.innerHTML=outcomes.map(function(item){return '<div class="decision-outcome-history-item"><span class="decision-outcome-badge">'+brainText(item.outcome_status||"unknown")+'</span><div class="decision-outcome-meta">Outcome #'+brainText(String(item.id||""))+' · '+brainText(formatHistoryDate(item.created_at))+'</div><div class="decision-outcome-body"><strong>What happened:</strong> '+brainText(item.outcome||"")+(item.expected_outcome?'\n\n<strong>Expected:</strong> '+brainText(item.expected_outcome):'')+(item.learning?'\n\n<strong>Learning:</strong> '+brainText(item.learning):'')+'</div></div>';}).join("");
+        } catch(error) { box.innerHTML='<div class="decision-muted">Unable to load outcome history.</div>'; }
+    }
+
+    async function submitDecisionOutcome() {
+        const status=document.getElementById("decisionOutcomeSubmitStatus");
+        const decisionId=document.getElementById("decisionOutcomeDecisionId").value;
+        const outcomeStatus=document.getElementById("decisionOutcomeStatus").value;
+        const outcome=document.getElementById("decisionOutcomeText").value.trim();
+        const expected=document.getElementById("decisionExpectedOutcome").value.trim();
+        const learning=document.getElementById("decisionOutcomeLearning").value.trim();
+        const confirmed=document.getElementById("decisionOutcomeConfirmed").checked;
+        if(!decisionId || !outcome || !confirmed){if(status)status.textContent="Select a saved decision, describe what happened, and explicitly confirm it.";return;}
+        if(status)status.textContent="Saving outcome…";
+        const button=document.getElementById("decisionOutcomeSubmitButton"); if(button)button.disabled=true;
+        try{
+            const response=await fetch("/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"record_decision_outcome",user_id:"default_user",decision_id:Number(decisionId),outcome_status:outcomeStatus,outcome:outcome,expected_outcome:expected,learning:learning,confirmed:true})});
+            const data=await response.json(); const trace=data.decision_outcome_trace||{};
+            if(!response.ok || !trace.persisted) throw new Error(trace.reason||"Outcome could not be saved.");
+            if(status)status.textContent=trace.duplicate?"✓ This outcome was already recorded.":"✓ Outcome saved. Your original decision was not changed.";
+            document.getElementById("decisionOutcomeText").value=""; document.getElementById("decisionExpectedOutcome").value=""; document.getElementById("decisionOutcomeLearning").value=""; document.getElementById("decisionOutcomeConfirmed").checked=false;
+            await loadDecisionOutcomeHistory();
+        }catch(error){if(status)status.textContent="✗ "+(error.message||"Outcome could not be saved.");}
+        finally{if(button)button.disabled=false;}
+    }
+
     async function submitExplicitDecision() {
         var decision = document.getElementById("decisionInputText").value.trim();
         var selected = document.getElementById("decisionSelectedOption").value.trim();
@@ -4138,25 +4146,15 @@
         if (!decision || !confirmed) { status.textContent = "Enter a decision and explicitly confirm it."; return; }
         status.textContent = "Submitting explicit decision through 4H → 4I → 4J...";
         try {
-            // Preserve the decision context for the backend 4A→4H validation.
-            // Do not submit a generic "Capture my explicit decision." message.
-            var decisionSubmissionMessage = decision;
-            if (selected) { decisionSubmissionMessage += "\nSelected option: " + selected; }
-            if (rationale) { decisionSubmissionMessage += "\nRationale: " + rationale; }
-
-            var response = await fetch("/api", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:decisionSubmissionMessage, user_id:"default_user", session_id:activeSessionId, title:activeSessionTitle, decision_input:{decision:decision, selected_option:selected, rationale:rationale, confirmed:true}})});
+            var response = await fetch("/api", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:"Capture my explicit decision.", user_id:"default_user", session_id:activeSessionId, title:activeSessionTitle, decision_input:{decision:decision, selected_option:selected, rationale:rationale, confirmed:true, explicit_user_record:true}})});
             var data = await response.json();
             lastDecisionApiResponse = data;
             renderDecisionCenter(data);
             if (data.decision_history_trace && data.decision_history_trace.persisted) {
                 await loadSavedDecisionHistory();
             }
-            status.textContent = data.decision_history_trace && data.decision_history_trace.persisted
-                ? "Decision persisted successfully."
-                : ((data.decision_input_trace && data.decision_input_trace.reason)
-                    || (data.decision_history_trace && data.decision_history_trace.reason)
-                    || (data.decision_capture_trace && data.decision_capture_trace.reason)
-                    || "Decision was not persisted.");
+            status.textContent = data.decision_history_trace && data.decision_history_trace.persisted ? ((data.decision_input_trace && data.decision_input_trace.reason === "explicit_user_decision_received_without_support_validation") ? "Decision persisted explicitly. Support validation was not passed; that status is preserved." : "Decision persisted.") : ((data.decision_input_trace && data.decision_input_trace.reason) || "Decision was not persisted.");
+            await loadDecisionOutcomeDecisions();
         } catch (error) { status.textContent = "Unable to submit decision: " + error.message; }
     }
 
@@ -4177,18 +4175,16 @@
         openDecisionCenter(event);
     });
     document.getElementById("decisionBackButton").addEventListener("click", function(){ showView(chatView); });
-    document.getElementById("decisionRefreshButton").addEventListener("click", async function(){
-        if (lastDecisionApiResponse) {
-            renderDecisionCenter(lastDecisionApiResponse);
-        }
-        await loadSavedDecisionHistory();
-    });
+    document.getElementById("decisionRefreshButton").addEventListener("click", function(){ if(lastDecisionApiResponse) renderDecisionCenter(lastDecisionApiResponse); });
     document.getElementById("decisionHistoryButton").addEventListener("click", loadSavedDecisionHistory);
     document.getElementById("decisionAskHistoryButton").addEventListener("click", askDecisionHistory);
     document.getElementById("decisionSubmitButton").addEventListener("click", submitExplicitDecision);
+    const decisionOutcomeDecisionId = document.getElementById("decisionOutcomeDecisionId");
+    if (decisionOutcomeDecisionId) decisionOutcomeDecisionId.addEventListener("change", loadDecisionOutcomeHistory);
+    const decisionOutcomeSubmitButton = document.getElementById("decisionOutcomeSubmitButton");
+    if (decisionOutcomeSubmitButton) decisionOutcomeSubmitButton.addEventListener("click", submitDecisionOutcome);
+    loadDecisionOutcomeDecisions();
 
-    // Restore database-backed saved decisions/count on a hard browser refresh.
-    loadSavedDecisionHistory();
 
     // ========================================================
     // BRAIN EXPLORER
@@ -7149,13 +7145,17 @@
 
             const response =
                 await fetch(
-                    "/api?memory_id=" +
-                    encodeURIComponent(
-                        memoryId
-                    ),
+                    "/api",
                     {
-                        method:
-                            "DELETE"
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            action: "delete_memory",
+                            id: memoryId,
+                            user_id: "default_user"
+                        })
                     }
                 );
 
@@ -7377,36 +7377,19 @@
                         await fetch(
                             "/api",
                             {
-                                method:
-                                    "PUT",
-
+                                method: "POST",
                                 headers: {
-                                    "Content-Type":
-                                        "application/json"
+                                    "Content-Type": "application/json"
                                 },
-
-                                body:
-                                    JSON.stringify({
-
-                                        id:
-                                            editingMemoryId,
-
-                                        memory:
-                                            memory,
-
-                                        subject:
-                                            subject ||
-                                            "general",
-
-                                        category:
-                                            category ||
-                                            "general",
-
-                                        importance:
-                                            importance
-
-                                    })
-
+                                body: JSON.stringify({
+                                    action: "update_memory",
+                                    id: editingMemoryId,
+                                    memory: memory,
+                                    subject: subject || "general",
+                                    category: category || "general",
+                                    importance: importance,
+                                    user_id: "default_user"
+                                })
                             }
                         );
 
