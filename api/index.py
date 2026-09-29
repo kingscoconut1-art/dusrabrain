@@ -10735,3 +10735,57 @@ def build_decision_synthesis_trace(decision_readiness, analysis_result, synthesi
                 },
                 500
             )
+# ============================================================
+# PHASE 7 — STEP 4H
+# DECISION CAPTURE AND ACTION GATE
+# ============================================================
+
+def validate_decision_capture(decision_readiness, decision_synthesis_quality, decision_synthesis):
+    """Deterministically gate whether a user decision may be captured.
+
+    This layer never chooses an option, never creates an action, and never
+    writes to memory. It only validates an explicitly supplied user decision
+    against the already validated 4D-4G decision-support chain.
+    """
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    quality = decision_synthesis_quality if isinstance(decision_synthesis_quality, dict) else {}
+    synthesis = decision_synthesis if isinstance(decision_synthesis, dict) else {}
+
+    ready = bool(readiness.get("ready", False))
+    quality_passed = bool(quality.get("passed", False))
+    synthesized = bool(synthesis.get("synthesized", False))
+
+    return {
+        "built": True,
+        "capturable": bool(ready and quality_passed and synthesized),
+        "status": "capturable" if (ready and quality_passed and synthesized) else "not_ready",
+        "reason": (
+            "decision_support_validated"
+            if (ready and quality_passed and synthesized)
+            else "decision_support_not_validated"
+        ),
+        "decision_recorded": False,
+        "action_created": False,
+        "recommendation_generated": False,
+    }
+
+
+def build_decision_capture_trace(decision_readiness, decision_synthesis_quality, decision_synthesis, capture_result):
+    """Compact public verification trace for Step 4H."""
+    readiness = decision_readiness if isinstance(decision_readiness, dict) else {}
+    quality = decision_synthesis_quality if isinstance(decision_synthesis_quality, dict) else {}
+    synthesis = decision_synthesis if isinstance(decision_synthesis, dict) else {}
+    result = capture_result if isinstance(capture_result, dict) else {}
+
+    return {
+        "built": bool(result.get("built", False)),
+        "capturable": bool(result.get("capturable", False)),
+        "status": str(result.get("status") or "not_ready"),
+        "reason": str(result.get("reason") or "unknown"),
+        "readiness_status": str(readiness.get("status") or "not_ready"),
+        "quality_status": str(quality.get("status") or "unknown"),
+        "synthesis_status": str(synthesis.get("status") or "unknown"),
+        "decision_recorded": False,
+        "action_created": False,
+        "recommendation_generated": False,
+    }
