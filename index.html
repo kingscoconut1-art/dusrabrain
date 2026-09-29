@@ -7145,13 +7145,21 @@
 
             const response =
                 await fetch(
-                    "/api?memory_id=" +
-                    encodeURIComponent(
-                        memoryId
-                    ),
+                    "/api/memory",
                     {
-                        method:
-                            "DELETE"
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+                        body: JSON.stringify({
+                            action:
+                                "delete_memory",
+                            id:
+                                memoryId,
+                            user_id:
+                                "default_user"
+                        })
                     }
                 );
 
@@ -7371,10 +7379,10 @@
 
                     const response =
                         await fetch(
-                            "/api",
+                            "/api/memory",
                             {
                                 method:
-                                    "PUT",
+                                    "POST",
 
                                 headers: {
                                     "Content-Type":
@@ -7383,6 +7391,9 @@
 
                                 body:
                                     JSON.stringify({
+
+                                        action:
+                                            "update_memory",
 
                                         id:
                                             editingMemoryId,
@@ -7399,7 +7410,10 @@
                                             "general",
 
                                         importance:
-                                            importance
+                                            importance,
+
+                                        user_id:
+                                            "default_user"
 
                                     })
 
