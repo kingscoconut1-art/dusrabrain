@@ -9845,6 +9845,23 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 7 — STEP 4N
+            # DECISION ↔ CURRENT PLAN CONFLICT DETECTION
+            # ------------------------------------------------
+
+            decision_current_plan_conflict = detect_decision_current_plan_conflicts(
+                recall_result=decision_history_recall,
+                reasoning_context=reasoning_context,
+            )
+
+            decision_current_plan_conflict_trace = (
+                build_decision_current_plan_conflict_trace(
+                    conflict_result=decision_current_plan_conflict,
+                )
+            )
+
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -10017,6 +10034,9 @@ class handler(
 
                     "decision_history_memory_evidence_trace":
                         decision_history_memory_evidence_trace,
+
+                    "decision_current_plan_conflict_trace":
+                        decision_current_plan_conflict_trace,
 
                     "session_id":
                         session_id,
@@ -11959,4 +11979,261 @@ def build_decision_history_memory_evidence_trace(bridge_result):
         "decision_history_modified": False,
         "memory_modified": False,
         "evidence_created": False,
+    }
+
+
+# ============================================================
+# PHASE 7 — STEP 4N
+# DECISION ↔ CURRENT PLAN CONFLICT DETECTION
+# ============================================================
+
+def _decision_current_plan_tokens(value):
+    """Conservative lexical tokens for deterministic plan comparison."""
+    text = str(value or "").lower()
+    return {
+        token
+        for token in re.findall(r"[a-z0-9][a-z0-9_'-]+", text)
+        if len(token) >= 4
+    }
+
+
+def _decision_current_plan_subject(decision):
+    """Return the best available historical decision subject label."""
+    item = decision if isinstance(decision, dict) else {}
+    for key in ("subject", "title", "session_title"):
+        value = str(item.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _decision_current_plan_text(decision):
+    """Build comparison text only from persisted decision fields."""
+    item = decision if isinstance(decision, dict) else {}
+    values = []
+    for key in ("decision", "selected_option", "rationale"):
+        value = item.get(key)
+        if isinstance(value, list):
+            values.extend(str(v).strip() for v in value if str(v or "").strip())
+        elif str(value or "").strip():
+            values.append(str(value).strip())
+    return " ".join(values).strip()
+
+
+def _current_plan_memory_items(reasoning_context):
+    """Extract only currently retrieved memory records for comparison."""
+    context = reasoning_context if isinstance(reasoning_context, dict) else {}
+    memories = context.get("memories", [])
+    if not isinstance(memories, list):
+        return []
+    return [item for item in memories[:30] if isinstance(item, dict)]
+
+
+def _plan_conflict_signals(decision_text, memory_text):
+    """
+    Conservative deterministic comparison.
+
+    We only report a potential conflict when the current memory has strong
+    change/reversal language AND shares meaningful terms with the historical
+    decision. Otherwise the result is consistency/insufficient evidence.
+    """
+    decision_tokens = _decision_current_plan_tokens(decision_text)
+    memory_tokens = _decision_current_plan_tokens(memory_text)
+    shared = decision_tokens.intersection(memory_tokens)
+
+    change_terms = {
+        "changed", "change", "changedto", "instead", "replaced",
+        "replace", "switch", "switched", "different", "revised",
+        "revisedto", "cancelled", "canceled", "stopped", "stop",
+        "dropped", "drop", "abandoned", "abandon", "reversed",
+        "reverse", "no", "not", "instead_of",
+    }
+    memory_lower = str(memory_text or "").lower()
+    has_change_signal = any(term in memory_lower for term in change_terms)
+
+    meaningful_shared = {token for token in shared if len(token) >= 5}
+
+    if not decision_tokens or not memory_tokens:
+        return {
+            "classification": "insufficient_evidence",
+            "shared_terms": [],
+            "change_signal": False,
+            "reason": "decision_or_current_plan_text_missing",
+        }
+
+    if has_change_signal and len(meaningful_shared) >= 2:
+        return {
+            "classification": "potential_conflict",
+            "shared_terms": sorted(meaningful_shared)[:20],
+            "change_signal": True,
+            "reason": "current_plan_contains_change_signal_with_shared_terms",
+        }
+
+    if len(meaningful_shared) >= 2:
+        return {
+            "classification": "consistent",
+            "shared_terms": sorted(meaningful_shared)[:20],
+            "change_signal": False,
+            "reason": "current_plan_shares_meaningful_terms_with_decision",
+        }
+
+    return {
+        "classification": "insufficient_evidence",
+        "shared_terms": sorted(shared)[:20],
+        "change_signal": has_change_signal,
+        "reason": "insufficient_overlap_for_deterministic_comparison",
+    }
+
+
+def detect_decision_current_plan_conflicts(
+    recall_result,
+    reasoning_context,
+):
+    """
+    Deterministically compare persisted decisions with currently retrieved
+    memories/plans. This is detection only: it never changes a decision,
+    memory, recommendation, or action.
+    """
+    recall = recall_result if isinstance(recall_result, dict) else {}
+    triggered = bool(recall.get("triggered", False))
+    decisions = recall.get("decisions", [])
+    decisions = [item for item in decisions if isinstance(item, dict)]
+
+    memories = _current_plan_memory_items(reasoning_context)
+
+    if not triggered:
+        return {
+            "built": True,
+            "detected": False,
+            "status": "not_triggered",
+            "reason": "not_a_decision_history_query",
+            "decision_count": 0,
+            "current_plan_count": 0,
+            "consistent_count": 0,
+            "potential_conflict_count": 0,
+            "insufficient_evidence_count": 0,
+            "decision_ids": [],
+            "comparisons": [],
+        }
+
+    if not decisions:
+        return {
+            "built": True,
+            "detected": False,
+            "status": "no_decisions",
+            "reason": "no_persisted_decisions_available",
+            "decision_count": 0,
+            "current_plan_count": len(memories),
+            "consistent_count": 0,
+            "potential_conflict_count": 0,
+            "insufficient_evidence_count": 0,
+            "decision_ids": [],
+            "comparisons": [],
+        }
+
+    comparisons = []
+    consistent_count = 0
+    potential_conflict_count = 0
+    insufficient_count = 0
+
+    for decision in decisions[:20]:
+        decision_id = decision.get("id")
+        decision_text = _decision_current_plan_text(decision)
+        decision_subject = _decision_current_plan_subject(decision)
+        matched = []
+
+        for memory in memories[:30]:
+            memory_text = str(memory.get("memory") or "").strip()
+            if not memory_text:
+                continue
+
+            signal = _plan_conflict_signals(decision_text, memory_text)
+            if signal["classification"] == "insufficient_evidence":
+                continue
+
+            matched.append({
+                "memory_id": memory.get("id"),
+                "subject": str(memory.get("subject") or "").strip(),
+                "classification": signal["classification"],
+                "reason": signal["reason"],
+                "shared_terms": signal["shared_terms"],
+                "change_signal": signal["change_signal"],
+            })
+
+        # Only surface comparisons that have deterministic lexical support.
+        if matched:
+            for item in matched:
+                if item["classification"] == "potential_conflict":
+                    potential_conflict_count += 1
+                elif item["classification"] == "consistent":
+                    consistent_count += 1
+            comparisons.append({
+                "decision_id": decision_id,
+                "decision_subject": decision_subject,
+                "comparisons": matched[:20],
+            })
+        else:
+            insufficient_count += 1
+            comparisons.append({
+                "decision_id": decision_id,
+                "decision_subject": decision_subject,
+                "comparisons": [],
+                "classification": "insufficient_evidence",
+            })
+
+    detected = bool(comparisons)
+    if potential_conflict_count:
+        status = "potential_conflict_detected"
+        reason = "current_plan_contains_potential_conflict_signal"
+    elif consistent_count:
+        status = "consistent"
+        reason = "current_plan_is_consistent_with_available_decision_evidence"
+    else:
+        status = "insufficient_evidence"
+        reason = "current_plan_evidence_is_insufficient_for_comparison"
+
+    return {
+        "built": True,
+        "detected": detected,
+        "status": status,
+        "reason": reason,
+        "decision_count": len(decisions[:20]),
+        "current_plan_count": len(memories[:30]),
+        "consistent_count": consistent_count,
+        "potential_conflict_count": potential_conflict_count,
+        "insufficient_evidence_count": insufficient_count,
+        "decision_ids": [
+            item.get("id") for item in decisions[:20]
+            if item.get("id") is not None
+        ],
+        "comparisons": comparisons,
+        "recommendation_generated": False,
+        "decision_modified": False,
+        "memory_modified": False,
+        "action_created": False,
+    }
+
+
+def build_decision_current_plan_conflict_trace(conflict_result):
+    """Compact public Step 4N verification trace."""
+    result = conflict_result if isinstance(conflict_result, dict) else {}
+    return {
+        "built": bool(result.get("built", False)),
+        "detected": bool(result.get("detected", False)),
+        "status": str(result.get("status") or "not_triggered"),
+        "reason": str(result.get("reason") or "unknown"),
+        "decision_count": int(result.get("decision_count", 0) or 0),
+        "current_plan_count": int(result.get("current_plan_count", 0) or 0),
+        "consistent_count": int(result.get("consistent_count", 0) or 0),
+        "potential_conflict_count": int(result.get("potential_conflict_count", 0) or 0),
+        "insufficient_evidence_count": int(result.get("insufficient_evidence_count", 0) or 0),
+        "decision_ids": [
+            item for item in result.get("decision_ids", [])
+            if item is not None
+        ][:20],
+        "recommendation_generated": False,
+        "decision_modified": False,
+        "memory_modified": False,
+        "action_created": False,
+        "read_only": True,
     }
