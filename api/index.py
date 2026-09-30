@@ -7454,6 +7454,580 @@ def build_memory_evidence_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8K — PLAN CONSISTENCY & TENSION INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Compare the reconstructed current plan against stored decisions,
+#   plan evolution, unresolved items, and conservative conflict signals.
+#
+# Classifications:
+#   - consistent
+#   - evolved_consistently
+#   - potential_tension
+#   - explicit_conflict
+#   - insufficient_evidence
+#
+# Boundaries:
+#   - READ-ONLY
+#   - no memory mutation
+#   - no recommendation
+#   - no decision for the user
+#   - no automatic conflict declaration from mere wording differences
+#   - chronology is preserved before conflict is considered
+# ============================================================
+
+
+def is_plan_consistency_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    terms = (
+        "is my current plan consistent",
+        "is my plan consistent",
+        "does my current plan conflict",
+        "does my plan conflict",
+        "is my current plan in conflict",
+        "is my plan in conflict",
+        "any conflict with my previous decisions",
+        "conflict with previous decisions",
+        "consistent with my previous decisions",
+        "consistent with my earlier decisions",
+        "does my current plan align",
+        "does my plan align with",
+        "does my current plan match",
+        "does my plan match my previous",
+        "are my current plans consistent",
+        "any contradiction in my plan",
+        "does my current plan contradict",
+        "is there a contradiction",
+        "plan consistency",
+        "plan conflict",
+        "plan contradiction",
+        "any tension in my plan",
+        "tension between my current plan",
+    )
+
+    return any(
+        term in text
+        for term in terms
+    )
+
+
+def _plan_consistency_text(value):
+    if isinstance(value, dict):
+        return str(
+            value.get("memory")
+            or value.get("state")
+            or value.get("current_plan")
+            or value.get("statement")
+            or ""
+        ).strip()
+    return str(value or "").strip()
+
+
+def _plan_consistency_overlap(left, right):
+    try:
+        left_tokens = set(
+            _planning_tokens(left)
+        )
+        right_tokens = set(
+            _planning_tokens(right)
+        )
+    except Exception:
+        return 0.0
+
+    if not left_tokens or not right_tokens:
+        return 0.0
+
+    return round(
+        len(left_tokens.intersection(right_tokens))
+        / max(
+            1,
+            len(left_tokens.union(right_tokens))
+        ),
+        4,
+    )
+
+
+def _plan_consistency_decision_alignment(
+    current_plan,
+    decisions,
+):
+    matches = []
+
+    for decision in decisions or []:
+        decision_text = _plan_consistency_text(
+            decision
+        )
+
+        overlap = _plan_consistency_overlap(
+            current_plan,
+            decision_text,
+        )
+
+        if overlap >= 0.12:
+            matches.append({
+                "decision": decision_text,
+                "overlap": overlap,
+                "aligned": True,
+            })
+
+    return matches[:15]
+
+
+def analyze_plan_consistency(
+    user_id,
+    message,
+    memories=None,
+    plan_context=None,
+    plan_state_context=None,
+    conflict_context=None,
+):
+    """
+    Determine whether the current reconstructed plan is consistent with
+    stored decisions and plan history.
+
+    This is an evidence classification, not an objective truth judgment.
+    """
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=100,
+        )
+
+    memories = list(memories or [])
+
+    plan_analysis = {}
+    if isinstance(plan_context, dict):
+        plan_analysis = (
+            plan_context.get("analysis")
+            if isinstance(
+                plan_context.get("analysis"),
+                dict,
+            )
+            else {}
+        )
+
+    state_analysis = {}
+    if isinstance(plan_state_context, dict):
+        state_analysis = (
+            plan_state_context.get("analysis")
+            if isinstance(
+                plan_state_context.get("analysis"),
+                dict,
+            )
+            else {}
+        )
+
+    conflict_analysis = {}
+    if isinstance(conflict_context, dict):
+        conflict_analysis = (
+            conflict_context.get("analysis")
+            if isinstance(
+                conflict_context.get("analysis"),
+                dict,
+            )
+            else {}
+        )
+
+    current_plan = _plan_consistency_text(
+        plan_analysis.get("current_plan")
+    )
+
+    decisions = list(
+        plan_analysis.get("related_decisions")
+        or []
+    )
+
+    decision_alignment = (
+        _plan_consistency_decision_alignment(
+            current_plan,
+            decisions,
+        )
+    )
+
+    transitions = list(
+        state_analysis.get("transitions")
+        or []
+    )
+
+    evolution_supported = bool(
+        state_analysis.get(
+            "evolution_supported"
+        )
+    )
+
+    potential_conflicts = list(
+        conflict_analysis.get(
+            "potential_conflicts"
+        )
+        or []
+    )
+
+    explicit_conflicts = []
+    evolution_conflicts = []
+
+    for item in potential_conflicts:
+        assessment = item.get(
+            "assessment"
+        ) or {}
+
+        if assessment.get(
+            "evolution_candidate"
+        ):
+            evolution_conflicts.append(
+                item
+            )
+        else:
+            explicit_conflicts.append(
+                item
+            )
+
+    unresolved_items = list(
+        plan_analysis.get(
+            "open_items"
+        )
+        or []
+    )
+
+    # A current plan that has supporting decisions and no explicit opposing
+    # evidence is consistent with stored context.
+    #
+    # A historical transition is not a contradiction. If a transition is
+    # supported chronologically, classify it as evolution.
+    #
+    # Open questions can create tension without becoming a conflict.
+    if explicit_conflicts:
+        classification = "explicit_conflict"
+    elif (
+        evolution_supported
+        and transitions
+        and (
+            decision_alignment
+            or current_plan
+        )
+    ):
+        classification = "evolved_consistently"
+    elif (
+        unresolved_items
+        or evolution_conflicts
+    ):
+        classification = "potential_tension"
+    elif (
+        current_plan
+        and decision_alignment
+    ):
+        classification = "consistent"
+    elif current_plan or memories:
+        classification = "insufficient_evidence"
+    else:
+        classification = "insufficient_evidence"
+
+    support_basis = []
+
+    if current_plan:
+        support_basis.append(
+            "current plan reconstructed from stored memories"
+        )
+
+    if decision_alignment:
+        support_basis.append(
+            "related stored decisions align with the current plan"
+        )
+
+    if evolution_supported:
+        support_basis.append(
+            "chronological plan evolution is supported"
+        )
+
+    if unresolved_items:
+        support_basis.append(
+            "open or unresolved items remain"
+        )
+
+    if explicit_conflicts:
+        support_basis.append(
+            "stored evidence contains an unresolved opposing statement"
+        )
+
+    if not support_basis:
+        support_basis.append(
+            "insufficient stored evidence for a consistency assessment"
+        )
+
+    return {
+        "plan_consistency_intelligence": True,
+        "classification": classification,
+        "current_plan": current_plan,
+        "decision_alignment": decision_alignment,
+        "evolution_supported": evolution_supported,
+        "transition_count": len(transitions),
+        "unresolved_items": unresolved_items[:20],
+        "potential_tension_count": len(
+            evolution_conflicts
+        ),
+        "potential_tensions": evolution_conflicts[:20],
+        "explicit_conflict_count": len(
+            explicit_conflicts
+        ),
+        "explicit_conflicts": explicit_conflicts[:20],
+        "support_basis": support_basis,
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_plan_consistency_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "classification": "insufficient_evidence",
+            "read_only": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get(
+                "plan_consistency_intelligence"
+            )
+        ),
+        "classification": str(
+            result.get(
+                "classification",
+                "insufficient_evidence",
+            )
+        ),
+        "decision_alignment_count": len(
+            result.get(
+                "decision_alignment"
+            )
+            or []
+        ),
+        "transition_count": int(
+            result.get(
+                "transition_count",
+                0,
+            )
+            or 0
+        ),
+        "potential_tension_count": int(
+            result.get(
+                "potential_tension_count",
+                0,
+            )
+            or 0
+        ),
+        "explicit_conflict_count": int(
+            result.get(
+                "explicit_conflict_count",
+                0,
+            )
+            or 0
+        ),
+        "unresolved_count": len(
+            result.get(
+                "unresolved_items"
+            )
+            or []
+        ),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_plan_consistency_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    conflict_context=None,
+):
+    if not is_plan_consistency_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_plan_consistency(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            plan_state_context=plan_state_context,
+            conflict_context=conflict_context,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
+
+def build_plan_consistency_prompt_context(
+    consistency_context,
+):
+    if not isinstance(
+        consistency_context,
+        dict,
+    ):
+        return "detected=false"
+
+    if not consistency_context.get(
+        "detected"
+    ):
+        return "detected=false"
+
+    result = (
+        consistency_context.get(
+            "analysis"
+        )
+        or {}
+    )
+
+    lines = [
+        "detected=true",
+        "classification="
+        + str(
+            result.get(
+                "classification",
+                "insufficient_evidence",
+            )
+        ),
+        "read_only=true",
+        "prescriptive=false",
+        "truth_not_established=true",
+        "CURRENT_PLAN="
+        + str(
+            result.get(
+                "current_plan",
+                "",
+            )
+            or ""
+        ),
+        "EVOLUTION_SUPPORTED="
+        + str(
+            bool(
+                result.get(
+                    "evolution_supported"
+                )
+            )
+        ),
+        "TRANSITION_COUNT="
+        + str(
+            result.get(
+                "transition_count",
+                0,
+            )
+        ),
+        "DECISION_ALIGNMENT_COUNT="
+        + str(
+            len(
+                result.get(
+                    "decision_alignment"
+                )
+                or []
+            )
+        ),
+        "POTENTIAL_TENSION_COUNT="
+        + str(
+            result.get(
+                "potential_tension_count",
+                0,
+            )
+        ),
+        "EXPLICIT_CONFLICT_COUNT="
+        + str(
+            result.get(
+                "explicit_conflict_count",
+                0,
+            )
+        ),
+    ]
+
+    basis = (
+        result.get(
+            "support_basis"
+        )
+        or []
+    )
+
+    if basis:
+        lines.append(
+            "SUPPORT_BASIS="
+            + " | ".join(
+                str(value)
+                for value in basis[:10]
+            )
+        )
+
+    alignments = (
+        result.get(
+            "decision_alignment"
+        )
+        or []
+    )
+
+    for index, item in enumerate(
+        alignments[:10],
+        start=1,
+    ):
+        lines.append(
+            "ALIGNED_DECISION_"
+            + str(index)
+            + "="
+            + str(
+                item.get(
+                    "decision",
+                    "",
+                )
+                or ""
+            )
+            + " [overlap="
+            + str(
+                item.get(
+                    "overlap",
+                    0,
+                )
+            )
+            + "]"
+        )
+
+    unresolved = (
+        result.get(
+            "unresolved_items"
+        )
+        or []
+    )
+
+    if unresolved:
+        lines.append(
+            "UNRESOLVED_ITEMS="
+            + " | ".join(
+                str(value)
+                for value in unresolved[:20]
+            )
+        )
+
+    return "\n".join(lines)
+
+
+
+
 # ============================================================
 # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
 # ============================================================
@@ -13758,6 +14332,7 @@ def generate_grounded_answer(
     confidence_context=None,
     plan_context=None,
     plan_state_context=None,
+    plan_consistency_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -13874,6 +14449,22 @@ that the claim is objectively true. Do not call a claim verified or true
 merely because its support score is high. If truth_not_established=true,
 preserve that limitation in the answer. Do not invent supporting evidence
 that is absent from the analysis.
+
+PLAN CONSISTENCY / TENSION CONTEXT:
+{build_plan_consistency_prompt_context(plan_consistency_context)}
+
+PLAN CONSISTENCY HANDLING:
+
+If PLAN CONSISTENCY / TENSION CONTEXT is marked detected=true,
+classify the current plan only according to the supplied deterministic
+evidence. Distinguish consistent, evolved_consistently, potential_tension,
+explicit_conflict, and insufficient_evidence. Do not call historical
+evolution a contradiction merely because an earlier state differs from a
+later state. If there is an explicit conflict, identify the stored
+opposing evidence without choosing which personal decision is "right".
+If there is only an unresolved item, describe it as unresolved or a
+potential tension, not as a contradiction. Never turn this analysis into
+a recommendation unless the user explicitly asks for one.
 
 PLAN EVOLUTION / STATE TRACKING CONTEXT:
 {build_plan_state_prompt_context(plan_state_context)}
@@ -15108,6 +15699,48 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8K — PLAN CONSISTENCY & TENSION INTELLIGENCE
+        # ----------------------------------------------------
+
+        if params.get(
+            "plan_consistency"
+        ) == ["true"]:
+
+            try:
+                result = analyze_plan_consistency(
+                    user_id=user_id,
+                    message=params.get(
+                        "message",
+                        [""]
+                    )[0],
+                    limit=params.get(
+                        "limit",
+                        ["100"]
+                    )[0],
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "plan_consistency_trace":
+                            build_plan_consistency_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
         # ----------------------------------------------------
 
@@ -15969,6 +16602,8 @@ class handler(
                     True,
                 "plan_evolution_state_tracking":
                     True,
+                "plan_consistency_tension_intelligence":
+                    True,
             }
         )
 
@@ -16026,6 +16661,50 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8K — PLAN CONSISTENCY & TENSION INTELLIGENCE
+            # ------------------------------------------------
+
+            if action == "analyze_plan_consistency":
+
+                result = analyze_plan_consistency(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            ""
+                        )
+                    ),
+                    memories=body.get(
+                        "memories"
+                    ),
+                    plan_context=body.get(
+                        "plan_context"
+                    ),
+                    plan_state_context=body.get(
+                        "plan_state_context"
+                    ),
+                    conflict_context=body.get(
+                        "conflict_context"
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "plan_consistency_trace":
+                            build_plan_consistency_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
@@ -16848,6 +17527,21 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8K
+            # NATURAL LANGUAGE PLAN CONSISTENCY CONTEXT
+            # ------------------------------------------------
+
+            memory_plan_consistency_context = build_plan_consistency_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+                plan_context=memory_plan_context,
+                plan_state_context=memory_plan_state_context,
+                conflict_context=memory_conflict_context,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -16867,6 +17561,7 @@ class handler(
                 confidence_context=memory_confidence_context,
                 plan_context=memory_plan_context,
                 plan_state_context=memory_plan_state_context,
+                plan_consistency_context=memory_plan_consistency_context,
             )
 
             response = grounded_result.get(
