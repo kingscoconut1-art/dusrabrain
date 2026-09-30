@@ -7449,6 +7449,466 @@ def build_memory_evidence_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8H — MEMORY CONFIDENCE & UNCERTAINTY INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Convert available memory signals into a transparent confidence state.
+#
+# Important boundary:
+#   Confidence in stored-context support is NOT objective truth.
+#
+# Signals:
+#   - evidence support strength
+#   - conflict signals
+#   - freshness
+#   - retrieval relevance
+#   - specificity / explicitness
+#
+# READ-ONLY: no mutation, deletion, consolidation, or winner selection.
+# ============================================================
+
+def _confidence_freshness_score(memory):
+    try:
+        created_at = memory.get("created_at")
+        if not created_at:
+            return 0.50
+
+        from datetime import datetime, timezone
+
+        if isinstance(created_at, datetime):
+            dt = created_at
+        else:
+            dt = datetime.fromisoformat(
+                str(created_at).replace("Z", "+00:00")
+            )
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        age_days = max(
+            0.0,
+            (
+                datetime.now(timezone.utc) - dt
+            ).total_seconds() / 86400.0,
+        )
+
+        return round(
+            max(
+                0.20,
+                min(
+                    1.0,
+                    1.0 / (
+                        1.0 + age_days / 365.0
+                    ),
+                ),
+            ),
+            4,
+        )
+    except Exception:
+        return 0.50
+
+
+def _confidence_relevance_score(memory):
+    semantic = max(
+        0.0,
+        min(
+            1.0,
+            float(memory.get("semantic_score") or 0.0),
+        ),
+    )
+    lexical = max(
+        0.0,
+        min(
+            1.0,
+            float(memory.get("bm25_score") or 0.0),
+        ),
+    )
+    recall = max(
+        0.0,
+        min(
+            1.0,
+            float(memory.get("recall_score") or 0.0) / 100.0,
+        ),
+    )
+    return round(max(semantic, lexical, recall), 4)
+
+
+def _confidence_specificity_score(memory):
+    value = str(memory.get("memory") or "").strip()
+    if not value:
+        return 0.0
+
+    tokens = _evidence_strength_tokens(value)
+    length_signal = min(1.0, len(tokens) / 25.0)
+    subject_signal = (
+        1.0
+        if str(memory.get("subject") or "").strip()
+        not in ("", "general")
+        else 0.50
+    )
+
+    return round(
+        length_signal * 0.60
+        + subject_signal * 0.40,
+        4,
+    )
+
+
+def _confidence_conflict_signal(memory_id, conflict_result):
+    if not isinstance(conflict_result, dict):
+        return 0.0
+
+    signal = 0.0
+
+    for item in conflict_result.get("potential_conflicts") or []:
+        ids = item.get("memory_ids") or []
+        normalized = {
+            int(value or 0)
+            for value in ids
+        }
+
+        if int(memory_id or 0) in normalized:
+            classification = str(
+                item.get("classification") or ""
+            ).lower()
+
+            signal = max(
+                signal,
+                1.0 if "conflict" in classification else 0.40,
+            )
+
+    return signal
+
+
+def _confidence_status(score):
+    value = float(score or 0.0)
+
+    if value >= 0.80:
+        return "high_confidence"
+    if value >= 0.60:
+        return "moderate_confidence"
+    if value >= 0.40:
+        return "low_confidence"
+    return "uncertain"
+
+
+def _confidence_uncertainty_reasons(
+    evidence_score,
+    conflict_signal,
+    freshness_score,
+    relevance_score,
+    specificity_score,
+    supporting_count,
+):
+    reasons = []
+
+    if evidence_score < 0.60:
+        reasons.append(
+            "stored evidence provides less than strong support"
+        )
+
+    if conflict_signal >= 0.50:
+        reasons.append(
+            "related memories contain a conflict or unresolved change signal"
+        )
+
+    if freshness_score < 0.45:
+        reasons.append(
+            "supporting memory context is relatively old"
+        )
+
+    if relevance_score < 0.45:
+        reasons.append(
+            "retrieval relevance is limited"
+        )
+
+    if specificity_score < 0.45:
+        reasons.append(
+            "stored statements are not highly specific"
+        )
+
+    if supporting_count <= 1:
+        reasons.append(
+            "only one meaningful supporting memory was found"
+        )
+
+    if not reasons:
+        reasons.append(
+            "available stored context is internally consistent and reasonably supportive"
+        )
+
+    return reasons
+
+
+def analyze_memory_confidence(
+    user_id,
+    claim,
+    subject="",
+    memories=None,
+    limit=80,
+):
+    """
+    Produce a transparent confidence/uncertainty assessment from stored
+    context. This is not a truth detector.
+    """
+    claim = str(claim or "").strip()
+    subject = str(subject or "").strip()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 80
+
+    limit = max(1, min(300, limit))
+
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=claim,
+            session_id="default",
+            limit=limit,
+        )
+
+    candidates = list(memories or [])[:limit]
+
+    try:
+        evidence_result = analyze_memory_evidence_strength(
+            user_id=user_id,
+            claim=claim,
+            subject=subject,
+            memories=candidates,
+            limit=limit,
+        )
+    except Exception:
+        evidence_result = {
+            "overall_support_score": 0.0,
+            "supporting_memory_count": 0,
+            "supporting_memories": [],
+            "truth_not_established": True,
+        }
+
+    try:
+        conflict_result = analyze_memory_conflicts(
+            user_id=user_id,
+            subject=subject,
+            limit=min(120, max(20, limit)),
+        )
+    except Exception:
+        conflict_result = None
+
+    supporting = (
+        evidence_result.get("supporting_memories") or []
+    )
+    if not supporting:
+        supporting = candidates[:10]
+
+    per_memory = []
+
+    for item in supporting[:30]:
+        memory_id = int(
+            item.get("memory_id", item.get("id", 0)) or 0
+        )
+
+        freshness = _confidence_freshness_score(item)
+        relevance = _confidence_relevance_score(item)
+        explicitness = _evidence_strength_explicitness(
+            item.get("memory", "")
+        )
+        specificity = _confidence_specificity_score(item)
+        conflict_signal = _confidence_conflict_signal(
+            memory_id,
+            conflict_result,
+        )
+
+        support_score = float(
+            item.get("support_score") or 0.0
+        )
+
+        memory_confidence = round(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    support_score * 0.35
+                    + freshness * 0.15
+                    + relevance * 0.20
+                    + explicitness * 0.10
+                    + specificity * 0.10
+                    + (1.0 - conflict_signal) * 0.10,
+                ),
+            ),
+            4,
+        )
+
+        per_memory.append({
+            "memory_id": memory_id,
+            "memory": str(item.get("memory") or ""),
+            "confidence_score": memory_confidence,
+            "confidence_status": _confidence_status(
+                memory_confidence
+            ),
+            "signals": {
+                "evidence_support": round(support_score, 4),
+                "freshness": freshness,
+                "relevance": relevance,
+                "explicitness": explicitness,
+                "specificity": specificity,
+                "conflict_signal": conflict_signal,
+            },
+        })
+
+    memory_average = (
+        sum(
+            float(item.get("confidence_score") or 0.0)
+            for item in per_memory
+        ) / len(per_memory)
+        if per_memory
+        else 0.0
+    )
+
+    evidence_score = float(
+        evidence_result.get("overall_support_score") or 0.0
+    )
+
+    conflict_signal = max(
+        (
+            float(
+                item.get("signals", {}).get(
+                    "conflict_signal", 0.0
+                )
+            )
+            for item in per_memory
+        ),
+        default=0.0,
+    )
+
+    freshness_average = (
+        sum(
+            float(
+                item.get("signals", {}).get(
+                    "freshness", 0.0
+                )
+            )
+            for item in per_memory
+        ) / len(per_memory)
+        if per_memory
+        else 0.0
+    )
+
+    relevance_average = (
+        sum(
+            float(
+                item.get("signals", {}).get(
+                    "relevance", 0.0
+                )
+            )
+            for item in per_memory
+        ) / len(per_memory)
+        if per_memory
+        else 0.0
+    )
+
+    specificity_average = (
+        sum(
+            float(
+                item.get("signals", {}).get(
+                    "specificity", 0.0
+                )
+            )
+            for item in per_memory
+        ) / len(per_memory)
+        if per_memory
+        else 0.0
+    )
+
+    overall = round(
+        max(
+            0.0,
+            min(
+                1.0,
+                evidence_score * 0.45
+                + memory_average * 0.25
+                + freshness_average * 0.10
+                + relevance_average * 0.10
+                + specificity_average * 0.10
+                - conflict_signal * 0.15,
+            ),
+        ),
+        4,
+    )
+
+    reasons = _confidence_uncertainty_reasons(
+        evidence_score=evidence_score,
+        conflict_signal=conflict_signal,
+        freshness_score=freshness_average,
+        relevance_score=relevance_average,
+        specificity_score=specificity_average,
+        supporting_count=len(supporting),
+    )
+
+    return {
+        "memory_confidence_intelligence": True,
+        "read_only": True,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+        "claim": claim,
+        "subject": subject,
+        "overall_confidence_score": overall,
+        "overall_confidence_status": _confidence_status(overall),
+        "uncertainty_reasons": reasons,
+        "candidate_count": len(candidates),
+        "supporting_memory_count": len(supporting),
+        "evidence_support_score": round(evidence_score, 4),
+        "conflict_signal": round(conflict_signal, 4),
+        "freshness_average": round(freshness_average, 4),
+        "relevance_average": round(relevance_average, 4),
+        "specificity_average": round(specificity_average, 4),
+        "supporting_memories": per_memory[:30],
+    }
+
+
+def build_memory_confidence_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "overall_confidence_score": 0.0,
+            "overall_confidence_status": "uncertain",
+            "truth_not_established": True,
+            "read_only": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get(
+                "memory_confidence_intelligence",
+                False
+            )
+        ),
+        "overall_confidence_score": float(
+            result.get("overall_confidence_score") or 0.0
+        ),
+        "overall_confidence_status": str(
+            result.get(
+                "overall_confidence_status",
+                "uncertain"
+            )
+        ),
+        "uncertainty_reasons": (
+            result.get("uncertainty_reasons") or []
+        ),
+        "supporting_memory_count": int(
+            result.get("supporting_memory_count") or 0
+        ),
+        "truth_not_established": True,
+        "read_only": True,
+        "automatic_mutation": False,
+    }
+
+
+
 # ============================================================
 # PHASE 8G — MEMORY EVIDENCE STRENGTH INTELLIGENCE
 # ============================================================
@@ -12418,6 +12878,37 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8H — MEMORY CONFIDENCE & UNCERTAINTY
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_confidence"
+        ) == ["true"]:
+
+            try:
+                result = analyze_memory_confidence(
+                    user_id=user_id,
+                    claim=params.get("claim", [""])[0],
+                    subject=params.get("subject", [""])[0],
+                    limit=params.get("limit", ["80"])[0],
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200,
+                )
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8G — MEMORY EVIDENCE STRENGTH
         # ----------------------------------------------------
 
@@ -13154,6 +13645,8 @@ class handler(
 
                 "memory_evidence_natural_language_integration":
                     True,
+                "memory_confidence_uncertainty_intelligence":
+                    True,
             }
         )
 
@@ -13211,6 +13704,35 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8H — MEMORY CONFIDENCE & UNCERTAINTY
+            # ------------------------------------------------
+
+            if action == "analyze_memory_confidence":
+
+                result = analyze_memory_confidence(
+                    user_id=user_id,
+                    claim=body.get("claim", ""),
+                    subject=body.get("subject", ""),
+                    memories=body.get("memories"),
+                    limit=body.get("limit", 80),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "confidence_trace":
+                            build_memory_confidence_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8G — MEMORY EVIDENCE STRENGTH
