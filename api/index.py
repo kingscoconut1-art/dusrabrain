@@ -8072,9 +8072,49 @@ def is_decision_readiness_question(message):
         "decision ready",
         "ready to decide",
         "ready to make this decision",
+        "ready to make the investment decision",
+        "ready for the investment decision",
+        "am i ready to make the investment decision",
+        "am i ready for the investment decision",
     )
 
-    return any(term in text for term in terms)
+    if any(term in text for term in terms):
+        return True
+
+    # Natural-language variants can contain the subject between
+    # "ready to make" and "decision", for example:
+    # "Am I ready to make the Evolve India investment decision based
+    # on my stored information?"
+    has_readiness = (
+        "am i ready" in text
+        or "how ready" in text
+        or "sufficiently ready" in text
+    )
+    has_decision = "decision" in text or "decide" in text
+    has_stored_basis = any(
+        phrase in text
+        for phrase in (
+            "stored information",
+            "stored data",
+            "stored memories",
+            "available information",
+            "available evidence",
+        )
+    )
+
+    if has_readiness and has_decision and has_stored_basis:
+        return True
+
+    # Investment-readiness questions are also direct decision-readiness
+    # questions even when they do not explicitly say "stored information".
+    if (
+        has_readiness
+        and "investment" in text
+        and has_decision
+    ):
+        return True
+
+    return False
 
 
 def _decision_readiness_analysis_dict(value):
