@@ -8479,6 +8479,201 @@ def validate_grounded_answer_trace(
     }
 
 
+
+# ============================================================
+# PHASE 8D.1 — NATURAL LANGUAGE MEMORY EVOLUTION INTEGRATION
+# ============================================================
+# Detects questions asking how a stored plan/project/position changed over
+# time and supplies the existing Phase 8D evolution evidence to the normal
+# grounded-answer pipeline. This is read-only and does not change memories.
+# ============================================================
+
+def is_memory_evolution_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    evolution_terms = (
+        "changed over time",
+        "change over time",
+        "changed since",
+        "how has my",
+        "how did my",
+        "how have my",
+        "evolved",
+        "evolution",
+        "earlier position",
+        "earlier plan",
+        "previous position",
+        "previous plan",
+        "what changed",
+        "how has the plan changed",
+        "how did the plan change",
+        "what was my earlier",
+        "what was my previous",
+    )
+
+    return any(term in text for term in evolution_terms)
+
+
+def infer_memory_evolution_subject(message, memories):
+    """Infer an exact stored subject conservatively from retrieved evidence."""
+    import re
+
+    candidates = []
+    seen = set()
+
+    for item in memories or []:
+        subject = str(item.get("subject") or "").strip()
+        if not subject or subject.lower() == "general":
+            continue
+        key = subject.lower()
+        if key not in seen:
+            seen.add(key)
+            candidates.append(subject)
+
+    if not candidates:
+        return ""
+
+    text = str(message or "").lower()
+    words = set(
+        re.findall(r"[a-z0-9]+", text)
+    )
+
+    scored = []
+    for subject in candidates:
+        subject_words = set(
+            re.findall(r"[a-z0-9]+", subject.lower())
+        )
+        overlap = len(words & subject_words)
+        exact_phrase = subject.lower() in text
+        scored.append(
+            (
+                100 if exact_phrase else 0,
+                overlap,
+                subject,
+            )
+        )
+
+    scored.sort(
+        key=lambda item: (item[0], item[1]),
+        reverse=True,
+    )
+
+    best = scored[0]
+
+    # If the user did not explicitly name a subject, only infer one when the
+    # retrieved evidence has a single clear non-general subject.
+    if best[0] > 0 or len(candidates) == 1:
+        return best[2]
+
+    return ""
+
+
+def build_memory_evolution_chat_context(
+    user_id,
+    message,
+    memories,
+):
+    """Build read-only evolution evidence for a normal chat question."""
+    if not is_memory_evolution_question(message):
+        return {
+            "detected": False,
+            "subject": "",
+            "analysis": None,
+            "timeline": [],
+            "memory_ids": [],
+        }
+
+    subject = infer_memory_evolution_subject(
+        message,
+        memories,
+    )
+
+    analysis = None
+
+    try:
+        analysis = analyze_memory_evolution(
+            user_id=user_id,
+            subject=subject,
+            limit=100,
+        )
+    except Exception:
+        analysis = None
+
+    timeline = []
+    if isinstance(analysis, dict):
+        timeline = list(
+            analysis.get("timeline") or []
+        )
+
+    # Version history may not exist for every related memory. In that case,
+    # use the already retrieved user memories as chronological evidence.
+    if not timeline:
+        related = []
+        subject_lower = subject.lower()
+
+        for item in memories or []:
+            item_subject = str(
+                item.get("subject") or ""
+            ).strip()
+
+            if subject_lower:
+                if item_subject.lower() != subject_lower:
+                    continue
+
+            related.append(item)
+
+        related.sort(
+            key=lambda item: str(
+                item.get("created_at") or ""
+            )
+        )
+
+        timeline = [
+            {
+                "id": item.get("id"),
+                "memory_id": item.get("id"),
+                "version_number": None,
+                "memory": str(item.get("memory") or ""),
+                "category": str(item.get("category") or "general"),
+                "importance": int(item.get("importance") or 5),
+                "subject": str(item.get("subject") or "general"),
+                "memory_key": item.get("memory_key"),
+                "session_id": item.get("session_id") or "default",
+                "change_type": None,
+                "change_reason": "",
+                "is_current": True,
+                "created_at": item.get("created_at"),
+                "chat_fallback": True,
+            }
+            for item in related
+        ]
+
+    memory_ids = []
+    for item in timeline:
+        try:
+            memory_id = int(
+                item.get("memory_id")
+                or item.get("id")
+                or 0
+            )
+        except Exception:
+            memory_id = 0
+
+        if memory_id and memory_id not in memory_ids:
+            memory_ids.append(memory_id)
+
+    return {
+        "detected": True,
+        "subject": subject,
+        "analysis": analysis,
+        "timeline": timeline[:80],
+        "memory_ids": memory_ids[:80],
+    }
+
+
 def generate_grounded_answer(
     message,
     session_id,
@@ -8486,7 +8681,8 @@ def generate_grounded_answer(
     memories,
     brain_entities,
     brain_relationships,
-    history
+    history,
+    evolution_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -8556,6 +8752,20 @@ If there is not enough evidence:
   "answer": "I don't have enough stored information to answer that reliably.",
   "evidence": []
 }}
+
+EVOLUTION QUESTION HANDLING:
+
+If MEMORY EVOLUTION CONTEXT is marked detected=true, the user is asking
+about change, history, or evolution of a stored plan/position/project.
+Compare the chronological evidence conservatively. Prefer explicitly dated
+or versioned evidence when available. If only separate stored memories are
+available, describe the progression only when the evidence supports it. Do
+not invent missing intermediate steps, dates, outcomes, or causal explanations.
+For an evolution question, a useful answer may say: earlier state -> later
+state -> current state. Every claim must remain supported by supplied sources.
+
+MEMORY EVOLUTION CONTEXT:
+{evolution_context if evolution_context else "detected=false"}
 
 SUPPLIED EVIDENCE:
 
@@ -10883,6 +11093,18 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8D.1
+            # NATURAL LANGUAGE MEMORY EVOLUTION CONTEXT
+            # ------------------------------------------------
+
+            memory_evolution_context = build_memory_evolution_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -10895,6 +11117,7 @@ class handler(
                 brain_entities=brain_entities,
                 brain_relationships=brain_relationships,
                 history=history,
+                evolution_context=memory_evolution_context,
             )
 
             response = grounded_result.get(
@@ -11456,6 +11679,23 @@ class handler(
 
                     "recall_trace":
                         recall_trace,
+
+                    "memory_evolution_trace":
+                        {
+                            "detected": bool(
+                                memory_evolution_context.get("detected")
+                            ),
+                            "subject": str(
+                                memory_evolution_context.get("subject") or ""
+                            ),
+                            "timeline_count": len(
+                                memory_evolution_context.get("timeline") or []
+                            ),
+                            "memory_ids": list(
+                                memory_evolution_context.get("memory_ids") or []
+                            ),
+                            "read_only": True,
+                        },
 
                     "reasoning_context_trace":
                         reasoning_context_trace,
