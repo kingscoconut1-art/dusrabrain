@@ -7451,6 +7451,319 @@ def build_memory_evidence_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8H.2 — CONFIDENCE CALIBRATION & NOISE FILTERING
+# ============================================================
+#
+# Purpose:
+#   Calibrate confidence using qualified evidence rather than treating
+#   every retrieved memory as equally informative.
+#
+# Design principles:
+#   - Do not increase confidence merely to make the result look better.
+#   - Filter weak/background memories from the primary confidence cluster.
+#   - Prefer memories with strong support, relevance, or subject alignment.
+#   - Preserve contradictory memories as uncertainty signals.
+#   - Keep confidence separate from objective truth.
+#
+# READ-ONLY. No memory mutation, deletion, consolidation, or winner
+# selection.
+# ============================================================
+
+
+def _confidence_calibration_qualification(item):
+    """
+    Decide whether a memory belongs to the primary confidence cluster.
+
+    A memory qualifies when at least one strong evidence signal exists.
+    Weakly related retrieved memories remain visible as background/noise
+    rather than silently becoming primary support.
+    """
+    support = max(
+        0.0,
+        min(
+            1.0,
+            float(
+                item.get(
+                    "support_score",
+                    0.0
+                )
+                or 0.0
+            )
+        )
+    )
+
+    signals = item.get(
+        "signals",
+        {}
+    ) or {}
+
+    subject_alignment = max(
+        0.0,
+        min(
+            1.0,
+            float(
+                signals.get(
+                    "subject_alignment",
+                    0.0
+                )
+                or 0.0
+            )
+        )
+    )
+
+    semantic = max(
+        0.0,
+        min(
+            1.0,
+            float(
+                signals.get(
+                    "semantic_relevance",
+                    0.0
+                )
+                or 0.0
+            )
+        )
+    )
+
+    overlap = max(
+        0.0,
+        min(
+            1.0,
+            float(
+                signals.get(
+                    "text_overlap",
+                    0.0
+                )
+                or 0.0
+            )
+        )
+    )
+
+    relevance = max(
+        semantic,
+        overlap,
+    )
+
+    qualified = bool(
+        support >= 0.55
+        or (
+            subject_alignment >= 1.0
+            and relevance >= 0.40
+        )
+        or relevance >= 0.65
+    )
+
+    return {
+        "qualified": qualified,
+        "support": round(support, 4),
+        "subject_alignment": round(
+            subject_alignment,
+            4
+        ),
+        "relevance": round(
+            relevance,
+            4
+        ),
+    }
+
+
+def calibrate_confidence_evidence(
+    evidence_result,
+):
+    """
+    Separate primary evidence from weak/background retrieval noise.
+
+    The calibrated support score is calculated only from qualified
+    evidence, using a relevance/support-weighted mean. This is a
+    calibration step, not a confidence boost.
+    """
+    if not isinstance(
+        evidence_result,
+        dict
+    ):
+        return {
+            "calibration_applied": False,
+            "qualified_memories": [],
+            "background_memories": [],
+            "calibrated_support_score": 0.0,
+            "qualified_count": 0,
+            "background_count": 0,
+        }
+
+    memories = list(
+        evidence_result.get(
+            "supporting_memories"
+        )
+        or []
+    )
+
+    qualified = []
+    background = []
+
+    for item in memories:
+        decision = (
+            _confidence_calibration_qualification(
+                item
+            )
+        )
+
+        calibrated_item = dict(
+            item
+        )
+
+        calibrated_item[
+            "calibration"
+        ] = decision
+
+        if decision.get(
+            "qualified"
+        ):
+            qualified.append(
+                calibrated_item
+            )
+        else:
+            background.append(
+                calibrated_item
+            )
+
+    qualified.sort(
+        key=lambda item: (
+            float(
+                item.get(
+                    "support_score",
+                    0.0
+                )
+                or 0.0
+            ),
+            float(
+                item.get(
+                    "calibration",
+                    {}
+                ).get(
+                    "relevance",
+                    0.0
+                )
+                or 0.0
+            ),
+            int(
+                item.get(
+                    "importance",
+                    0
+                )
+                or 0
+            ),
+        ),
+        reverse=True,
+    )
+
+    weighted_sum = 0.0
+    weight_sum = 0.0
+
+    for item in qualified:
+        decision = item.get(
+            "calibration",
+            {}
+        )
+
+        support = float(
+            item.get(
+                "support_score",
+                0.0
+            )
+            or 0.0
+        )
+
+        relevance = float(
+            decision.get(
+                "relevance",
+                0.0
+            )
+            or 0.0
+        )
+
+        weight = max(
+            0.25,
+            0.60 * relevance
+            + 0.40 * support,
+        )
+
+        weighted_sum += (
+            support * weight
+        )
+        weight_sum += weight
+
+    calibrated_score = (
+        weighted_sum / weight_sum
+        if weight_sum
+        else 0.0
+    )
+
+    return {
+        "calibration_applied": True,
+        "qualified_memories": qualified[:30],
+        "background_memories": background[:30],
+        "calibrated_support_score": round(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    calibrated_score
+                )
+            ),
+            4,
+        ),
+        "qualified_count": len(
+            qualified
+        ),
+        "background_count": len(
+            background
+        ),
+        "filtered_background_memory_ids": [
+            int(
+                item.get(
+                    "memory_id",
+                    0
+                )
+                or 0
+            )
+            for item in background
+        ],
+        "calibration_rule": (
+            "qualified evidence requires strong support, "
+            "strong relevance, or strong subject alignment; "
+            "weak retrieved memories remain background context"
+        ),
+    }
+
+
+def _confidence_calibrated_reasons(
+    base_reasons,
+    qualified_count,
+    background_count,
+):
+    reasons = list(
+        base_reasons or []
+    )
+
+    if background_count > 0:
+        reasons.append(
+            str(background_count)
+            + " weaker retrieved memories were treated as background rather than primary support"
+        )
+
+    if qualified_count >= 3:
+        reasons.append(
+            str(qualified_count)
+            + " qualified memories form the primary support cluster"
+        )
+
+    return reasons
+
+
+
+
 # ============================================================
 # PHASE 8H.1 — NATURAL LANGUAGE CONFIDENCE INTEGRATION
 # ============================================================
@@ -7628,6 +7941,13 @@ def build_memory_confidence_prompt_context(
                 0.0
             )
         ),
+        "raw_evidence_support_score="
+        + str(
+            analysis.get(
+                "raw_evidence_support_score",
+                0.0
+            )
+        ),
         "supporting_memory_count="
         + str(
             int(
@@ -7639,6 +7959,45 @@ def build_memory_confidence_prompt_context(
             )
         ),
     ]
+
+    calibration = (
+        analysis.get(
+            "confidence_calibration"
+        )
+        or {}
+    )
+
+    lines.extend([
+        "confidence_calibration_applied="
+        + str(
+            bool(
+                calibration.get(
+                    "applied",
+                    False
+                )
+            )
+        ),
+        "qualified_memory_count="
+        + str(
+            int(
+                calibration.get(
+                    "qualified_count",
+                    0
+                )
+                or 0
+            )
+        ),
+        "background_memory_count="
+        + str(
+            int(
+                calibration.get(
+                    "background_count",
+                    0
+                )
+                or 0
+            )
+        ),
+    ])
 
     reasons = (
         analysis.get(
@@ -7979,11 +8338,20 @@ def analyze_memory_confidence(
     except Exception:
         conflict_result = None
 
-    supporting = (
-        evidence_result.get("supporting_memories") or []
+    calibration = calibrate_confidence_evidence(
+        evidence_result
     )
+
+    supporting = (
+        calibration.get(
+            "qualified_memories"
+        )
+        or []
+    )
+
     if not supporting:
-        supporting = candidates[:10]
+        # Preserve uncertainty when no memory passes calibration.
+        supporting = []
 
     per_memory = []
 
@@ -8049,8 +8417,18 @@ def analyze_memory_confidence(
         else 0.0
     )
 
+    raw_evidence_score = float(
+        evidence_result.get(
+            "overall_support_score"
+        ) or 0.0
+    )
+
     evidence_score = float(
-        evidence_result.get("overall_support_score") or 0.0
+        calibration.get(
+            "calibrated_support_score",
+            raw_evidence_score
+        )
+        or 0.0
     )
 
     conflict_signal = max(
@@ -8129,6 +8507,24 @@ def analyze_memory_confidence(
         supporting_count=len(supporting),
     )
 
+    reasons = _confidence_calibrated_reasons(
+        base_reasons=reasons,
+        qualified_count=int(
+            calibration.get(
+                "qualified_count",
+                0
+            )
+            or 0
+        ),
+        background_count=int(
+            calibration.get(
+                "background_count",
+                0
+            )
+            or 0
+        ),
+    )
+
     return {
         "memory_confidence_intelligence": True,
         "read_only": True,
@@ -8141,7 +8537,50 @@ def analyze_memory_confidence(
         "uncertainty_reasons": reasons,
         "candidate_count": len(candidates),
         "supporting_memory_count": len(supporting),
-        "evidence_support_score": round(evidence_score, 4),
+        "evidence_support_score": round(
+            evidence_score,
+            4
+        ),
+        "raw_evidence_support_score": round(
+            raw_evidence_score,
+            4
+        ),
+        "confidence_calibration": {
+            "applied": bool(
+                calibration.get(
+                    "calibration_applied",
+                    False
+                )
+            ),
+            "qualified_count": int(
+                calibration.get(
+                    "qualified_count",
+                    0
+                )
+                or 0
+            ),
+            "background_count": int(
+                calibration.get(
+                    "background_count",
+                    0
+                )
+                or 0
+            ),
+            "filtered_background_memory_ids": (
+                calibration.get(
+                    "filtered_background_memory_ids",
+                    []
+                )
+                or []
+            ),
+            "rule": str(
+                calibration.get(
+                    "calibration_rule",
+                    ""
+                )
+                or ""
+            ),
+        },
         "conflict_signal": round(conflict_signal, 4),
         "freshness_average": round(freshness_average, 4),
         "relevance_average": round(relevance_average, 4),
@@ -13941,6 +14380,8 @@ class handler(
                 "memory_confidence_uncertainty_intelligence":
                     True,
                 "memory_confidence_natural_language_integration":
+                    True,
+                "memory_confidence_calibration_noise_filter":
                     True,
             }
         )
