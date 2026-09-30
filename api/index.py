@@ -7186,6 +7186,269 @@ def build_memory_conflict_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8G.1 — NATURAL LANGUAGE EVIDENCE INTEGRATION
+# ============================================================
+#
+# Connect Phase 8G deterministic evidence-strength analysis to normal chat.
+#
+# Evidence strength is support from stored context, NOT proof of truth.
+# This layer is READ-ONLY.
+# ============================================================
+
+def is_memory_evidence_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    evidence_terms = (
+        "how strongly supported",
+        "how well supported",
+        "how strong is the evidence",
+        "how strong is the support",
+        "evidence strength",
+        "strength of the evidence",
+        "strength of support",
+        "how much support",
+        "how much evidence",
+        "what supports my",
+        "what evidence supports",
+        "which memories support",
+        "how reliable is the support",
+        "how well do my memories support",
+        "is my plan supported",
+        "how strongly is my",
+        "how strongly does my memory support",
+    )
+
+    return any(
+        term in text
+        for term in evidence_terms
+    )
+
+
+def build_memory_evidence_chat_context(
+    user_id,
+    message,
+    memories,
+):
+    """
+    Run deterministic 8G evidence analysis for an evidence-strength
+    question. Existing memories remain the evidence; this function
+    creates no new factual memory.
+    """
+    if not is_memory_evidence_question(message):
+        return {
+            "detected": False,
+            "subject": "",
+            "analysis": None,
+        }
+
+    subject = infer_memory_evolution_subject(
+        message,
+        memories,
+    )
+
+    try:
+        analysis = analyze_memory_evidence_strength(
+            user_id=user_id,
+            claim=message,
+            subject=subject,
+            memories=memories,
+            limit=80,
+        )
+    except Exception:
+        analysis = None
+
+    if not isinstance(analysis, dict):
+        analysis = {
+            "evidence_strength_intelligence": False,
+            "read_only": True,
+            "automatic_mutation": False,
+            "truth_not_established": True,
+            "claim": message,
+            "subject": subject,
+            "overall_support_score": 0.0,
+            "overall_support_label": "weak_support",
+            "candidate_count": 0,
+            "supporting_memory_count": 0,
+            "supporting_memories": [],
+        }
+
+    return {
+        "detected": True,
+        "subject": subject,
+        "analysis": analysis,
+    }
+
+
+def build_memory_evidence_prompt_context(
+    evidence_context,
+):
+    """
+    Convert deterministic 8G output into compact model context.
+    """
+    if not isinstance(
+        evidence_context,
+        dict
+    ):
+        return "detected=false"
+
+    if not evidence_context.get(
+        "detected"
+    ):
+        return "detected=false"
+
+    analysis = (
+        evidence_context.get(
+            "analysis"
+        )
+        or {}
+    )
+
+    lines = [
+        "detected=true",
+        "subject="
+        + str(
+            evidence_context.get(
+                "subject"
+            )
+            or ""
+        ),
+        "read_only="
+        + str(
+            bool(
+                analysis.get(
+                    "read_only",
+                    True
+                )
+            )
+        ),
+        "automatic_mutation="
+        + str(
+            bool(
+                analysis.get(
+                    "automatic_mutation",
+                    False
+                )
+            )
+        ),
+        "truth_not_established="
+        + str(
+            bool(
+                analysis.get(
+                    "truth_not_established",
+                    True
+                )
+            )
+        ),
+        "overall_support_score="
+        + str(
+            analysis.get(
+                "overall_support_score",
+                0.0
+            )
+        ),
+        "overall_support_label="
+        + str(
+            analysis.get(
+                "overall_support_label",
+                "weak_support"
+            )
+        ),
+        "supporting_memory_count="
+        + str(
+            int(
+                analysis.get(
+                    "supporting_memory_count",
+                    0
+                )
+                or 0
+            )
+        ),
+    ]
+
+    supporting = (
+        analysis.get(
+            "supporting_memories"
+        )
+        or []
+    )
+
+    if not supporting:
+        lines.append(
+            "RESULT=no_meaningful_stored_support"
+        )
+
+    for item in supporting[:20]:
+        signals = (
+            item.get(
+                "signals"
+            )
+            or {}
+        )
+
+        lines.append(
+            "EVIDENCE SUPPORT"
+            + " | memory_id="
+            + str(
+                item.get(
+                    "memory_id"
+                )
+            )
+            + " | label="
+            + str(
+                item.get(
+                    "support_label",
+                    "weak_support"
+                )
+            )
+            + " | score="
+            + str(
+                item.get(
+                    "support_score",
+                    0.0
+                )
+            )
+            + " | subject_alignment="
+            + str(
+                signals.get(
+                    "subject_alignment",
+                    0.0
+                )
+            )
+            + " | text_overlap="
+            + str(
+                signals.get(
+                    "text_overlap",
+                    0.0
+                )
+            )
+            + " | semantic_relevance="
+            + str(
+                signals.get(
+                    "semantic_relevance",
+                    0.0
+                )
+            )
+            + " | conflict_penalty="
+            + str(
+                signals.get(
+                    "conflict_penalty",
+                    0.0
+                )
+            )
+        )
+
+    return "\n".join(
+        lines
+    )
+
+
+
+
 # ============================================================
 # PHASE 8G — MEMORY EVIDENCE STRENGTH INTELLIGENCE
 # ============================================================
@@ -10843,6 +11106,7 @@ def generate_grounded_answer(
     evolution_context=None,
     quality_context=None,
     conflict_context=None,
+    evidence_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -10944,6 +11208,21 @@ earlier/later chronology. Never claim that a later memory automatically
 makes an earlier memory false. Never select a winner unless the stored
 evidence explicitly establishes a later decision. Do not invent conflict
 details that are absent from the supplied analysis.
+
+MEMORY EVIDENCE STRENGTH CONTEXT:
+{build_memory_evidence_prompt_context(evidence_context)}
+
+EVIDENCE STRENGTH QUESTION HANDLING:
+
+If MEMORY EVIDENCE STRENGTH CONTEXT is marked detected=true, answer using
+the deterministic 8G analysis. Report the supplied support label and score
+when useful, and identify the supporting memories from the supplied
+evidence. Treat "strong support", "moderate support", "limited support",
+and "weak support" as levels of support from stored context, NOT as proof
+that the claim is objectively true. Do not call a claim verified or true
+merely because its support score is high. If truth_not_established=true,
+preserve that limitation in the answer. Do not invent supporting evidence
+that is absent from the analysis.
 
 QUALITY QUESTION HANDLING:
 
@@ -12872,6 +13151,9 @@ class handler(
 
                 "memory_evidence_strength_intelligence":
                     True,
+
+                "memory_evidence_natural_language_integration":
+                    True,
             }
         )
 
@@ -13569,6 +13851,18 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8G.1
+            # NATURAL LANGUAGE MEMORY EVIDENCE CONTEXT
+            # ------------------------------------------------
+
+            memory_evidence_context = build_memory_evidence_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -13584,6 +13878,7 @@ class handler(
                 evolution_context=memory_evolution_context,
                 quality_context=memory_quality_context,
                 conflict_context=memory_conflict_context,
+                evidence_context=memory_evidence_context,
             )
 
             response = grounded_result.get(
