@@ -6956,6 +6956,487 @@ Return ONLY JSON:
 
 
 # ============================================================
+# PHASE 8D — MEMORY EVOLUTION & CURRENT-STATE INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Move from "retrieve a memory" to "understand how a memory
+#   changes over time".
+#
+# Safety model:
+#   - Read-only analysis by default.
+#   - Original memories and memory_versions are never changed.
+#   - No automatic deletion or overwriting.
+#   - AI may summarize only supplied stored evidence.
+#   - Potential conflicts are labeled as potential, never asserted
+#     as fact without explicit stored support.
+#
+# This phase uses the existing Phase 6 memory version history and
+# Phase 8C semantic/retrieval stack. It does NOT add a new database
+# dependency and does NOT require a UI change.
+# ============================================================
+
+
+def _normalize_evolution_subject(value):
+    return re.sub(
+        r"\s+",
+        " ",
+        str(value or "").strip().lower(),
+    )
+
+
+def get_memory_evolution_timeline(
+    user_id,
+    memory_id=None,
+    subject="",
+    limit=100,
+):
+    """Return stored memory/version evidence in chronological order.
+
+    This is deliberately read-only. It exposes the existing version history
+    in a form that the Phase 8D analyzer can reason over.
+    """
+    ensure_memory_versions_table()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 100
+
+    limit = max(1, min(500, limit))
+
+    subject = str(subject or "").strip()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            where = ["mv.user_id = %s"]
+            values = [user_id]
+
+            if memory_id is not None:
+                where.append("mv.memory_id = %s")
+                values.append(int(memory_id))
+
+            if subject:
+                where.append("LOWER(mv.subject) = LOWER(%s)")
+                values.append(subject)
+
+            values.append(limit)
+
+            cur.execute(
+                f"""
+                SELECT
+                    mv.id,
+                    mv.memory_id,
+                    mv.version_number,
+                    mv.memory,
+                    mv.category,
+                    mv.importance,
+                    mv.subject,
+                    mv.memory_key,
+                    mv.session_id,
+                    mv.change_type,
+                    mv.change_reason,
+                    mv.is_current,
+                    mv.created_at
+                FROM memory_versions mv
+                INNER JOIN memories m
+                    ON m.id = mv.memory_id
+                   AND m.user_id = mv.user_id
+                WHERE {" AND ".join(where)}
+                ORDER BY
+                    mv.subject,
+                    mv.memory_id,
+                    mv.version_number ASC
+                LIMIT %s
+                """,
+                tuple(values),
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": int(row[0]),
+            "memory_id": int(row[1]),
+            "version_number": int(row[2]),
+            "memory": str(row[3] or ""),
+            "category": row[4] or "general",
+            "importance": int(row[5] or 5),
+            "subject": row[6] or "general",
+            "memory_key": row[7],
+            "session_id": row[8] or "default",
+            "change_type": row[9],
+            "change_reason": row[10] or "",
+            "is_current": bool(row[11]),
+            "created_at": row[12].isoformat() if row[12] else None,
+        }
+        for row in rows
+    ]
+
+
+def _group_memory_evolution_timeline(timeline):
+    grouped = {}
+
+    for item in timeline or []:
+        key = int(item.get("memory_id") or 0)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(item)
+
+    for items in grouped.values():
+        items.sort(
+            key=lambda item: (
+                int(item.get("version_number") or 0),
+                str(item.get("created_at") or ""),
+            )
+        )
+
+    return grouped
+
+
+def _build_evolution_transition_evidence(timeline):
+    grouped = _group_memory_evolution_timeline(timeline)
+    transitions = []
+
+    for memory_id, versions in grouped.items():
+        for index in range(1, len(versions)):
+            previous = versions[index - 1]
+            current = versions[index]
+
+            transitions.append({
+                "memory_id": memory_id,
+                "from_version": int(previous.get("version_number") or 0),
+                "to_version": int(current.get("version_number") or 0),
+                "previous_memory": previous.get("memory", ""),
+                "current_memory": current.get("memory", ""),
+                "change_type": current.get("change_type", ""),
+                "change_reason": current.get("change_reason", ""),
+                "changed_at": current.get("created_at"),
+            })
+
+    return transitions
+
+
+def _safe_current_memory_evidence(timeline):
+    current = [
+        item
+        for item in timeline or []
+        if item.get("is_current")
+    ]
+
+    # Some legacy rows may not have a current marker. In that case the
+    # highest version for each memory is the safest supported current state.
+    if current:
+        return current
+
+    grouped = _group_memory_evolution_timeline(timeline)
+    fallback = []
+
+    for versions in grouped.values():
+        if versions:
+            fallback.append(versions[-1])
+
+    return fallback
+
+
+def _trim_evolution_evidence(timeline, max_items=80):
+    items = list(timeline or [])
+
+    if len(items) <= max_items:
+        return items
+
+    # Preserve the newest/current evidence first, then fill with older
+    # versions. Nothing is discarded from storage; this only limits the AI
+    # prompt size.
+    current = [item for item in items if item.get("is_current")]
+    older = [item for item in items if not item.get("is_current")]
+
+    current.sort(
+        key=lambda item: str(item.get("created_at") or ""),
+        reverse=True,
+    )
+    older.sort(
+        key=lambda item: str(item.get("created_at") or ""),
+        reverse=True,
+    )
+
+    return (current + older)[:max_items]
+
+
+def analyze_memory_evolution(
+    user_id,
+    memory_id=None,
+    subject="",
+    limit=100,
+):
+    """Analyze memory evolution using only stored version evidence.
+
+    The returned analysis is informational/proposal-only. It never writes to
+    memories, memory_versions, or any consolidation table.
+    """
+    timeline = get_memory_evolution_timeline(
+        user_id=user_id,
+        memory_id=memory_id,
+        subject=subject,
+        limit=limit,
+    )
+
+    if not timeline:
+        return {
+            "evolution_found": False,
+            "subject": subject or "",
+            "memory_id": memory_id,
+            "timeline": [],
+            "current_state": [],
+            "transitions": [],
+            "potential_conflicts": [],
+            "evolution_summary": "No stored memory version evidence was found.",
+            "analysis_basis": "stored_memory_versions_only",
+            "read_only": True,
+        }
+
+    evidence = _trim_evolution_evidence(timeline, max_items=80)
+    transitions = _build_evolution_transition_evidence(timeline)
+    current_state = _safe_current_memory_evidence(timeline)
+
+    # Deterministic transition metadata is always available, even if the AI
+    # service is unavailable. This prevents Phase 8D from becoming dependent
+    # on an external generation call.
+    deterministic = {
+        "version_count": len(timeline),
+        "memory_count": len({int(item.get("memory_id") or 0) for item in timeline}),
+        "current_memory_count": len(current_state),
+        "transition_count": len(transitions),
+        "subjects": sorted({
+            str(item.get("subject") or "general")
+            for item in timeline
+        }),
+    }
+
+    if not transitions:
+        return {
+            "evolution_found": True,
+            "subject": subject or (timeline[0].get("subject") or "general"),
+            "memory_id": memory_id,
+            "timeline": timeline,
+            "current_state": current_state,
+            "transitions": [],
+            "potential_conflicts": [],
+            "evolution_summary": "Stored memory history exists, but no version transition was recorded for the selected evidence.",
+            "deterministic": deterministic,
+            "analysis_basis": "stored_memory_versions_only",
+            "read_only": True,
+        }
+
+    source_payload = {
+        "current_state": [
+            {
+                "memory_id": int(item.get("memory_id") or 0),
+                "version_number": int(item.get("version_number") or 0),
+                "memory": str(item.get("memory") or ""),
+                "subject": str(item.get("subject") or "general"),
+                "category": str(item.get("category") or "general"),
+                "created_at": item.get("created_at"),
+            }
+            for item in current_state
+        ],
+        "transitions": transitions[:60],
+        "evidence": [
+            {
+                "memory_id": int(item.get("memory_id") or 0),
+                "version_number": int(item.get("version_number") or 0),
+                "memory": str(item.get("memory") or ""),
+                "subject": str(item.get("subject") or "general"),
+                "category": str(item.get("category") or "general"),
+                "change_type": item.get("change_type", ""),
+                "change_reason": item.get("change_reason", ""),
+                "is_current": bool(item.get("is_current")),
+                "created_at": item.get("created_at"),
+            }
+            for item in evidence
+        ],
+    }
+
+    system_prompt = """
+You are Dusra Brain's Memory Evolution Analyzer.
+
+Analyze ONLY the stored evidence supplied by the application.
+Do not use outside knowledge and do not invent facts.
+
+Your job is to distinguish:
+1. the currently supported state,
+2. how the stored memory changed over time,
+3. potential conflicts between stored statements.
+
+Rules:
+- A later version may update an earlier version; do not call that a conflict
+  merely because the wording changed.
+- A conflict is only "potential" when two stored statements appear difficult
+  to hold simultaneously and the evidence does not explicitly explain the
+  change.
+- Never delete, rewrite, or choose a winner between historical memories.
+- Never infer an outcome that is not explicitly stored.
+- Current state must be based on records marked current, or the latest
+  version supplied by the application.
+- Keep historical changes in chronological order.
+- If evidence is insufficient, say so.
+
+Return ONLY JSON:
+{
+  "evolution_summary": "...",
+  "current_state": [
+    {"memory_id": 1, "statement": "...", "evidence_version": 2}
+  ],
+  "historical_changes": [
+    {
+      "memory_id": 1,
+      "from_version": 1,
+      "to_version": 2,
+      "change": "...",
+      "supported_by": [1]
+    }
+  ],
+  "potential_conflicts": [
+    {
+      "memory_ids": [1, 2],
+      "issue": "...",
+      "evidence": [1, 2]
+    }
+  ]
+}
+"""
+
+    try:
+        raw = groq_request(
+            [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        source_payload,
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                },
+            ],
+            temperature=0.0,
+            max_completion_tokens=700,
+        )
+
+        parsed = json.loads(
+            clean_json_response(raw)
+        )
+
+        if not isinstance(parsed, dict):
+            raise ValueError("Invalid evolution analysis response")
+
+    except Exception:
+        # Safe fallback: expose deterministic evidence without pretending that
+        # an AI interpretation was completed.
+        return {
+            "evolution_found": True,
+            "subject": subject or (timeline[0].get("subject") or "general"),
+            "memory_id": memory_id,
+            "timeline": timeline,
+            "current_state": current_state,
+            "transitions": transitions,
+            "potential_conflicts": [],
+            "evolution_summary": (
+                "Memory history was found. A generated evolution summary was "
+                "not available, so only stored version evidence is returned."
+            ),
+            "deterministic": deterministic,
+            "analysis_basis": "stored_memory_versions_only",
+            "ai_analysis": False,
+            "read_only": True,
+        }
+
+    # Sanitize AI output so the API remains stable and evidence-bound.
+    allowed_memory_ids = {
+        int(item.get("memory_id") or 0)
+        for item in timeline
+    }
+
+    safe_current = []
+    for item in parsed.get("current_state", []):
+        if not isinstance(item, dict):
+            continue
+        try:
+            mid = int(item.get("memory_id"))
+        except Exception:
+            continue
+        if mid not in allowed_memory_ids:
+            continue
+        safe_current.append({
+            "memory_id": mid,
+            "statement": str(item.get("statement") or "").strip(),
+            "evidence_version": item.get("evidence_version"),
+        })
+
+    safe_changes = []
+    for item in parsed.get("historical_changes", []):
+        if not isinstance(item, dict):
+            continue
+        try:
+            mid = int(item.get("memory_id"))
+            from_version = int(item.get("from_version"))
+            to_version = int(item.get("to_version"))
+        except Exception:
+            continue
+        if mid not in allowed_memory_ids:
+            continue
+        safe_changes.append({
+            "memory_id": mid,
+            "from_version": from_version,
+            "to_version": to_version,
+            "change": str(item.get("change") or "").strip(),
+            "supported_by": item.get("supported_by", []),
+        })
+
+    safe_conflicts = []
+    for item in parsed.get("potential_conflicts", []):
+        if not isinstance(item, dict):
+            continue
+        raw_ids = item.get("memory_ids", [])
+        if not isinstance(raw_ids, list):
+            continue
+        ids = []
+        for raw_id in raw_ids:
+            try:
+                mid = int(raw_id)
+            except Exception:
+                continue
+            if mid in allowed_memory_ids and mid not in ids:
+                ids.append(mid)
+        if len(ids) < 2:
+            continue
+        safe_conflicts.append({
+            "memory_ids": ids,
+            "issue": str(item.get("issue") or "").strip(),
+            "evidence": item.get("evidence", []),
+        })
+
+    return {
+        "evolution_found": True,
+        "subject": subject or (timeline[0].get("subject") or "general"),
+        "memory_id": memory_id,
+        "timeline": timeline,
+        "current_state": safe_current or current_state,
+        "transitions": transitions,
+        "historical_changes": safe_changes,
+        "potential_conflicts": safe_conflicts,
+        "evolution_summary": str(
+            parsed.get("evolution_summary")
+            or "Stored memory evolution was analyzed."
+        ).strip(),
+        "deterministic": deterministic,
+        "analysis_basis": "stored_memory_versions_only",
+        "ai_analysis": True,
+        "read_only": True,
+    }
+
+
+# ============================================================
 # PHASE 7 — STEP 2
 # RECALL INTELLIGENCE LAYER
 # ============================================================
@@ -9259,6 +9740,45 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8D — MEMORY EVOLUTION ANALYSIS
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_evolution"
+        ) == ["true"]:
+
+            memory_id = params.get("memory_id", [""])[0]
+            subject = params.get("subject", [""])[0]
+
+            try:
+                parsed_memory_id = None
+
+                if str(memory_id or "").strip():
+                    parsed_memory_id = int(memory_id)
+
+                result = analyze_memory_evolution(
+                    user_id=user_id,
+                    memory_id=parsed_memory_id,
+                    subject=subject,
+                    limit=params.get("limit", ["100"])[0],
+                )
+
+                send_json(
+                    self,
+                    result,
+                )
+
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # ALL MEMORIES
         # ----------------------------------------------------
 
@@ -9811,6 +10331,9 @@ class handler(
 
                 "versioned_memory_updates":
                     True,
+
+                "memory_evolution_intelligence":
+                    True,
             }
         )
 
@@ -9868,6 +10391,37 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8D — MEMORY EVOLUTION ANALYSIS
+            # ------------------------------------------------
+
+            if action == "analyze_memory_evolution":
+
+                memory_id = body.get("memory_id")
+                try:
+                    memory_id = (
+                        int(memory_id)
+                        if memory_id is not None
+                        else None
+                    )
+                except Exception:
+                    memory_id = None
+
+                result = analyze_memory_evolution(
+                    user_id=user_id,
+                    memory_id=memory_id,
+                    subject=body.get("subject", ""),
+                    limit=body.get("limit", 100),
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200,
+                )
+
+                return
 
             if action == "get_decision_history":
 
