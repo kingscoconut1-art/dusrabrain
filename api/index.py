@@ -7452,6 +7452,907 @@ def build_memory_evidence_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Reconstruct an active plan from stored memories, decisions,
+#   relationships, evidence, and evolution context.
+#
+# Output:
+#   - goal / intended outcome
+#   - current plan
+#   - current stage
+#   - known objectives
+#   - dependencies
+#   - related decisions
+#   - open / unresolved items
+#   - changes over time
+#   - supporting memories
+#
+# Boundaries:
+#   - READ-ONLY
+#   - does not create tasks
+#   - does not make decisions
+#   - does not invent missing steps
+#   - does not change memories
+#   - does not claim objective truth
+# ============================================================
+
+
+def is_planning_intelligence_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    planning_terms = (
+        "current plan",
+        "my plan",
+        "what am i trying to achieve",
+        "what am i trying to do",
+        "what is the goal",
+        "what's the goal",
+        "what are my objectives",
+        "what am i working toward",
+        "what am i working on",
+        "where am i with",
+        "where do i stand with",
+        "current stage",
+        "what is the next stage",
+        "what remains",
+        "what is still open",
+        "what is unresolved",
+        "what are the dependencies",
+        "what decisions affect",
+        "how has my plan changed",
+        "how has the plan changed",
+        "what has changed in my plan",
+    )
+
+    return any(
+        term in text
+        for term in planning_terms
+    )
+
+
+def _planning_tokens(value):
+    try:
+        return set(
+            _evidence_strength_tokens(
+                str(value or "")
+            )
+        )
+    except Exception:
+        return set()
+
+
+def _planning_overlap(left, right):
+    a = _planning_tokens(left)
+    b = _planning_tokens(right)
+
+    if not a or not b:
+        return 0.0
+
+    return round(
+        len(a.intersection(b))
+        / max(
+            1,
+            len(a.union(b))
+        ),
+        4,
+    )
+
+
+def _planning_memory_role(memory):
+    text = str(
+        memory.get(
+            "memory",
+            ""
+        )
+        or ""
+    ).strip().lower()
+
+    role = "context"
+
+    if any(
+        phrase in text
+        for phrase in (
+            "has decided",
+            "decided to",
+            "decision",
+            "will launch",
+            "launch",
+        )
+    ):
+        role = "decision"
+
+    if any(
+        phrase in text
+        for phrase in (
+            "planning",
+            "plan",
+            "pilot",
+            "structure",
+            "strategy",
+        )
+    ):
+        role = "plan"
+
+    if any(
+        phrase in text
+        for phrase in (
+            "aiming to",
+            "goal",
+            "objective",
+            "validate",
+            "reduce risk",
+            "target",
+        )
+    ):
+        role = "objective"
+
+    if any(
+        phrase in text
+        for phrase in (
+            "wait",
+            "pending",
+            "whether",
+            "considering",
+            "deciding",
+            "unresolved",
+        )
+    ):
+        role = "open_item"
+
+    return role
+
+
+def _planning_stage_from_memories(memories):
+    texts = [
+        str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).lower()
+        for item in memories or []
+    ]
+
+    joined = " ".join(texts)
+
+    if any(
+        phrase in joined
+        for phrase in (
+            "pilot",
+            "three-month",
+            "90-day",
+            "90 day",
+        )
+    ):
+        return "pilot / validation"
+
+    if any(
+        phrase in joined
+        for phrase in (
+            "launch",
+            "launching",
+        )
+    ):
+        return "launch planning"
+
+    if any(
+        phrase in joined
+        for phrase in (
+            "planning",
+            "plan",
+        )
+    ):
+        return "planning"
+
+    return "not established"
+
+
+def _planning_objectives(memories):
+    objectives = []
+
+    for item in memories or []:
+        text = str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+        lower = text.lower()
+
+        if any(
+            phrase in lower
+            for phrase in (
+                "validate",
+                "reduce risk",
+                "test the market",
+                "commercial viability",
+                "goal",
+                "objective",
+            )
+        ):
+            if text not in objectives:
+                objectives.append(text)
+
+    return objectives[:10]
+
+
+def _planning_open_items(memories):
+    items = []
+
+    for item in memories or []:
+        text = str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+        lower = text.lower()
+
+        if any(
+            phrase in lower
+            for phrase in (
+                "whether",
+                "wait",
+                "considering",
+                "deciding",
+                "pending",
+                "unresolved",
+            )
+        ):
+            if text not in items:
+                items.append(text)
+
+    return items[:10]
+
+
+def _planning_dependencies(
+    memories,
+    relationships,
+):
+    dependencies = []
+
+    for relation in relationships or []:
+        if not isinstance(
+            relation,
+            dict
+        ):
+            continue
+
+        relation_text = " ".join(
+            str(
+                relation.get(
+                    key,
+                    ""
+                )
+                or ""
+            )
+            for key in (
+                "subject",
+                "predicate",
+                "object",
+                "relation",
+            )
+        ).strip()
+
+        lower = relation_text.lower()
+
+        if any(
+            phrase in lower
+            for phrase in (
+                "depends",
+                "requires",
+                "before",
+                "after",
+                "pilot",
+                "investment",
+                "validation",
+                "launch",
+            )
+        ):
+            if relation_text:
+                dependencies.append(
+                    relation_text
+                )
+
+    # Also capture explicit dependency-like memory statements.
+    for item in memories or []:
+        text = str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+        lower = text.lower()
+
+        if any(
+            phrase in lower
+            for phrase in (
+                "before",
+                "depends on",
+                "after",
+                "wait three months",
+                "before committing",
+            )
+        ):
+            if text not in dependencies:
+                dependencies.append(text)
+
+    return dependencies[:15]
+
+
+def _planning_decisions(memories):
+    decisions = []
+
+    for item in memories or []:
+        role = _planning_memory_role(
+            item
+        )
+
+        if role != "decision":
+            continue
+
+        text = str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+        if text and text not in decisions:
+            decisions.append(text)
+
+    return decisions[:10]
+
+
+def _planning_related_changes(
+    evolution_context,
+):
+    changes = []
+
+    if not isinstance(
+        evolution_context,
+        dict
+    ):
+        return changes
+
+    for key in (
+        "transitions",
+        "evolution",
+        "changes",
+        "grounded_changes",
+    ):
+        values = evolution_context.get(
+            key
+        )
+
+        if not isinstance(
+            values,
+            list
+        ):
+            continue
+
+        for item in values[:20]:
+            if isinstance(
+                item,
+                dict
+            ):
+                changes.append(
+                    item
+                )
+            elif item:
+                changes.append({
+                    "change": str(item)
+                })
+
+    return changes[:15]
+
+
+def analyze_memory_plan(
+    user_id,
+    message,
+    memories=None,
+    brain_entities=None,
+    brain_relationships=None,
+    evolution_context=None,
+    decision_context=None,
+    limit=80,
+):
+    """
+    Reconstruct a grounded plan from stored context.
+    This is descriptive, not prescriptive.
+    """
+    message = str(
+        message or ""
+    ).strip()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 80
+
+    limit = max(
+        1,
+        min(
+            300,
+            limit
+        )
+    )
+
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=limit,
+        )
+
+    memories = list(
+        memories or []
+    )[:limit]
+
+    entities = list(
+        brain_entities or []
+    )
+
+    relationships = list(
+        brain_relationships or []
+    )
+
+    # Keep only relationships with at least one term overlapping the
+    # retrieved plan context. This prevents unrelated graph data from
+    # becoming part of the reconstructed plan.
+    relevant_relationships = []
+
+    memory_text = " ".join(
+        str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        )
+        for item in memories
+    )
+
+    for relation in relationships:
+        if not isinstance(
+            relation,
+            dict
+        ):
+            continue
+
+        relation_text = " ".join(
+            str(
+                relation.get(
+                    key,
+                    ""
+                )
+                or ""
+            )
+            for key in (
+                "subject",
+                "predicate",
+                "object",
+                "relation",
+            )
+        )
+
+        if _planning_overlap(
+            message,
+            relation_text
+        ) >= 0.10 or _planning_overlap(
+            memory_text,
+            relation_text
+        ) >= 0.10:
+            relevant_relationships.append(
+                relation
+            )
+
+    roles = []
+
+    for item in memories:
+        role = _planning_memory_role(
+            item
+        )
+
+        enriched = dict(
+            item
+        )
+
+        enriched[
+            "planning_role"
+        ] = role
+
+        roles.append(
+            enriched
+        )
+
+    stage = _planning_stage_from_memories(
+        memories
+    )
+
+    objectives = _planning_objectives(
+        memories
+    )
+
+    open_items = _planning_open_items(
+        memories
+    )
+
+    dependencies = _planning_dependencies(
+        memories,
+        relevant_relationships,
+    )
+
+    decisions = _planning_decisions(
+        memories
+    )
+
+    changes = _planning_related_changes(
+        evolution_context
+    )
+
+    goal = ""
+
+    # Prefer an explicit goal/objective memory.
+    for item in roles:
+        text = str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+        lower = text.lower()
+
+        if any(
+            phrase in lower
+            for phrase in (
+                "goal",
+                "aiming to",
+                "trying to",
+                "focused on",
+                "major long-term",
+            )
+        ):
+            goal = text
+            break
+
+    if not goal and objectives:
+        goal = objectives[0]
+
+    current_plan = ""
+
+    # Prefer a current decision/plan statement over generic context.
+    for item in roles:
+        role = item.get(
+            "planning_role"
+        )
+
+        if role not in (
+            "decision",
+            "plan",
+        ):
+            continue
+
+        text = str(
+            item.get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+        if text:
+            current_plan = text
+            break
+
+    if not current_plan and memories:
+        current_plan = str(
+            memories[0].get(
+                "memory",
+                ""
+            )
+            or ""
+        ).strip()
+
+    # Confidence is intentionally descriptive. It reflects how much
+    # structured plan material was found, not objective truth.
+    structured_signal = 0.0
+
+    if goal:
+        structured_signal += 0.20
+
+    if current_plan:
+        structured_signal += 0.20
+
+    if decisions:
+        structured_signal += 0.15
+
+    if objectives:
+        structured_signal += 0.15
+
+    if dependencies:
+        structured_signal += 0.15
+
+    if open_items:
+        structured_signal += 0.10
+
+    if changes:
+        structured_signal += 0.05
+
+    plan_completeness = round(
+        min(
+            1.0,
+            structured_signal
+        ),
+        4,
+    )
+
+    return {
+        "planning_intelligence": True,
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+        "message": message,
+        "goal": goal,
+        "current_plan": current_plan,
+        "current_stage": stage,
+        "objectives": objectives,
+        "dependencies": dependencies,
+        "related_decisions": decisions,
+        "open_items": open_items,
+        "changes_over_time": changes,
+        "plan_completeness_score": plan_completeness,
+        "candidate_memory_count": len(
+            memories
+        ),
+        "supporting_memories": roles[:30],
+        "relevant_relationships": (
+            relevant_relationships[:30]
+        ),
+        "related_entity_count": len(
+            entities
+        ),
+        "decision_context_available": bool(
+            decision_context
+        ),
+    }
+
+
+def build_memory_plan_trace(result):
+    if not isinstance(
+        result,
+        dict
+    ):
+        return {
+            "detected": False,
+            "read_only": True,
+            "prescriptive": False,
+            "truth_not_established": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get(
+                "planning_intelligence",
+                False
+            )
+        ),
+        "goal": str(
+            result.get(
+                "goal",
+                ""
+            )
+            or ""
+        ),
+        "current_stage": str(
+            result.get(
+                "current_stage",
+                "not established"
+            )
+        ),
+        "plan_completeness_score": float(
+            result.get(
+                "plan_completeness_score",
+                0.0
+            )
+            or 0.0
+        ),
+        "supporting_memory_count": int(
+            result.get(
+                "candidate_memory_count",
+                0
+            )
+            or 0
+        ),
+        "open_item_count": len(
+            result.get(
+                "open_items"
+            )
+            or []
+        ),
+        "dependency_count": len(
+            result.get(
+                "dependencies"
+            )
+            or []
+        ),
+        "decision_count": len(
+            result.get(
+                "related_decisions"
+            )
+            or []
+        ),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_memory_plan_prompt_context(
+    plan_context,
+):
+    if not isinstance(
+        plan_context,
+        dict
+    ):
+        return "detected=false"
+
+    if not plan_context.get(
+        "detected"
+    ):
+        return "detected=false"
+
+    result = (
+        plan_context.get(
+            "analysis"
+        )
+        or {}
+    )
+
+    lines = [
+        "detected=true",
+        "read_only=true",
+        "prescriptive=false",
+        "truth_not_established=true",
+        "goal="
+        + str(
+            result.get(
+                "goal",
+                ""
+            )
+            or ""
+        ),
+        "current_plan="
+        + str(
+            result.get(
+                "current_plan",
+                ""
+            )
+            or ""
+        ),
+        "current_stage="
+        + str(
+            result.get(
+                "current_stage",
+                "not established"
+            )
+        ),
+        "plan_completeness_score="
+        + str(
+            result.get(
+                "plan_completeness_score",
+                0.0
+            )
+        ),
+    ]
+
+    objectives = (
+        result.get(
+            "objectives"
+        )
+        or []
+    )
+
+    if objectives:
+        lines.append(
+            "OBJECTIVES="
+            + " | ".join(
+                str(value)
+                for value in objectives[:10]
+            )
+        )
+
+    dependencies = (
+        result.get(
+            "dependencies"
+        )
+        or []
+    )
+
+    if dependencies:
+        lines.append(
+            "DEPENDENCIES="
+            + " | ".join(
+                str(value)
+                for value in dependencies[:15]
+            )
+        )
+
+    decisions = (
+        result.get(
+            "related_decisions"
+        )
+        or []
+    )
+
+    if decisions:
+        lines.append(
+            "RELATED_DECISIONS="
+            + " | ".join(
+                str(value)
+                for value in decisions[:10]
+            )
+        )
+
+    open_items = (
+        result.get(
+            "open_items"
+        )
+        or []
+    )
+
+    if open_items:
+        lines.append(
+            "OPEN_ITEMS="
+            + " | ".join(
+                str(value)
+                for value in open_items[:10]
+            )
+        )
+
+    changes = (
+        result.get(
+            "changes_over_time"
+        )
+        or []
+    )
+
+    if changes:
+        lines.append(
+            "CHANGES_OVER_TIME="
+            + " | ".join(
+                str(value)
+                for value in changes[:10]
+            )
+        )
+
+    return "\n".join(
+        lines
+    )
+
+
+
 # ============================================================
 # PHASE 8H.2 — CONFIDENCE CALIBRATION & NOISE FILTERING
 # ============================================================
@@ -7776,6 +8677,44 @@ def _confidence_calibrated_reasons(
 # READ-ONLY. No memory mutation, deletion, consolidation, or winner
 # selection.
 # ============================================================
+
+
+def build_memory_plan_chat_context(
+    user_id,
+    message,
+    memories,
+    brain_entities=None,
+    brain_relationships=None,
+    evolution_context=None,
+    decision_context=None,
+):
+    if not is_planning_intelligence_question(
+        message
+    ):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_memory_plan(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            brain_entities=brain_entities,
+            brain_relationships=brain_relationships,
+            evolution_context=evolution_context,
+            decision_context=decision_context,
+            limit=80,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
 
 def is_memory_confidence_question(message):
     text = str(message or "").strip().lower()
@@ -12287,6 +13226,7 @@ def generate_grounded_answer(
     conflict_context=None,
     evidence_context=None,
     confidence_context=None,
+    plan_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -12403,6 +13343,19 @@ that the claim is objectively true. Do not call a claim verified or true
 merely because its support score is high. If truth_not_established=true,
 preserve that limitation in the answer. Do not invent supporting evidence
 that is absent from the analysis.
+
+MEMORY-TO-PLAN / PLANNING CONTEXT:
+{build_memory_plan_prompt_context(plan_context)}
+
+PLANNING QUESTION HANDLING:
+
+If MEMORY-TO-PLAN / PLANNING CONTEXT is marked detected=true,
+answer using the supplied deterministic planning analysis. Describe the
+goal, current plan, current stage, objectives, dependencies, related
+decisions, open items, and changes only when supplied. Do not invent
+missing steps, deadlines, dependencies, or decisions. Do not turn the
+analysis into a recommendation unless the user explicitly asks for one.
+Treat the plan as a reconstruction of stored context, not objective truth.
 
 MEMORY CONFIDENCE / UNCERTAINTY CONTEXT:
 {build_memory_confidence_prompt_context(confidence_context)}
@@ -13610,6 +14563,48 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_plan"
+        ) == ["true"]:
+
+            try:
+                result = analyze_memory_plan(
+                    user_id=user_id,
+                    message=params.get(
+                        "message",
+                        [""]
+                    )[0],
+                    limit=params.get(
+                        "limit",
+                        ["80"]
+                    )[0],
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "planning_trace":
+                            build_memory_plan_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8H — MEMORY CONFIDENCE & UNCERTAINTY
         # ----------------------------------------------------
 
@@ -14383,6 +15378,8 @@ class handler(
                     True,
                 "memory_confidence_calibration_noise_filter":
                     True,
+                "memory_to_plan_planning_intelligence":
+                    True,
             }
         )
 
@@ -14440,6 +15437,57 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
+            # ------------------------------------------------
+
+            if action == "analyze_memory_plan":
+
+                result = analyze_memory_plan(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            ""
+                        )
+                    ),
+                    memories=body.get(
+                        "memories"
+                    ),
+                    brain_entities=body.get(
+                        "brain_entities"
+                    ),
+                    brain_relationships=body.get(
+                        "brain_relationships"
+                    ),
+                    evolution_context=body.get(
+                        "evolution_context"
+                    ),
+                    decision_context=body.get(
+                        "decision_context"
+                    ),
+                    limit=body.get(
+                        "limit",
+                        80
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "planning_trace":
+                            build_memory_plan_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8H — MEMORY CONFIDENCE & UNCERTAINTY
@@ -15133,6 +16181,22 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8I
+            # NATURAL LANGUAGE PLANNING CONTEXT
+            # ------------------------------------------------
+
+            memory_plan_context = build_memory_plan_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+                brain_entities=brain_entities,
+                brain_relationships=brain_relationships,
+                evolution_context=evolution_context,
+                decision_context=decision_context,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -15150,6 +16214,7 @@ class handler(
                 conflict_context=memory_conflict_context,
                 evidence_context=memory_evidence_context,
                 confidence_context=memory_confidence_context,
+                plan_context=memory_plan_context,
             )
 
             response = grounded_result.get(
