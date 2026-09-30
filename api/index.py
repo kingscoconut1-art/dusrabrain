@@ -6957,6 +6957,582 @@ Return ONLY JSON:
 
 
 
+
+# ============================================================
+# PHASE 8F — MEMORY CONFLICT & CONTRADICTION INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Detect possible conflicts between stored memories while preserving
+#   historical evolution as a first-class concept.
+#
+# Important distinction:
+#   - A later memory that updates an earlier state is NOT automatically
+#     a contradiction.
+#   - A potential conflict is flagged only when two stored statements
+#     appear difficult to hold simultaneously and the system cannot
+#     explain the difference from version history.
+#
+# This phase is READ-ONLY.
+#
+# It does NOT:
+#   - delete memories
+#   - overwrite memories
+#   - choose a "winner"
+#   - change importance
+#   - automatically consolidate memories
+#   - infer an outcome
+#
+# Detection is intentionally conservative and deterministic:
+#   1. Same/related subject
+#   2. Current or recent evidence
+#   3. Meaningful token overlap
+#   4. Opposing polarity/action markers
+#   5. Version/evolution context used to downgrade normal evolution
+#
+# AI is not required for detection. This keeps the safety boundary
+# independent of an external generation service.
+# ============================================================
+
+
+def _conflict_tokens(text):
+    return {
+        token.lower()
+        for token in re.findall(
+            r"[A-Za-z0-9_'-]+",
+            str(text or "")
+        )
+        if len(token) >= 3
+    }
+
+
+def _conflict_polarity(text):
+    value = str(text or "").lower()
+
+    negative_markers = (
+        "not",
+        "no longer",
+        "never",
+        "cancel",
+        "cancelled",
+        "canceled",
+        "stop",
+        "stopped",
+        "reject",
+        "rejected",
+        "decline",
+        "declined",
+        "do not",
+        "don't",
+        "will not",
+        "won't",
+        "avoid",
+        "drop",
+        "dropped",
+        "abandon",
+        "abandoned",
+    )
+
+    positive_markers = (
+        "decided to",
+        "will",
+        "plan to",
+        "planning to",
+        "proceed",
+        "launch",
+        "continue",
+        "approved",
+        "accept",
+        "accepted",
+        "start",
+        "started",
+        "invest",
+        "go ahead",
+    )
+
+    negative = sum(
+        1
+        for marker in negative_markers
+        if marker in value
+    )
+
+    positive = sum(
+        1
+        for marker in positive_markers
+        if marker in value
+    )
+
+    if negative and not positive:
+        return "negative"
+    if positive and not negative:
+        return "positive"
+    if negative and positive:
+        return "mixed"
+
+    return "neutral"
+
+
+def _conflict_overlap_score(left_text, right_text):
+    left = _conflict_tokens(left_text)
+    right = _conflict_tokens(right_text)
+
+    if not left or not right:
+        return 0.0
+
+    intersection = len(left & right)
+    union = len(left | right)
+
+    return round(
+        intersection / max(1, union),
+        4,
+    )
+
+
+def _conflict_subject_match(left, right):
+    left_subject = str(
+        left.get("subject") or ""
+    ).strip().lower()
+
+    right_subject = str(
+        right.get("subject") or ""
+    ).strip().lower()
+
+    if (
+        left_subject
+        and right_subject
+        and left_subject != "general"
+        and right_subject != "general"
+    ):
+        if left_subject == right_subject:
+            return True
+
+    left_text = str(
+        left.get("memory") or ""
+    ).lower()
+
+    right_text = str(
+        right.get("memory") or ""
+    ).lower()
+
+    if left_subject and left_subject != "general":
+        if left_subject in right_text:
+            return True
+
+    if right_subject and right_subject != "general":
+        if right_subject in left_text:
+            return True
+
+    return False
+
+
+def _conflict_temporal_relation(left, right):
+    left_date = str(
+        left.get("created_at") or ""
+    )
+    right_date = str(
+        right.get("created_at") or ""
+    )
+
+    if not left_date or not right_date:
+        return "unknown"
+
+    if left_date < right_date:
+        return "left_earlier"
+    if right_date < left_date:
+        return "right_earlier"
+
+    return "same_time"
+
+
+def _conflict_is_version_evolution(left, right):
+    left_id = int(
+        left.get("id") or 0
+    )
+    right_id = int(
+        right.get("id") or 0
+    )
+
+    if (
+        left_id
+        and right_id
+        and left_id == right_id
+    ):
+        return True
+
+    # Version metadata can explicitly establish evolution.
+    left_version = int(
+        left.get("version_number") or 0
+    )
+    right_version = int(
+        right.get("version_number") or 0
+    )
+
+    if (
+        left_id
+        and right_id
+        and left_id == right_id
+        and left_version != right_version
+    ):
+        return True
+
+    return False
+
+
+def _conflict_pair_reason(
+    left,
+    right,
+):
+    left_text = str(
+        left.get("memory") or ""
+    ).strip()
+
+    right_text = str(
+        right.get("memory") or ""
+    ).strip()
+
+    overlap = _conflict_overlap_score(
+        left_text,
+        right_text,
+    )
+
+    left_polarity = _conflict_polarity(
+        left_text
+    )
+    right_polarity = _conflict_polarity(
+        right_text
+    )
+
+    temporal = _conflict_temporal_relation(
+        left,
+        right,
+    )
+
+    same_subject = _conflict_subject_match(
+        left,
+        right,
+    )
+
+    evolution = _conflict_is_version_evolution(
+        left,
+        right,
+    )
+
+    if not same_subject:
+        return {
+            "potential": False,
+            "reason": "different_subject",
+            "overlap": overlap,
+            "temporal_relation": temporal,
+        }
+
+    if evolution:
+        return {
+            "potential": False,
+            "reason": "same_memory_version_evolution",
+            "overlap": overlap,
+            "temporal_relation": temporal,
+        }
+
+    if (
+        overlap < 0.18
+    ):
+        return {
+            "potential": False,
+            "reason": "insufficient_topic_overlap",
+            "overlap": overlap,
+            "temporal_relation": temporal,
+        }
+
+    opposite_polarity = (
+        {
+            left_polarity,
+            right_polarity,
+        }
+        == {
+            "positive",
+            "negative",
+        }
+    )
+
+    if not opposite_polarity:
+        return {
+            "potential": False,
+            "reason": "no_opposing_polarity",
+            "overlap": overlap,
+            "temporal_relation": temporal,
+        }
+
+    # A later state can still represent a legitimate evolution. We flag it
+    # as "potential" rather than "contradiction" and explicitly preserve
+    # chronology for downstream explanation.
+    return {
+        "potential": True,
+        "reason": "opposing_current_or_recent_statements",
+        "overlap": overlap,
+        "temporal_relation": temporal,
+        "left_polarity": left_polarity,
+        "right_polarity": right_polarity,
+        "evolution_candidate": (
+            temporal in (
+                "left_earlier",
+                "right_earlier",
+            )
+        ),
+    }
+
+
+def get_memory_conflict_candidates(
+    user_id,
+    subject="",
+    limit=120,
+):
+    """Load a bounded set of stored memories for conflict analysis."""
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 120
+
+    limit = max(
+        2,
+        min(500, limit)
+    )
+
+    subject = str(
+        subject or ""
+    ).strip()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            where = [
+                "user_id = %s"
+            ]
+            values = [user_id]
+
+            if subject:
+                where.append(
+                    "LOWER(subject) = LOWER(%s)"
+                )
+                values.append(subject)
+
+            values.append(limit)
+
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    memory,
+                    created_at,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id
+                FROM memories
+                WHERE {" AND ".join(where)}
+                ORDER BY
+                    created_at DESC,
+                    importance DESC
+                LIMIT %s
+                """,
+                tuple(values)
+            )
+
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": int(row[0]),
+            "memory": str(row[1] or ""),
+            "created_at": (
+                row[2].isoformat()
+                if row[2]
+                else None
+            ),
+            "category": row[3] or "general",
+            "importance": int(row[4] or 5),
+            "subject": row[5] or "general",
+            "memory_key": row[6],
+            "session_id": row[7] or "default",
+        }
+        for row in rows
+    ]
+
+
+def analyze_memory_conflicts(
+    user_id,
+    subject="",
+    limit=120,
+):
+    """
+    Analyze stored memories for potential conflicts.
+
+    The result is informational only. It never mutates stored memory.
+    """
+    memories = get_memory_conflict_candidates(
+        user_id=user_id,
+        subject=subject,
+        limit=limit,
+    )
+
+    potential_conflicts = []
+    checked_pairs = 0
+
+    for left_index in range(
+        len(memories)
+    ):
+        left = memories[left_index]
+
+        for right_index in range(
+            left_index + 1,
+            len(memories)
+        ):
+            right = memories[right_index]
+
+            checked_pairs += 1
+
+            assessment = _conflict_pair_reason(
+                left,
+                right,
+            )
+
+            if not assessment.get(
+                "potential"
+            ):
+                continue
+
+            temporal = assessment.get(
+                "temporal_relation"
+            )
+
+            if temporal == "left_earlier":
+                earlier = left
+                later = right
+            elif temporal == "right_earlier":
+                earlier = right
+                later = left
+            else:
+                earlier = left
+                later = right
+
+            potential_conflicts.append({
+                "memory_ids": [
+                    int(left["id"]),
+                    int(right["id"]),
+                ],
+                "earlier_memory_id": int(
+                    earlier["id"]
+                ),
+                "later_memory_id": int(
+                    later["id"]
+                ),
+                "earlier_statement": str(
+                    earlier.get("memory") or ""
+                ),
+                "later_statement": str(
+                    later.get("memory") or ""
+                ),
+                "subject": (
+                    str(
+                        left.get("subject")
+                        or right.get("subject")
+                        or "general"
+                    )
+                ),
+                "assessment": assessment,
+                "classification": (
+                    "potential_evolution_or_conflict"
+                    if assessment.get(
+                        "evolution_candidate"
+                    )
+                    else "potential_conflict"
+                ),
+                "action": (
+                    "review_chronology_before_calling_it_a_conflict"
+                ),
+                "read_only": True,
+            })
+
+    potential_conflicts.sort(
+        key=lambda item: (
+            float(
+                (
+                    item.get("assessment")
+                    or {}
+                ).get(
+                    "overlap",
+                    0.0
+                )
+            ),
+            str(
+                item.get("later_memory_id")
+                or ""
+            ),
+        ),
+        reverse=True,
+    )
+
+    return {
+        "conflict_intelligence": True,
+        "read_only": True,
+        "automatic_mutation": False,
+        "subject": subject or "",
+        "memory_count": len(memories),
+        "checked_pairs": checked_pairs,
+        "potential_conflict_count": len(
+            potential_conflicts
+        ),
+        "potential_conflicts": (
+            potential_conflicts[:50]
+        ),
+        "classification_rule": (
+            "Opposing stored statements with meaningful topic overlap "
+            "are flagged conservatively; chronological changes are "
+            "reported as potential evolution rather than automatically "
+            "declared contradictions."
+        ),
+    }
+
+
+def build_memory_conflict_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "potential_conflict_count": 0,
+            "read_only": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get(
+                "conflict_intelligence",
+                False
+            )
+        ),
+        "memory_count": int(
+            result.get(
+                "memory_count",
+                0
+            ) or 0
+        ),
+        "checked_pairs": int(
+            result.get(
+                "checked_pairs",
+                0
+            ) or 0
+        ),
+        "potential_conflict_count": int(
+            result.get(
+                "potential_conflict_count",
+                0
+            ) or 0
+        ),
+        "read_only": True,
+        "automatic_mutation": False,
+    }
+
+
+
 # ============================================================
 # PHASE 8E — MEMORY QUALITY & LIFECYCLE INTELLIGENCE
 # ============================================================
@@ -10697,6 +11273,45 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8F — MEMORY CONFLICT INTELLIGENCE
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_conflicts"
+        ) == ["true"]:
+
+            try:
+                result = analyze_memory_conflicts(
+                    user_id=user_id,
+                    subject=params.get(
+                        "subject",
+                        [""]
+                    )[0],
+                    limit=params.get(
+                        "limit",
+                        ["120"]
+                    )[0],
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200,
+                )
+
+            except Exception as error:
+                send_json(
+                    self,
+                    {
+                        "error": str(error)
+                    },
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8E — MEMORY QUALITY & LIFECYCLE
         # ----------------------------------------------------
 
@@ -11339,6 +11954,9 @@ class handler(
 
                 "memory_quality_lifecycle_intelligence":
                     True,
+
+                "memory_conflict_intelligence":
+                    True,
             }
         )
 
@@ -11396,6 +12014,39 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8F — MEMORY CONFLICT INTELLIGENCE
+            # ------------------------------------------------
+
+            if action == "analyze_memory_conflicts":
+
+                result = analyze_memory_conflicts(
+                    user_id=user_id,
+                    subject=body.get(
+                        "subject",
+                        ""
+                    ),
+                    limit=body.get(
+                        "limit",
+                        120
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "conflict_trace":
+                            build_memory_conflict_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8E — MEMORY QUALITY & LIFECYCLE
