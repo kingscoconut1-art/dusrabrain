@@ -7453,6 +7453,536 @@ def build_memory_evidence_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8J — PLAN EVOLUTION & STATE TRACKING
+# ============================================================
+#
+# Purpose:
+#   Turn the read-only 8I reconstructed plan into a chronological
+#   state model using only persisted memory/version evidence.
+#
+# Output:
+#   - initial supported state
+#   - subsequent supported transitions
+#   - current supported state
+#   - unresolved items carried forward
+#   - evidence IDs for every state/transition
+#
+# Boundaries:
+#   - READ-ONLY
+#   - no memory mutation
+#   - no task creation
+#   - no recommendations
+#   - no inferred outcomes
+#   - no "winner" between historical states
+# ============================================================
+
+
+def is_plan_state_tracking_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    terms = (
+        "how has my plan changed",
+        "how has the plan changed",
+        "what changed in my plan",
+        "what has changed in my plan",
+        "what changed over time",
+        "how did my plan change",
+        "earlier plan",
+        "previous plan",
+        "earlier position",
+        "previous position",
+        "before the pilot",
+        "before this plan",
+        "then vs now",
+        "from earlier to now",
+        "how did i get to",
+        "how did i move from",
+        "what is the evolution of my plan",
+        "show me the evolution",
+        "plan history",
+        "plan timeline",
+        "state of my plan",
+        "current state compared with",
+    )
+
+    return any(term in text for term in terms)
+
+
+def _plan_state_text(item):
+    if not isinstance(item, dict):
+        return ""
+    return str(
+        item.get("memory")
+        or item.get("statement")
+        or item.get("change")
+        or ""
+    ).strip()
+
+
+def _plan_state_id(item):
+    if not isinstance(item, dict):
+        return None
+    for key in ("memory_id", "id"):
+        try:
+            value = int(item.get(key) or 0)
+            if value:
+                return value
+        except Exception:
+            pass
+    return None
+
+
+def _plan_state_version(item):
+    if not isinstance(item, dict):
+        return None
+    try:
+        value = item.get("version_number")
+        return int(value) if value is not None else None
+    except Exception:
+        return None
+
+
+def _plan_state_sort_key(item):
+    version = _plan_state_version(item)
+    return (
+        str(item.get("created_at") or ""),
+        -1 if version is None else version,
+    )
+
+
+def _build_plan_state_sequence(timeline):
+    """Build chronological states without inventing transitions."""
+    items = [
+        dict(item)
+        for item in (timeline or [])
+        if _plan_state_text(item)
+    ]
+
+    items.sort(key=_plan_state_sort_key)
+
+    states = []
+    seen = set()
+
+    for item in items:
+        memory_id = _plan_state_id(item)
+        version = _plan_state_version(item)
+
+        key = (
+            memory_id,
+            version,
+            _plan_state_text(item),
+        )
+
+        if key in seen:
+            continue
+        seen.add(key)
+
+        states.append({
+            "memory_id": memory_id,
+            "version_number": version,
+            "state": _plan_state_text(item),
+            "subject": str(
+                item.get("subject") or "general"
+            ),
+            "created_at": item.get("created_at"),
+            "change_type": item.get("change_type"),
+            "change_reason": str(
+                item.get("change_reason") or ""
+            ),
+            "is_current": bool(
+                item.get("is_current")
+            ),
+        })
+
+    return states
+
+
+def _build_plan_state_transitions(states):
+    transitions = []
+
+    for index in range(1, len(states)):
+        previous = states[index - 1]
+        current = states[index]
+
+        # If the same memory/version repeats, it is not a transition.
+        if (
+            previous.get("memory_id")
+            == current.get("memory_id")
+            and previous.get("version_number")
+            == current.get("version_number")
+        ):
+            continue
+
+        transitions.append({
+            "from_state": previous.get("state", ""),
+            "to_state": current.get("state", ""),
+            "from_memory_id": previous.get("memory_id"),
+            "to_memory_id": current.get("memory_id"),
+            "from_version": previous.get("version_number"),
+            "to_version": current.get("version_number"),
+            "change_type": current.get("change_type"),
+            "change_reason": current.get("change_reason", ""),
+            "changed_at": current.get("created_at"),
+            "evidence_memory_ids": [
+                value
+                for value in (
+                    previous.get("memory_id"),
+                    current.get("memory_id"),
+                )
+                if value
+            ],
+        })
+
+    return transitions
+
+
+def _current_plan_state(states):
+    current = [
+        item for item in states
+        if item.get("is_current")
+    ]
+
+    if current:
+        current.sort(
+            key=lambda item: (
+                str(item.get("created_at") or ""),
+                -1 if item.get("version_number") is None
+                else item.get("version_number"),
+            ),
+            reverse=True,
+        )
+        return current[0]
+
+    if states:
+        return states[-1]
+
+    return None
+
+
+def _initial_plan_state(states):
+    if not states:
+        return None
+    return states[0]
+
+
+def analyze_plan_state_tracking(
+    user_id,
+    message,
+    memories=None,
+    plan_context=None,
+    evolution_context=None,
+    limit=100,
+):
+    """
+    Reconstruct plan evolution from persisted evidence.
+
+    The function never creates or changes state. It reports only what the
+    stored timeline supports.
+    """
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=max(80, int(limit or 100)),
+        )
+
+    memories = list(memories or [])
+
+    timeline = []
+
+    if isinstance(evolution_context, dict):
+        timeline = list(
+            evolution_context.get("timeline") or []
+        )
+
+        # If the existing evolution analyzer supplied no timeline, use its
+        # explicit transitions only as secondary evidence.
+        if not timeline:
+            timeline = list(
+                evolution_context.get("analysis", {}).get(
+                    "timeline"
+                ) or []
+            )
+
+    if not timeline:
+        # Fallback is deliberately conservative: current retrieved memories
+        # are states, but are NOT labelled as historical versions.
+        timeline = [
+            {
+                "id": item.get("id"),
+                "memory_id": item.get("id"),
+                "version_number": None,
+                "memory": str(
+                    item.get("memory") or ""
+                ),
+                "subject": str(
+                    item.get("subject") or "general"
+                ),
+                "created_at": item.get("created_at"),
+                "change_type": None,
+                "change_reason": "",
+                "is_current": True,
+            }
+            for item in memories
+            if str(item.get("memory") or "").strip()
+        ]
+
+    states = _build_plan_state_sequence(
+        timeline
+    )
+
+    transitions = _build_plan_state_transitions(
+        states
+    )
+
+    current_state = _current_plan_state(
+        states
+    )
+
+    initial_state = _initial_plan_state(
+        states
+    )
+
+    unresolved = []
+
+    if isinstance(plan_context, dict):
+        analysis = (
+            plan_context.get("analysis")
+            if isinstance(plan_context.get("analysis"), dict)
+            else {}
+        )
+        unresolved = list(
+            analysis.get("open_items") or []
+        )
+
+    # Only call something a transition when stored chronological evidence
+    # actually gives us distinct states.
+    evolution_supported = bool(
+        len(states) > 1
+        and len(transitions) > 0
+    )
+
+    return {
+        "plan_state_tracking": True,
+        "evolution_supported": evolution_supported,
+        "read_only": True,
+        "prescriptive": False,
+        "truth_not_established": True,
+        "initial_state": initial_state,
+        "current_state": current_state,
+        "states": states[:100],
+        "transitions": transitions[:100],
+        "unresolved_items": unresolved[:20],
+        "state_count": len(states),
+        "transition_count": len(transitions),
+        "evidence_basis": (
+            "stored_memory_versions_and_retrieved_memories"
+        ),
+    }
+
+
+def build_plan_state_tracking_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "read_only": True,
+            "prescriptive": False,
+        }
+
+    initial_state = result.get("initial_state") or {}
+    current_state = result.get("current_state") or {}
+
+    return {
+        "detected": bool(
+            result.get("plan_state_tracking")
+        ),
+        "evolution_supported": bool(
+            result.get("evolution_supported")
+        ),
+        "state_count": int(
+            result.get("state_count") or 0
+        ),
+        "transition_count": int(
+            result.get("transition_count") or 0
+        ),
+        "initial_memory_id": initial_state.get(
+            "memory_id"
+        ),
+        "current_memory_id": current_state.get(
+            "memory_id"
+        ),
+        "unresolved_count": len(
+            result.get("unresolved_items") or []
+        ),
+        "read_only": True,
+        "prescriptive": False,
+        "truth_not_established": True,
+    }
+
+
+def build_plan_state_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    evolution_context=None,
+):
+    if not is_plan_state_tracking_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_plan_state_tracking(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            evolution_context=evolution_context,
+            limit=100,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
+
+def build_plan_state_prompt_context(
+    state_context,
+):
+    if not isinstance(state_context, dict):
+        return "detected=false"
+
+    if not state_context.get("detected"):
+        return "detected=false"
+
+    result = state_context.get("analysis") or {}
+
+    lines = [
+        "detected=true",
+        "read_only=true",
+        "prescriptive=false",
+        "truth_not_established=true",
+        "evolution_supported="
+        + str(
+            bool(
+                result.get(
+                    "evolution_supported"
+                )
+            )
+        ),
+    ]
+
+    initial_state = result.get("initial_state") or {}
+    current_state = result.get("current_state") or {}
+
+    if initial_state:
+        lines.append(
+            "INITIAL_STATE="
+            + str(
+                initial_state.get(
+                    "state",
+                    ""
+                )
+                or ""
+            )
+            + " [memory_id="
+            + str(
+                initial_state.get(
+                    "memory_id"
+                )
+            )
+            + "]"
+        )
+
+    if current_state:
+        lines.append(
+            "CURRENT_STATE="
+            + str(
+                current_state.get(
+                    "state",
+                    ""
+                )
+                or ""
+            )
+            + " [memory_id="
+            + str(
+                current_state.get(
+                    "memory_id"
+                )
+            )
+            + "]"
+        )
+
+    transitions = result.get("transitions") or []
+
+    for index, item in enumerate(
+        transitions[:15],
+        start=1,
+    ):
+        lines.append(
+            "TRANSITION_"
+            + str(index)
+            + "="
+            + str(
+                item.get(
+                    "from_state",
+                    ""
+                )
+                or ""
+            )
+            + " -> "
+            + str(
+                item.get(
+                    "to_state",
+                    ""
+                )
+                or ""
+            )
+            + " [evidence="
+            + ",".join(
+                str(value)
+                for value in (
+                    item.get(
+                        "evidence_memory_ids"
+                    )
+                    or []
+                )
+            )
+            + "]"
+        )
+
+    unresolved = (
+        result.get(
+            "unresolved_items"
+        )
+        or []
+    )
+
+    if unresolved:
+        lines.append(
+            "UNRESOLVED_ITEMS="
+            + " | ".join(
+                str(value)
+                for value in unresolved[:20]
+            )
+        )
+
+    return "\n".join(lines)
+
+
+
+
 # ============================================================
 # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
 # ============================================================
@@ -13227,6 +13757,7 @@ def generate_grounded_answer(
     evidence_context=None,
     confidence_context=None,
     plan_context=None,
+    plan_state_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -13343,6 +13874,20 @@ that the claim is objectively true. Do not call a claim verified or true
 merely because its support score is high. If truth_not_established=true,
 preserve that limitation in the answer. Do not invent supporting evidence
 that is absent from the analysis.
+
+PLAN EVOLUTION / STATE TRACKING CONTEXT:
+{build_plan_state_prompt_context(plan_state_context)}
+
+PLAN STATE HANDLING:
+
+If PLAN EVOLUTION / STATE TRACKING CONTEXT is marked detected=true,
+answer the user's history/state question only from the supplied
+chronological evidence. Clearly distinguish the earlier state, supported
+transitions, current state, and unresolved items. Do not invent why a
+change happened unless change_reason is supplied. A later state does not
+automatically make an earlier state "wrong"; describe it as a change or
+update. If evolution_supported=false, say that stored evidence is
+insufficient to establish a reliable transition timeline.
 
 MEMORY-TO-PLAN / PLANNING CONTEXT:
 {build_memory_plan_prompt_context(plan_context)}
@@ -14563,6 +15108,48 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
+        # ----------------------------------------------------
+
+        if params.get(
+            "plan_state"
+        ) == ["true"]:
+
+            try:
+                result = analyze_plan_state_tracking(
+                    user_id=user_id,
+                    message=params.get(
+                        "message",
+                        [""]
+                    )[0],
+                    limit=params.get(
+                        "limit",
+                        ["100"]
+                    )[0],
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "plan_state_trace":
+                            build_plan_state_tracking_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
         # ----------------------------------------------------
 
@@ -15380,6 +15967,8 @@ class handler(
                     True,
                 "memory_to_plan_planning_intelligence":
                     True,
+                "plan_evolution_state_tracking":
+                    True,
             }
         )
 
@@ -15437,6 +16026,51 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
+            # ------------------------------------------------
+
+            if action == "analyze_plan_state":
+
+                result = analyze_plan_state_tracking(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            ""
+                        )
+                    ),
+                    memories=body.get(
+                        "memories"
+                    ),
+                    plan_context=body.get(
+                        "plan_context"
+                    ),
+                    evolution_context=body.get(
+                        "evolution_context"
+                    ),
+                    limit=body.get(
+                        "limit",
+                        100
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "plan_state_trace":
+                            build_plan_state_tracking_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
@@ -16200,6 +16834,20 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8J
+            # NATURAL LANGUAGE PLAN STATE TRACKING CONTEXT
+            # ------------------------------------------------
+
+            memory_plan_state_context = build_plan_state_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+                plan_context=memory_plan_context,
+                evolution_context=memory_evolution_context,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -16218,6 +16866,7 @@ class handler(
                 evidence_context=memory_evidence_context,
                 confidence_context=memory_confidence_context,
                 plan_context=memory_plan_context,
+                plan_state_context=memory_plan_state_context,
             )
 
             response = grounded_result.get(
