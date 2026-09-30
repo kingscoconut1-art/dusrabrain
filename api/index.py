@@ -7450,6 +7450,286 @@ def build_memory_evidence_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8H.1 — NATURAL LANGUAGE CONFIDENCE INTEGRATION
+# ============================================================
+#
+# Connect Phase 8H deterministic confidence analysis to normal chat.
+#
+# Confidence is confidence in the stored-context assessment, NOT proof
+# of objective truth.
+#
+# READ-ONLY. No memory mutation, deletion, consolidation, or winner
+# selection.
+# ============================================================
+
+def is_memory_confidence_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    confidence_terms = (
+        "how confident",
+        "how certain",
+        "confidence level",
+        "confidence score",
+        "confidence in my",
+        "how reliable is my",
+        "how reliable are my memories",
+        "how certain are my memories",
+        "how certain is my",
+        "how sure",
+        "how much confidence",
+        "what is my confidence",
+        "should dusra brain be confident",
+    )
+
+    return any(
+        term in text
+        for term in confidence_terms
+    )
+
+
+def build_memory_confidence_chat_context(
+    user_id,
+    message,
+    memories,
+):
+    """
+    Run deterministic 8H confidence analysis for a confidence question.
+    """
+    if not is_memory_confidence_question(message):
+        return {
+            "detected": False,
+            "subject": "",
+            "analysis": None,
+        }
+
+    subject = infer_memory_evolution_subject(
+        message,
+        memories,
+    )
+
+    try:
+        analysis = analyze_memory_confidence(
+            user_id=user_id,
+            claim=message,
+            subject=subject,
+            memories=memories,
+            limit=80,
+        )
+    except Exception:
+        analysis = None
+
+    if not isinstance(analysis, dict):
+        analysis = {
+            "memory_confidence_intelligence": False,
+            "read_only": True,
+            "automatic_mutation": False,
+            "truth_not_established": True,
+            "claim": message,
+            "subject": subject,
+            "overall_confidence_score": 0.0,
+            "overall_confidence_status": "uncertain",
+            "uncertainty_reasons": [
+                "confidence analysis was unavailable"
+            ],
+            "supporting_memory_count": 0,
+            "evidence_support_score": 0.0,
+        }
+
+    return {
+        "detected": True,
+        "subject": subject,
+        "analysis": analysis,
+    }
+
+
+def build_memory_confidence_prompt_context(
+    confidence_context,
+):
+    """
+    Convert deterministic 8H output into compact model context.
+    """
+    if not isinstance(
+        confidence_context,
+        dict
+    ):
+        return "detected=false"
+
+    if not confidence_context.get(
+        "detected"
+    ):
+        return "detected=false"
+
+    analysis = (
+        confidence_context.get(
+            "analysis"
+        )
+        or {}
+    )
+
+    lines = [
+        "detected=true",
+        "subject="
+        + str(
+            confidence_context.get(
+                "subject"
+            )
+            or ""
+        ),
+        "read_only="
+        + str(
+            bool(
+                analysis.get(
+                    "read_only",
+                    True
+                )
+            )
+        ),
+        "automatic_mutation="
+        + str(
+            bool(
+                analysis.get(
+                    "automatic_mutation",
+                    False
+                )
+            )
+        ),
+        "truth_not_established="
+        + str(
+            bool(
+                analysis.get(
+                    "truth_not_established",
+                    True
+                )
+            )
+        ),
+        "overall_confidence_score="
+        + str(
+            analysis.get(
+                "overall_confidence_score",
+                0.0
+            )
+        ),
+        "overall_confidence_status="
+        + str(
+            analysis.get(
+                "overall_confidence_status",
+                "uncertain"
+            )
+        ),
+        "evidence_support_score="
+        + str(
+            analysis.get(
+                "evidence_support_score",
+                0.0
+            )
+        ),
+        "supporting_memory_count="
+        + str(
+            int(
+                analysis.get(
+                    "supporting_memory_count",
+                    0
+                )
+                or 0
+            )
+        ),
+    ]
+
+    reasons = (
+        analysis.get(
+            "uncertainty_reasons"
+        )
+        or []
+    )
+
+    if reasons:
+        lines.append(
+            "UNCERTAINTY_REASONS="
+            + " | ".join(
+                str(reason)
+                for reason in reasons[:10]
+            )
+        )
+
+    supporting = (
+        analysis.get(
+            "supporting_memories"
+        )
+        or []
+    )
+
+    for item in supporting[:20]:
+        signals = (
+            item.get(
+                "signals"
+            )
+            or {}
+        )
+
+        lines.append(
+            "CONFIDENCE MEMORY"
+            + " | memory_id="
+            + str(
+                item.get(
+                    "memory_id"
+                )
+            )
+            + " | confidence_score="
+            + str(
+                item.get(
+                    "confidence_score",
+                    0.0
+                )
+            )
+            + " | confidence_status="
+            + str(
+                item.get(
+                    "confidence_status",
+                    "uncertain"
+                )
+            )
+            + " | evidence_support="
+            + str(
+                signals.get(
+                    "evidence_support",
+                    0.0
+                )
+            )
+            + " | freshness="
+            + str(
+                signals.get(
+                    "freshness",
+                    0.0
+                )
+            )
+            + " | relevance="
+            + str(
+                signals.get(
+                    "relevance",
+                    0.0
+                )
+            )
+            + " | conflict_signal="
+            + str(
+                signals.get(
+                    "conflict_signal",
+                    0.0
+                )
+            )
+        )
+
+    return "\n".join(
+        lines
+    )
+
+
+
+
 # ============================================================
 # PHASE 8H — MEMORY CONFIDENCE & UNCERTAINTY INTELLIGENCE
 # ============================================================
@@ -11567,6 +11847,7 @@ def generate_grounded_answer(
     quality_context=None,
     conflict_context=None,
     evidence_context=None,
+    confidence_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -11683,6 +11964,18 @@ that the claim is objectively true. Do not call a claim verified or true
 merely because its support score is high. If truth_not_established=true,
 preserve that limitation in the answer. Do not invent supporting evidence
 that is absent from the analysis.
+
+MEMORY CONFIDENCE / UNCERTAINTY CONTEXT:
+{build_memory_confidence_prompt_context(confidence_context)}
+
+CONFIDENCE QUESTION HANDLING:
+
+If MEMORY CONFIDENCE / UNCERTAINTY CONTEXT is marked detected=true,
+answer using the deterministic 8H analysis. Report the supplied confidence
+status and score when useful, and explain the supplied uncertainty reasons.
+Treat confidence as confidence in the stored-context assessment, NOT as
+proof of objective truth. If truth_not_established=true, preserve that
+limitation. Do not invent uncertainty reasons absent from the analysis.
 
 QUALITY QUESTION HANDLING:
 
@@ -13647,6 +13940,8 @@ class handler(
                     True,
                 "memory_confidence_uncertainty_intelligence":
                     True,
+                "memory_confidence_natural_language_integration":
+                    True,
             }
         )
 
@@ -14385,6 +14680,18 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8H.1
+            # NATURAL LANGUAGE MEMORY CONFIDENCE CONTEXT
+            # ------------------------------------------------
+
+            memory_confidence_context = build_memory_confidence_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -14401,6 +14708,7 @@ class handler(
                 quality_context=memory_quality_context,
                 conflict_context=memory_conflict_context,
                 evidence_context=memory_evidence_context,
+                confidence_context=memory_confidence_context,
             )
 
             response = grounded_result.get(
