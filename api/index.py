@@ -8029,6 +8029,538 @@ def build_plan_consistency_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8M — DECISION READINESS INTELLIGENCE
+# ============================================================
+
+def is_decision_readiness_question(message):
+    """Detect direct questions about readiness to make a decision.
+
+    This layer is intentionally separate from the older Step 4D
+    decision-readiness gate. Step 4D evaluates an explicitly supplied
+    decision-analysis payload; Phase 8M evaluates a user's current
+    reconstructed plan using stored planning evidence, unresolved gaps,
+    consistency, and confidence signals.
+    """
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    terms = (
+        "am i ready to make this decision",
+        "am i ready to make a decision",
+        "am i ready to decide",
+        "am i ready to take a decision",
+        "am i ready for this decision",
+        "is my plan ready for a decision",
+        "is my current plan ready for a decision",
+        "is this plan ready for a decision",
+        "am i actually ready to make this decision",
+        "am i sufficiently ready to decide",
+        "do i have enough information to decide",
+        "do i have enough information to make this decision",
+        "do i have enough evidence to decide",
+        "do i have enough evidence to make this decision",
+        "do i have enough information to make a decision",
+        "is there enough information to decide",
+        "is there enough evidence to decide",
+        "how ready am i to decide",
+        "how ready am i to make this decision",
+        "decision readiness",
+        "decision ready",
+        "ready to decide",
+        "ready to make this decision",
+    )
+
+    return any(term in text for term in terms)
+
+
+def _decision_readiness_analysis_dict(value):
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def analyze_decision_readiness_intelligence(
+    user_id,
+    message,
+    memories=None,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+):
+    """
+    Deterministically assess readiness from stored planning evidence.
+
+    This does not decide what the user should do. It reports whether the
+    stored context appears ready, partially ready, not ready, or
+    insufficiently supported for a decision. It never creates a decision,
+    changes memory, or recommends an option.
+    """
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=100,
+        )
+
+    memories = list(memories or [])
+
+    plan = _decision_readiness_analysis_dict(
+        (plan_context or {}).get("analysis")
+        if isinstance(plan_context, dict)
+        else {}
+    )
+    state = _decision_readiness_analysis_dict(
+        (plan_state_context or {}).get("analysis")
+        if isinstance(plan_state_context, dict)
+        else {}
+    )
+    consistency = _decision_readiness_analysis_dict(
+        (consistency_context or {}).get("analysis")
+        if isinstance(consistency_context, dict)
+        else {}
+    )
+    gaps = _decision_readiness_analysis_dict(
+        (unresolved_gap_context or {}).get("analysis")
+        if isinstance(unresolved_gap_context, dict)
+        else {}
+    )
+
+    current_plan = str(
+        plan.get("current_plan")
+        or state.get("current_state")
+        or ""
+    ).strip()
+
+    related_decisions = list(
+        plan.get("related_decisions")
+        or []
+    )
+    open_items = list(
+        plan.get("open_items")
+        or []
+    )
+    unresolved_items = list(
+        gaps.get("unresolved_items")
+        or state.get("unresolved_items")
+        or open_items
+        or []
+    )
+
+    explicit_conflicts = list(
+        consistency.get("explicit_conflicts")
+        or []
+    )
+    potential_tensions = list(
+        consistency.get("potential_tensions")
+        or []
+    )
+
+    # Evidence support is calculated only from supplied stored memories.
+    evidence_score = 0.0
+    supporting_count = 0
+
+    if current_plan:
+        try:
+            evidence_result = analyze_memory_evidence_strength(
+                user_id=user_id,
+                claim=current_plan,
+                subject="",
+                memories=memories,
+                limit=min(100, max(20, len(memories) or 20)),
+            )
+            evidence_score = float(
+                evidence_result.get(
+                    "overall_support_score",
+                    0.0,
+                )
+                or 0.0
+            )
+            supporting_count = int(
+                evidence_result.get(
+                    "supporting_memory_count",
+                    0,
+                )
+                or 0
+            )
+        except Exception:
+            evidence_score = 0.0
+            supporting_count = 0
+
+    # Confidence is calculated against the reconstructed current plan,
+    # not against the user's desired outcome.
+    confidence_score = 0.0
+    confidence_status = "low"
+    confidence_reasons = []
+
+    if current_plan:
+        try:
+            confidence_result = analyze_memory_confidence(
+                user_id=user_id,
+                claim=current_plan,
+                subject="",
+                memories=memories,
+                limit=min(100, max(20, len(memories) or 20)),
+            )
+            confidence_score = float(
+                confidence_result.get(
+                    "overall_confidence_score",
+                    0.0,
+                )
+                or 0.0
+            )
+            confidence_status = str(
+                confidence_result.get(
+                    "overall_confidence_status",
+                    "low",
+                )
+                or "low"
+            )
+            confidence_reasons = list(
+                confidence_result.get(
+                    "uncertainty_reasons",
+                    [],
+                )
+                or []
+            )
+        except Exception:
+            confidence_score = 0.0
+            confidence_status = "low"
+
+    consistency_classification = str(
+        consistency.get(
+            "classification",
+            "insufficient_evidence",
+        )
+        or "insufficient_evidence"
+    )
+
+    unresolved_count = len(unresolved_items)
+    decision_gap_count = int(
+        gaps.get("decision_gap_count", 0)
+        or 0
+    )
+    information_gap_count = int(
+        gaps.get("information_gap_count", 0)
+        or 0
+    )
+
+    # Readiness is deliberately conservative:
+    # - explicit conflict blocks readiness
+    # - unresolved decision/information gaps prevent "ready"
+    # - strong plan/evidence without blocking gaps can be "ready"
+    # - partial evidence or open items becomes "partially_ready"
+    #
+    # This is a classification of stored support, not a recommendation.
+    checks = {
+        "current_plan_identified": bool(current_plan),
+        "supporting_evidence_present": bool(
+            supporting_count > 0
+            or evidence_score >= 0.50
+        ),
+        "confidence_not_low": bool(
+            confidence_score >= 0.60
+        ),
+        "no_explicit_conflict": not bool(
+            explicit_conflicts
+        ),
+        "no_unresolved_gap": bool(
+            unresolved_count == 0
+            and decision_gap_count == 0
+            and information_gap_count == 0
+        ),
+        "plan_consistency_supported": consistency_classification in (
+            "consistent",
+            "evolved_consistently",
+        ),
+    }
+
+    if not current_plan:
+        status = "insufficient_evidence"
+        readiness_score = 0.0
+        reason = "current_plan_not_reconstructed"
+    elif explicit_conflicts:
+        status = "not_ready"
+        readiness_score = 0.30
+        reason = "explicit_conflict_present"
+    elif (
+        unresolved_count > 0
+        or decision_gap_count > 0
+        or information_gap_count > 0
+    ):
+        status = "partially_ready"
+        readiness_score = 0.50
+        reason = "unresolved_items_remain"
+    elif (
+        checks["supporting_evidence_present"]
+        and checks["confidence_not_low"]
+        and checks["plan_consistency_supported"]
+    ):
+        status = "ready"
+        readiness_score = 0.80
+        reason = "stored_plan_evidence_is_sufficiently_aligned"
+    elif (
+        checks["supporting_evidence_present"]
+        or checks["plan_consistency_supported"]
+    ):
+        status = "partially_ready"
+        readiness_score = 0.60
+        reason = "plan_is_supported_but_evidence_is_incomplete"
+    else:
+        status = "not_ready"
+        readiness_score = 0.35
+        reason = "stored_support_is_insufficient"
+
+    # Never let the numeric score imply objective truth or a recommendation.
+    readiness_score = round(
+        max(0.0, min(1.0, readiness_score)),
+        4,
+    )
+
+    return {
+        "decision_readiness_intelligence": True,
+        "status": status,
+        "readiness_score": readiness_score,
+        "reason": reason,
+        "current_plan": current_plan,
+        "supporting_evidence_score": round(
+            max(0.0, min(1.0, evidence_score)),
+            4,
+        ),
+        "supporting_memory_count": supporting_count,
+        "confidence_score": round(
+            max(0.0, min(1.0, confidence_score)),
+            4,
+        ),
+        "confidence_status": confidence_status,
+        "confidence_reasons": confidence_reasons[:10],
+        "consistency_classification": consistency_classification,
+        "unresolved_items": unresolved_items[:20],
+        "decision_gap_count": decision_gap_count,
+        "information_gap_count": information_gap_count,
+        "explicit_conflict_count": len(explicit_conflicts),
+        "potential_tension_count": len(potential_tensions),
+        "related_decision_count": len(related_decisions),
+        "checks": checks,
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_decision_readiness_intelligence_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "status": "insufficient_evidence",
+            "read_only": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get("decision_readiness_intelligence")
+        ),
+        "status": str(
+            result.get(
+                "status",
+                "insufficient_evidence",
+            )
+            or "insufficient_evidence"
+        ),
+        "readiness_score": float(
+            result.get(
+                "readiness_score",
+                0.0,
+            )
+            or 0.0
+        ),
+        "reason": str(
+            result.get("reason", "unknown")
+            or "unknown"
+        ),
+        "supporting_memory_count": int(
+            result.get("supporting_memory_count", 0)
+            or 0
+        ),
+        "unresolved_count": len(
+            result.get("unresolved_items") or []
+        ),
+        "decision_gap_count": int(
+            result.get("decision_gap_count", 0)
+            or 0
+        ),
+        "information_gap_count": int(
+            result.get("information_gap_count", 0)
+            or 0
+        ),
+        "explicit_conflict_count": int(
+            result.get("explicit_conflict_count", 0)
+            or 0
+        ),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_decision_readiness_intelligence_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+):
+    if not is_decision_readiness_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_decision_readiness_intelligence(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            plan_state_context=plan_state_context,
+            consistency_context=consistency_context,
+            unresolved_gap_context=unresolved_gap_context,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
+
+def build_decision_readiness_intelligence_prompt_context(
+    readiness_context,
+):
+    if not isinstance(readiness_context, dict):
+        return "detected=false"
+
+    if not readiness_context.get("detected"):
+        return "detected=false"
+
+    result = readiness_context.get("analysis") or {}
+
+    lines = [
+        "detected=true",
+        "status="
+        + str(
+            result.get(
+                "status",
+                "insufficient_evidence",
+            )
+        ),
+        "readiness_score="
+        + str(
+            result.get(
+                "readiness_score",
+                0.0,
+            )
+        ),
+        "reason="
+        + str(
+            result.get("reason", "unknown")
+            or "unknown"
+        ),
+        "read_only=true",
+        "prescriptive=false",
+        "truth_not_established=true",
+        "CURRENT_PLAN="
+        + str(
+            result.get("current_plan", "")
+            or ""
+        ),
+        "SUPPORTING_EVIDENCE_SCORE="
+        + str(
+            result.get(
+                "supporting_evidence_score",
+                0.0,
+            )
+        ),
+        "SUPPORTING_MEMORY_COUNT="
+        + str(
+            result.get(
+                "supporting_memory_count",
+                0,
+            )
+        ),
+        "CONFIDENCE_SCORE="
+        + str(
+            result.get(
+                "confidence_score",
+                0.0,
+            )
+        ),
+        "CONFIDENCE_STATUS="
+        + str(
+            result.get(
+                "confidence_status",
+                "low",
+            )
+        ),
+        "CONSISTENCY_CLASSIFICATION="
+        + str(
+            result.get(
+                "consistency_classification",
+                "insufficient_evidence",
+            )
+        ),
+        "UNRESOLVED_COUNT="
+        + str(
+            len(result.get("unresolved_items") or [])
+        ),
+        "DECISION_GAP_COUNT="
+        + str(
+            result.get(
+                "decision_gap_count",
+                0,
+            )
+        ),
+        "INFORMATION_GAP_COUNT="
+        + str(
+            result.get(
+                "information_gap_count",
+                0,
+            )
+        ),
+        "EXPLICIT_CONFLICT_COUNT="
+        + str(
+            result.get(
+                "explicit_conflict_count",
+                0,
+            )
+        ),
+    ]
+
+    for index, item in enumerate(
+        result.get("unresolved_items") or [],
+        start=1,
+    ):
+        lines.append(
+            "UNRESOLVED_ITEM_"
+            + str(index)
+            + "="
+            + str(item)
+        )
+
+    return "\n".join(lines)
+
+
+
 # ============================================================
 # PHASE 8L — UNRESOLVED QUESTIONS & DECISION GAPS INTELLIGENCE
 # ============================================================
@@ -14826,6 +15358,7 @@ def generate_grounded_answer(
     plan_state_context=None,
     plan_consistency_context=None,
     unresolved_gap_context=None,
+    decision_readiness_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -14958,6 +15491,23 @@ opposing evidence without choosing which personal decision is "right".
 If there is only an unresolved item, describe it as unresolved or a
 potential tension, not as a contradiction. Never turn this analysis into
 a recommendation unless the user explicitly asks for one.
+
+DECISION READINESS INTELLIGENCE CONTEXT:
+{build_decision_readiness_intelligence_prompt_context(decision_readiness_context)}
+
+DECISION READINESS HANDLING:
+
+If DECISION READINESS INTELLIGENCE CONTEXT is marked detected=true,
+answer the user's readiness question using the supplied deterministic
+classification. Explain whether the stored context is ready, partially
+ready, not ready, or insufficiently supported. Identify the current plan,
+supporting evidence, unresolved items, conflicts, and confidence signals
+only when supplied. A readiness score is a measure of support in stored
+context, NOT proof that the user should decide now and NOT a recommendation.
+Never tell the user which option to choose. Never invent missing
+requirements, deadlines, facts, or evidence. If unresolved items remain,
+say they remain unresolved rather than deciding them.
+
 
 UNRESOLVED QUESTIONS / DECISION GAPS CONTEXT:
 {build_unresolved_gap_prompt_context(unresolved_gap_context)}
@@ -17213,6 +17763,54 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8M — DECISION READINESS INTELLIGENCE
+            # ------------------------------------------------
+
+            if action == "analyze_decision_readiness_intelligence":
+
+                result = analyze_decision_readiness_intelligence(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            ""
+                        )
+                    ),
+                    memories=body.get(
+                        "memories"
+                    ),
+                    plan_context=body.get(
+                        "plan_context"
+                    ),
+                    plan_state_context=body.get(
+                        "plan_state_context"
+                    ),
+                    consistency_context=body.get(
+                        "consistency_context"
+                    ),
+                    unresolved_gap_context=body.get(
+                        "unresolved_gap_context"
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "decision_readiness_intelligence_trace":
+                            build_decision_readiness_intelligence_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
+
+
+            # ------------------------------------------------
             # PHASE 8L — UNRESOLVED QUESTIONS & DECISION GAPS
             # ------------------------------------------------
 
@@ -18107,6 +18705,25 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8M
+            # NATURAL LANGUAGE DECISION READINESS CONTEXT
+            # ------------------------------------------------
+
+            memory_decision_readiness_context = (
+                build_decision_readiness_intelligence_chat_context(
+                    user_id=user_id,
+                    message=message,
+                    memories=memories,
+                    plan_context=memory_plan_context,
+                    plan_state_context=memory_plan_state_context,
+                    consistency_context=memory_plan_consistency_context,
+                    unresolved_gap_context=memory_unresolved_gap_context,
+                )
+            )
+
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -18128,6 +18745,7 @@ class handler(
                 plan_state_context=memory_plan_state_context,
                 plan_consistency_context=memory_plan_consistency_context,
                 unresolved_gap_context=memory_unresolved_gap_context,
+                decision_readiness_context=memory_decision_readiness_context,
             )
 
             response = grounded_result.get(
@@ -18481,6 +19099,7 @@ class handler(
             ] = (
                 not is_plan_consistency_question(message)
                 and not is_unresolved_gap_question(message)
+                and not is_decision_readiness_question(message)
             )
 
             # Step 4L is authoritative only for a direct decision-history
@@ -18489,6 +19108,7 @@ class handler(
             if (
                 not is_plan_consistency_question(message)
                 and not is_unresolved_gap_question(message)
+                and not is_decision_readiness_question(message)
                 and
                 decision_history_answer_verification.get("verified")
                 and decision_history_answer.get("answered")
@@ -18580,6 +19200,7 @@ class handler(
             if (
                 is_decision_evolution_question(message)
                 and not is_unresolved_gap_question(message)
+                and not is_decision_readiness_question(message)
                 and
                 decision_evolution_answer_verification.get("verified")
                 and
@@ -18590,6 +19211,142 @@ class handler(
                     .get("answer", response)
                     .strip()
                 )
+
+
+            # ------------------------------------------------
+            # PHASE 8M — AUTHORITATIVE DECISION READINESS ANSWER
+            # ------------------------------------------------
+
+            if is_decision_readiness_question(message):
+
+                readiness_analysis = (
+                    memory_decision_readiness_context.get(
+                        "analysis"
+                    )
+                    if isinstance(
+                        memory_decision_readiness_context,
+                        dict,
+                    )
+                    else None
+                )
+
+                if isinstance(
+                    readiness_analysis,
+                    dict,
+                ):
+                    status = str(
+                        readiness_analysis.get(
+                            "status",
+                            "insufficient_evidence",
+                        )
+                        or "insufficient_evidence"
+                    )
+
+                    current_plan = str(
+                        readiness_analysis.get(
+                            "current_plan",
+                            "",
+                        )
+                        or ""
+                    ).strip()
+
+                    unresolved = list(
+                        readiness_analysis.get(
+                            "unresolved_items",
+                            [],
+                        )
+                        or []
+                    )
+
+                    conflicts = int(
+                        readiness_analysis.get(
+                            "explicit_conflict_count",
+                            0,
+                        )
+                        or 0
+                    )
+
+                    confidence_status = str(
+                        readiness_analysis.get(
+                            "confidence_status",
+                            "low",
+                        )
+                        or "low"
+                    )
+
+                    evidence_score = float(
+                        readiness_analysis.get(
+                            "supporting_evidence_score",
+                            0.0,
+                        )
+                        or 0.0
+                    )
+
+                    if status == "ready":
+                        readiness_label = (
+                            "The stored evidence indicates that "
+                            "your current plan is sufficiently supported "
+                            "for a decision-readiness assessment."
+                        )
+                    elif status == "partially_ready":
+                        readiness_label = (
+                            "Your current plan is partially supported, "
+                            "but the stored context still contains "
+                            "unresolved items."
+                        )
+                    elif status == "not_ready":
+                        readiness_label = (
+                            "The stored context does not currently "
+                            "provide sufficient support for a "
+                            "decision-readiness assessment."
+                        )
+                    else:
+                        readiness_label = (
+                            "There is not enough stored evidence to "
+                            "assess decision readiness reliably."
+                        )
+
+                    answer_parts = [readiness_label]
+
+                    if current_plan:
+                        answer_parts.append(
+                            "Current plan: "
+                            + current_plan
+                            + "."
+                        )
+
+                    answer_parts.append(
+                        "Stored evidence support: "
+                        + f"{evidence_score:.4f}"
+                        + "; confidence: "
+                        + confidence_status
+                        + "."
+                    )
+
+                    if unresolved:
+                        answer_parts.append(
+                            "Unresolved items remain: "
+                            + "; ".join(
+                                str(item)
+                                for item in unresolved[:5]
+                            )
+                            + "."
+                        )
+
+                    if conflicts:
+                        answer_parts.append(
+                            "The stored context also contains "
+                            + str(conflicts)
+                            + " explicit conflict signal(s)."
+                        )
+
+                    answer_parts.append(
+                        "This describes support in your stored data; "
+                        "it does not decide what you should do."
+                    )
+
+                    response = " ".join(answer_parts).strip()
+
 
 
             # ------------------------------------------------
@@ -18801,6 +19558,14 @@ class handler(
                     "unresolved_gap_trace":
                         build_unresolved_gap_trace(
                             memory_unresolved_gap_context.get(
+                                "analysis"
+                            )
+                        ),
+
+
+                    "decision_readiness_intelligence_trace":
+                        build_decision_readiness_intelligence_trace(
+                            memory_decision_readiness_context.get(
                                 "analysis"
                             )
                         ),
