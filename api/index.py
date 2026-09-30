@@ -5,6 +5,7 @@ import os
 import re
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler
 
@@ -6955,6 +6956,510 @@ Return ONLY JSON:
     }
 
 
+
+# ============================================================
+# PHASE 8E — MEMORY QUALITY & LIFECYCLE INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Move from "this memory can be retrieved" to:
+#   "this memory has a measurable lifecycle and support quality."
+#
+# This phase is intentionally READ-ONLY.
+#
+# It does NOT:
+#   - rewrite memories
+#   - delete memories
+#   - merge memories
+#   - change importance
+#   - override user facts
+#
+# Existing Phase 6 consolidation already provides proposal/review/
+# approval workflows. Phase 8E therefore does NOT duplicate that
+# system. Instead, it evaluates the quality and lifecycle state of
+# individual memories so later intelligence can make safer use of
+# the existing memory store.
+#
+# Lifecycle labels:
+#   active      = recent/currently useful memory
+#   aging       = older memory that may still be useful
+#   historical = old memory retained for historical context
+#
+# Quality is deterministic and based only on stored fields:
+#   - importance
+#   - content specificity
+#   - subject / memory key structure
+#   - age / freshness
+#   - version history support
+#
+# No external AI call is required.
+# ============================================================
+
+
+def _memory_quality_parse_datetime(value):
+    if not value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
+    except Exception:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed
+
+
+def _memory_quality_age_days(created_at):
+    parsed = _memory_quality_parse_datetime(created_at)
+
+    if parsed is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+
+    try:
+        return max(
+            0.0,
+            (now - parsed).total_seconds() / 86400.0
+        )
+    except Exception:
+        return None
+
+
+def _memory_quality_specificity(memory):
+    text = str(
+        memory.get("memory", "") or ""
+    ).strip()
+
+    subject = str(
+        memory.get("subject", "") or ""
+    ).strip()
+
+    memory_key = str(
+        memory.get("memory_key", "") or ""
+    ).strip()
+
+    if not text:
+        return 0.0
+
+    words = re.findall(
+        r"[A-Za-z0-9_'-]+",
+        text
+    )
+
+    unique_words = {
+        word.lower()
+        for word in words
+        if len(word) >= 3
+    }
+
+    score = 0.0
+
+    if len(text) >= 40:
+        score += 0.30
+    elif len(text) >= 20:
+        score += 0.20
+    else:
+        score += 0.10
+
+    if len(unique_words) >= 8:
+        score += 0.25
+    elif len(unique_words) >= 5:
+        score += 0.18
+    elif len(unique_words) >= 3:
+        score += 0.10
+
+    if subject and subject.lower() != "general":
+        score += 0.20
+
+    if memory_key:
+        score += 0.15
+
+    if re.search(
+        r"\d|%|₹|\$|€|£|[A-Z]{2,}",
+        text
+    ):
+        score += 0.10
+
+    return round(
+        max(0.0, min(1.0, score)),
+        4
+    )
+
+
+def _memory_quality_lifecycle(age_days, importance):
+    if age_days is None:
+        if int(importance or 5) >= 8:
+            return "active"
+        return "aging"
+
+    if age_days <= 90:
+        return "active"
+
+    if age_days <= 365:
+        return "aging"
+
+    return "historical"
+
+
+def _memory_quality_score(
+    importance,
+    specificity,
+    freshness,
+    version_support
+):
+    importance_score = (
+        max(
+            0.0,
+            min(
+                10.0,
+                float(importance or 5)
+            )
+        )
+        / 10.0
+    )
+
+    score = (
+        importance_score * 0.40
+        + specificity * 0.25
+        + freshness * 0.20
+        + version_support * 0.15
+    )
+
+    return round(
+        max(0.0, min(1.0, score)),
+        4
+    )
+
+
+def _memory_quality_freshness(age_days):
+    if age_days is None:
+        return 0.50
+
+    return round(
+        0.5 ** (age_days / 30.0),
+        4
+    )
+
+
+def _memory_quality_version_support(memory_id, user_id):
+    if not memory_id:
+        return {
+            "version_count": 0,
+            "current_version_count": 0,
+            "version_support": 0.0,
+        }
+
+    ensure_memory_versions_table()
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*) AS version_count,
+                        COUNT(*) FILTER (
+                            WHERE is_current = TRUE
+                        ) AS current_version_count
+                    FROM memory_versions
+                    WHERE user_id = %s
+                      AND memory_id = %s
+                    """,
+                    (
+                        user_id,
+                        int(memory_id),
+                    )
+                )
+
+                row = cur.fetchone()
+    except Exception:
+        return {
+            "version_count": 0,
+            "current_version_count": 0,
+            "version_support": 0.0,
+        }
+
+    version_count = int(row[0] or 0)
+    current_version_count = int(row[1] or 0)
+
+    if version_count >= 3:
+        version_support = 1.0
+    elif version_count == 2:
+        version_support = 0.75
+    elif version_count == 1:
+        version_support = 0.50
+    else:
+        version_support = 0.0
+
+    return {
+        "version_count": version_count,
+        "current_version_count": current_version_count,
+        "version_support": version_support,
+    }
+
+
+def assess_memory_quality(
+    user_id,
+    memory_id=None,
+    subject="",
+    limit=100,
+):
+    """Return read-only lifecycle/quality analysis for stored memories."""
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 100
+
+    limit = max(
+        1,
+        min(500, limit)
+    )
+
+    subject = str(
+        subject or ""
+    ).strip()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            where = [
+                "user_id = %s"
+            ]
+            values = [user_id]
+
+            if memory_id is not None:
+                where.append(
+                    "id = %s"
+                )
+                values.append(
+                    int(memory_id)
+                )
+
+            if subject:
+                where.append(
+                    "LOWER(subject) = LOWER(%s)"
+                )
+                values.append(
+                    subject
+                )
+
+            values.append(limit)
+
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    memory,
+                    created_at,
+                    category,
+                    importance,
+                    subject,
+                    memory_key,
+                    session_id
+                FROM memories
+                WHERE {" AND ".join(where)}
+                ORDER BY
+                    importance DESC,
+                    created_at DESC
+                LIMIT %s
+                """,
+                tuple(values)
+            )
+
+            rows = cur.fetchall()
+
+    analyzed = []
+
+    for row in rows:
+        memory = {
+            "id": int(row[0]),
+            "memory": str(row[1] or ""),
+            "created_at": (
+                row[2].isoformat()
+                if row[2]
+                else None
+            ),
+            "category": row[3] or "general",
+            "importance": int(row[4] or 5),
+            "subject": row[5] or "general",
+            "memory_key": row[6],
+            "session_id": row[7] or "default",
+        }
+
+        age_days = _memory_quality_age_days(
+            memory.get("created_at")
+        )
+
+        specificity = _memory_quality_specificity(
+            memory
+        )
+
+        freshness = _memory_quality_freshness(
+            age_days
+        )
+
+        version_support = (
+            _memory_quality_version_support(
+                memory_id=memory["id"],
+                user_id=user_id,
+            )
+        )
+
+        lifecycle = _memory_quality_lifecycle(
+            age_days,
+            memory.get("importance", 5)
+        )
+
+        quality_score = _memory_quality_score(
+            importance=memory.get("importance", 5),
+            specificity=specificity,
+            freshness=freshness,
+            version_support=version_support.get(
+                "version_support",
+                0.0
+            ),
+        )
+
+        if lifecycle == "active":
+            lifecycle_action = "keep_active"
+        elif lifecycle == "aging":
+            lifecycle_action = "retain_and_recheck_when_relevant"
+        else:
+            lifecycle_action = "retain_as_historical_context"
+
+        analyzed.append({
+            **memory,
+            "age_days": (
+                round(age_days, 2)
+                if age_days is not None
+                else None
+            ),
+            "specificity_score": specificity,
+            "freshness_score": freshness,
+            "version_support": version_support,
+            "lifecycle": lifecycle,
+            "lifecycle_action": lifecycle_action,
+            "quality_score": quality_score,
+        })
+
+    analyzed.sort(
+        key=lambda item: (
+            float(
+                item.get("quality_score") or 0.0
+            ),
+            int(
+                item.get("importance") or 0
+            ),
+            str(
+                item.get("created_at") or ""
+            ),
+        ),
+        reverse=True,
+    )
+
+    summary = {
+        "memory_count": len(analyzed),
+        "active_count": sum(
+            1
+            for item in analyzed
+            if item.get("lifecycle") == "active"
+        ),
+        "aging_count": sum(
+            1
+            for item in analyzed
+            if item.get("lifecycle") == "aging"
+        ),
+        "historical_count": sum(
+            1
+            for item in analyzed
+            if item.get("lifecycle") == "historical"
+        ),
+        "average_quality_score": round(
+            (
+                sum(
+                    float(
+                        item.get("quality_score") or 0.0
+                    )
+                    for item in analyzed
+                )
+                / max(1, len(analyzed))
+            ),
+            4,
+        ),
+    }
+
+    return {
+        "quality_intelligence": True,
+        "read_only": True,
+        "automatic_mutation": False,
+        "subject": subject,
+        "memory_id": memory_id,
+        "memories": analyzed,
+        "summary": summary,
+        "basis": [
+            "stored_memory_fields",
+            "memory_version_history",
+            "deterministic_age_signal",
+            "deterministic_specificity_signal",
+        ],
+    }
+
+
+def build_memory_quality_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "memory_count": 0,
+            "read_only": True,
+        }
+
+    summary = result.get(
+        "summary",
+        {}
+    ) or {}
+
+    return {
+        "detected": bool(
+            result.get(
+                "quality_intelligence",
+                False
+            )
+        ),
+        "memory_count": int(
+            summary.get(
+                "memory_count",
+                0
+            ) or 0
+        ),
+        "active_count": int(
+            summary.get(
+                "active_count",
+                0
+            ) or 0
+        ),
+        "aging_count": int(
+            summary.get(
+                "aging_count",
+                0
+            ) or 0
+        ),
+        "historical_count": int(
+            summary.get(
+                "historical_count",
+                0
+            ) or 0
+        ),
+        "read_only": True,
+        "automatic_mutation": False,
+    }
+
+
+
 # ============================================================
 # PHASE 8D — MEMORY EVOLUTION & CURRENT-STATE INTELLIGENCE
 # ============================================================
@@ -9950,6 +10455,51 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8E — MEMORY QUALITY & LIFECYCLE
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_quality"
+        ) == ["true"]:
+
+            memory_id = params.get("memory_id", [""])[0]
+
+            try:
+                memory_id = (
+                    int(memory_id)
+                    if memory_id
+                    else None
+                )
+            except Exception:
+                memory_id = None
+
+            try:
+                result = assess_memory_quality(
+                    user_id=user_id,
+                    memory_id=memory_id,
+                    subject=params.get("subject", [""])[0],
+                    limit=params.get("limit", ["100"])[0],
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200,
+                )
+
+            except Exception as error:
+                send_json(
+                    self,
+                    {
+                        "error": str(error)
+                    },
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8D — MEMORY EVOLUTION ANALYSIS
         # ----------------------------------------------------
 
@@ -10544,6 +11094,9 @@ class handler(
 
                 "memory_evolution_intelligence":
                     True,
+
+                "memory_quality_lifecycle_intelligence":
+                    True,
             }
         )
 
@@ -10601,6 +11154,45 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8E — MEMORY QUALITY & LIFECYCLE
+            # ------------------------------------------------
+
+            if action == "analyze_memory_quality":
+
+                memory_id = body.get("memory_id")
+
+                try:
+                    memory_id = (
+                        int(memory_id)
+                        if memory_id is not None
+                        else None
+                    )
+                except Exception:
+                    memory_id = None
+
+                result = assess_memory_quality(
+                    user_id=user_id,
+                    memory_id=memory_id,
+                    subject=body.get("subject", ""),
+                    limit=body.get("limit", 100),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "quality_trace":
+                            build_memory_quality_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8D — MEMORY EVOLUTION ANALYSIS
