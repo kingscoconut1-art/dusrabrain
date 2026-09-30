@@ -8985,6 +8985,233 @@ def validate_grounded_answer_trace(
 
 
 
+
+# ============================================================
+# PHASE 8E.1 — NATURAL LANGUAGE MEMORY QUALITY INTEGRATION
+# ============================================================
+#
+# Connects Phase 8E quality/lifecycle analysis to normal chat.
+#
+# This is READ-ONLY:
+#   - no memory mutation
+#   - no deletion
+#   - no importance changes
+#   - no automatic consolidation
+#
+# The quality analysis is used as supporting context. Existing memories
+# remain the evidence sources for the grounded answer.
+# ============================================================
+
+def is_memory_quality_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    quality_terms = (
+        "quality of my memories",
+        "quality of my memory",
+        "memory quality",
+        "current status of my memories",
+        "current status of my memory",
+        "status of my memories",
+        "status of my memory",
+        "how current are my memories",
+        "how fresh are my memories",
+        "which memories are current",
+        "which memories are active",
+        "which memories are aging",
+        "which memories are historical",
+        "are my memories up to date",
+        "are my memories outdated",
+        "how reliable are my memories",
+        "quality and current status",
+        "memory lifecycle",
+        "lifecycle of my memories",
+    )
+
+    return any(
+        term in text
+        for term in quality_terms
+    )
+
+
+def build_memory_quality_chat_context(
+    user_id,
+    message,
+    memories,
+):
+    """
+    Build deterministic, read-only quality/lifecycle context for normal chat.
+    The retrieved memories remain the grounded evidence sources.
+    """
+    if not is_memory_quality_question(message):
+        return {
+            "detected": False,
+            "subject": "",
+            "analysis": None,
+        }
+
+    subject = infer_memory_evolution_subject(
+        message,
+        memories,
+    )
+
+    # For an explicitly named subject, use the stored subject when available.
+    # If quality wording contains a project name not represented as an exact
+    # subject, the normal retrieval set still supplies the evidence.
+    try:
+        analysis = assess_memory_quality(
+            user_id=user_id,
+            subject=subject,
+            limit=100,
+        )
+    except Exception:
+        analysis = None
+
+    if not isinstance(analysis, dict):
+        analysis = {
+            "quality_intelligence": False,
+            "read_only": True,
+            "automatic_mutation": False,
+            "subject": subject,
+            "memories": [],
+            "summary": {},
+        }
+
+    return {
+        "detected": True,
+        "subject": subject,
+        "analysis": analysis,
+    }
+
+
+def build_memory_quality_prompt_context(
+    quality_context,
+):
+    """
+    Convert the deterministic quality result into compact prompt context.
+    This does not create new facts; it exposes only calculated lifecycle
+    signals derived from stored memory fields and version history.
+    """
+    if not isinstance(quality_context, dict):
+        return "detected=false"
+
+    if not quality_context.get("detected"):
+        return "detected=false"
+
+    analysis = quality_context.get(
+        "analysis"
+    ) or {}
+
+    summary = analysis.get(
+        "summary"
+    ) or {}
+
+    lines = [
+        "detected=true",
+        "subject="
+        + str(
+            quality_context.get("subject")
+            or ""
+        ),
+        "read_only="
+        + str(
+            bool(
+                analysis.get(
+                    "read_only",
+                    True
+                )
+            )
+        ),
+        "automatic_mutation="
+        + str(
+            bool(
+                analysis.get(
+                    "automatic_mutation",
+                    False
+                )
+            )
+        ),
+        "memory_count="
+        + str(
+            int(
+                summary.get(
+                    "memory_count",
+                    0
+                ) or 0
+            )
+        ),
+        "active_count="
+        + str(
+            int(
+                summary.get(
+                    "active_count",
+                    0
+                ) or 0
+            )
+        ),
+        "aging_count="
+        + str(
+            int(
+                summary.get(
+                    "aging_count",
+                    0
+                ) or 0
+            )
+        ),
+        "historical_count="
+        + str(
+            int(
+                summary.get(
+                    "historical_count",
+                    0
+                ) or 0
+            )
+        ),
+        "average_quality_score="
+        + str(
+            summary.get(
+                "average_quality_score",
+                0
+            )
+        ),
+    ]
+
+    for item in (
+        analysis.get("memories") or []
+    )[:20]:
+
+        lines.append(
+            "MEMORY QUALITY | id="
+            + str(item.get("id"))
+            + " | lifecycle="
+            + str(item.get("lifecycle"))
+            + " | quality_score="
+            + str(item.get("quality_score"))
+            + " | freshness_score="
+            + str(item.get("freshness_score"))
+            + " | specificity_score="
+            + str(item.get("specificity_score"))
+            + " | importance="
+            + str(item.get("importance"))
+            + " | version_count="
+            + str(
+                (
+                    item.get("version_support")
+                    or {}
+                ).get(
+                    "version_count",
+                    0
+                )
+            )
+        )
+
+    return "\n".join(lines)
+
+
+
+
 # ============================================================
 # PHASE 8D.1 — NATURAL LANGUAGE MEMORY EVOLUTION INTEGRATION
 # ============================================================
@@ -9188,6 +9415,7 @@ def generate_grounded_answer(
     brain_relationships,
     history,
     evolution_context=None,
+    quality_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -9271,6 +9499,20 @@ state -> current state. Every claim must remain supported by supplied sources.
 
 MEMORY EVOLUTION CONTEXT:
 {evolution_context if evolution_context else "detected=false"}
+
+MEMORY QUALITY / LIFECYCLE CONTEXT:
+{build_memory_quality_prompt_context(quality_context)}
+
+QUALITY QUESTION HANDLING:
+
+If MEMORY QUALITY / LIFECYCLE CONTEXT is marked detected=true, the user is
+asking about the quality, freshness, lifecycle, or current status of stored
+memories. Use the deterministic quality context to describe active, aging,
+or historical status and the calculated quality/freshness signals. Do not
+invent a reliability claim beyond the supplied calculations. Do not imply
+that age alone makes a memory false. Historical memories remain valid
+historical context. The underlying stored memories remain the evidence
+sources for factual claims.
 
 SUPPLIED EVIDENCE:
 
@@ -11697,6 +11939,18 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8E.1
+            # NATURAL LANGUAGE MEMORY QUALITY CONTEXT
+            # ------------------------------------------------
+
+            memory_quality_context = build_memory_quality_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -11710,6 +11964,7 @@ class handler(
                 brain_relationships=brain_relationships,
                 history=history,
                 evolution_context=memory_evolution_context,
+                quality_context=memory_quality_context,
             )
 
             response = grounded_result.get(
