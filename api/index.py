@@ -16191,8 +16191,11 @@ class handler(
                 memories=memories,
                 brain_entities=brain_entities,
                 brain_relationships=brain_relationships,
-                evolution_context=evolution_context,
-                decision_context=decision_context,
+                evolution_context=memory_evolution_context,
+                # Decision context is built later in the chat pipeline,
+                # so planning analysis must not reference an undefined
+                # local variable here.
+                decision_context=None,
             )
 
 
