@@ -2251,6 +2251,80 @@ body.home-active .container {
     font-style: normal;
 }
 
+
+.db-home-how {
+    padding: 90px 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.db-home-how-intro {
+    max-width: 760px;
+    margin-bottom: 38px;
+}
+
+.db-home-how-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.db-home-how-step {
+    padding: 24px;
+    min-height: 220px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 20px;
+    background: rgba(255,255,255,.025);
+}
+
+.db-home-how-step-number {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 50%;
+    color: #b5b5bd;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.db-home-how-step h3 {
+    margin: 42px 0 10px;
+    font-size: 21px;
+    letter-spacing: -.035em;
+}
+
+.db-home-how-step p {
+    margin: 0;
+    color: #8f8f99;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.db-home-simple-line {
+    margin-top: 28px;
+    padding: 18px 22px;
+    border-left: 2px solid rgba(255,255,255,.45);
+    color: #b0b0b8;
+    background: rgba(255,255,255,.025);
+    border-radius: 0 14px 14px 0;
+    font-size: 15px;
+}
+
+.db-home-made-india {
+    margin-top: 18px;
+    text-align: center;
+    color: #8d8d97;
+    font-size: 13px;
+    letter-spacing: .02em;
+}
+
+.db-home-made-india strong {
+    color: #f2f2f2;
+    font-weight: 700;
+}
+
 .db-home-statement {
     padding: 100px 0;
     border-top: 1px solid rgba(255,255,255,.10);
@@ -2354,6 +2428,10 @@ body.home-active .container {
 
     .db-home-architecture {
         padding: 20px;
+    }
+
+    .db-home-how-grid {
+        grid-template-columns: 1fr 1fr;
     }
 
     .db-home-layers,
@@ -2464,6 +2542,69 @@ body.home-active .container {
 
         <div class="db-home-flow">
             MEMORY + DECISIONS → UNDERSTANDING → AI AGENT
+        </div>
+    </section>
+
+
+    <section id="dbHowItWorks" class="db-home-how">
+        <div class="db-home-wrap">
+
+            <div class="db-home-how-intro">
+                <div class="db-home-kicker">How Dusra Brain Works</div>
+                <h2>Think of it as a brain that learns your context.</h2>
+                <p class="db-home-lead">
+                    You don't need to remember everything yourself. You tell
+                    Dusra Brain what matters, and over time it builds a useful
+                    picture of your world.
+                </p>
+            </div>
+
+            <div class="db-home-how-grid">
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">1</div>
+                    <h3>Tell it something</h3>
+                    <p>
+                        Save a fact, idea, experience, project, preference,
+                        decision or anything you want Dusra Brain to remember.
+                    </p>
+                </article>
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">2</div>
+                    <h3>It remembers</h3>
+                    <p>
+                        Important information becomes part of your personal
+                        memory instead of disappearing with one conversation.
+                    </p>
+                </article>
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">3</div>
+                    <h3>It connects the dots</h3>
+                    <p>
+                        Memories, decisions, changes and outcomes can be
+                        connected so your history has more context.
+                    </p>
+                </article>
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">4</div>
+                    <h3>Ask it later</h3>
+                    <p>
+                        When you return, the AI can work with your existing
+                        context instead of making you explain everything again.
+                    </p>
+                </article>
+
+            </div>
+
+            <div class="db-home-simple-line">
+                <strong>In simple words:</strong>
+                You tell it → it remembers → it understands the context →
+                your AI agent works with you.
+            </div>
+
         </div>
     </section>
 
@@ -2617,6 +2758,7 @@ body.home-active .container {
         <div class="db-home-wrap db-home-footer-inner">
             <span>© 2026 Dusra Brain</span>
             <span>Personal Memory · Decision Intelligence · AI Agent</span>
+            <div class="db-home-made-india"><strong>Made in India 🇮🇳</strong> · Built for the world</div>
         </div>
     </footer>
 
