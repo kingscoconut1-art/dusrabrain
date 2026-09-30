@@ -2325,6 +2325,71 @@ body.home-active .container {
     font-weight: 700;
 }
 
+
+.db-home-connect {
+    padding: 90px 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.db-home-connect-intro {
+    max-width: 760px;
+    margin-bottom: 38px;
+}
+
+.db-home-connect-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.db-home-connect-card {
+    min-height: 245px;
+    padding: 28px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 22px;
+    background: rgba(255,255,255,.025);
+}
+
+.db-home-connect-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px;
+    font-size: 22px;
+    background: rgba(255,255,255,.035);
+}
+
+.db-home-connect-card h3 {
+    margin: 28px 0 10px;
+    font-size: 22px;
+    letter-spacing: -.035em;
+}
+
+.db-home-connect-card p {
+    margin: 0;
+    color: #8f8f99;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.db-home-connect-note {
+    margin-top: 24px;
+    padding: 18px 22px;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    color: #9b9ba4;
+    background: rgba(255,255,255,.02);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.db-home-connect-note strong {
+    color: #f1f1f1;
+}
+
 .db-home-statement {
     padding: 100px 0;
     border-top: 1px solid rgba(255,255,255,.10);
@@ -2430,6 +2495,10 @@ body.home-active .container {
         padding: 20px;
     }
 
+    .db-home-connect-grid {
+        grid-template-columns: 1fr;
+    }
+
     .db-home-how-grid {
         grid-template-columns: 1fr 1fr;
     }
@@ -2471,6 +2540,7 @@ body.home-active .container {
                 <a href="#dbMemory">Memory</a>
                 <a href="#dbDecisions">Decisions</a>
                 <a href="#dbAgent">AI Agent</a>
+                <a href="#dbConnect">Connect</a>
             </div>
 
             <a href="#" id="dusraEnterButton" class="db-home-enter">
@@ -2732,6 +2802,63 @@ body.home-active .container {
                 </div>
 
             </div>
+        </div>
+    </section>
+
+
+    <section id="dbConnect" class="db-home-connect">
+        <div class="db-home-wrap">
+
+            <div class="db-home-connect-intro">
+                <div class="db-home-kicker">Connect with your daily life</div>
+                <h2>Your everyday conversations can become part of your brain.</h2>
+                <p class="db-home-lead">
+                    Dusra Brain is designed to connect with the tools you already
+                    use every day — so useful information doesn't have to stay
+                    trapped inside separate apps.
+                </p>
+            </div>
+
+            <div class="db-home-connect-grid">
+
+                <article class="db-home-connect-card">
+                    <div class="db-home-connect-icon">💬</div>
+                    <h3>WhatsApp</h3>
+                    <p>
+                        Bring useful conversations, ideas, notes and information
+                        from your everyday WhatsApp life into your personal
+                        AI context.
+                    </p>
+                </article>
+
+                <article class="db-home-connect-card">
+                    <div class="db-home-connect-icon">✈️</div>
+                    <h3>Telegram</h3>
+                    <p>
+                        Connect conversations and information from Telegram
+                        so your important context can be available when you
+                        need it.
+                    </p>
+                </article>
+
+                <article class="db-home-connect-card">
+                    <div class="db-home-connect-icon">#</div>
+                    <h3>Slack</h3>
+                    <p>
+                        Bring relevant work conversations and knowledge from
+                        Slack into a connected personal intelligence layer.
+                    </p>
+                </article>
+
+            </div>
+
+            <div class="db-home-connect-note">
+                <strong>One brain. Many places.</strong>
+                Your daily tools are where information happens.
+                Dusra Brain is designed to bring the useful context together
+                so you can remember, understand and use it later.
+            </div>
+
         </div>
     </section>
 
