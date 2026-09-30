@@ -1975,9 +1975,652 @@
       backend intelligence in the browser.
     -->
 
+
+/* =========================================================
+   DUSRA BRAIN — ARCHITECTURE HOME PAGE
+   Added without removing or replacing the existing app.
+========================================================= */
+
+body.home-active .header,
+body.home-active .container {
+    display: none !important;
+}
+
+.db-home {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(99,102,241,.13), transparent 34rem),
+        #050505;
+    color: #f5f5f5;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.db-home * {
+    box-sizing: border-box;
+}
+
+.db-home a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.db-home-wrap {
+    width: min(1180px, calc(100% - 40px));
+    margin: 0 auto;
+}
+
+.db-home-nav {
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
+.db-home-brand {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -.045em;
+}
+
+.db-home-links {
+    display: flex;
+    gap: 28px;
+    color: #9696a0;
+    font-size: 13px;
+}
+
+.db-home-links a:hover {
+    color: #fff;
+}
+
+.db-home-enter {
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: #fff;
+    color: #050505 !important;
+    font-weight: 750;
+    font-size: 13px;
+}
+
+.db-home-hero {
+    padding: 105px 0 85px;
+    text-align: center;
+}
+
+.db-home-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid rgba(255,255,255,.11);
+    border-radius: 999px;
+    color: #a9a9b2;
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.db-home-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #fff;
+}
+
+.db-home h1 {
+    margin: 25px auto 18px;
+    max-width: 920px;
+    font-size: clamp(52px, 8vw, 104px);
+    line-height: .92;
+    letter-spacing: -.075em;
+    font-weight: 800;
+}
+
+.db-home-hero p {
+    max-width: 720px;
+    margin: 0 auto;
+    color: #9999a3;
+    font-size: clamp(17px, 2vw, 21px);
+    line-height: 1.6;
+}
+
+.db-home-actions {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 34px;
+    flex-wrap: wrap;
+}
+
+.db-home-primary,
+.db-home-secondary {
+    display: inline-block;
+    padding: 13px 20px;
+    border-radius: 999px;
+    font-weight: 750;
+    font-size: 14px;
+}
+
+.db-home-primary {
+    background: #fff;
+    color: #050505 !important;
+}
+
+.db-home-secondary {
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.045);
+}
+
+.db-home-architecture {
+    margin: 0 auto 100px;
+    padding: 34px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 28px;
+    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+}
+
+.db-home-kicker {
+    color: #70707a;
+    font-size: 11px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+}
+
+.db-home-architecture .db-home-kicker {
+    text-align: center;
+}
+
+.db-home-architecture h2 {
+    text-align: center;
+    margin: 8px 0 30px;
+    font-size: 30px;
+    letter-spacing: -.04em;
+}
+
+.db-home-layers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.db-home-layer,
+.db-home-card,
+.db-home-agent-copy,
+.db-home-agent-diagram {
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(0,0,0,.32);
+    border-radius: 20px;
+}
+
+.db-home-layer {
+    min-height: 230px;
+    padding: 25px;
+}
+
+.db-home-number {
+    color: #666670;
+    font-size: 11px;
+    letter-spacing: .12em;
+}
+
+.db-home-layer h3 {
+    margin: 42px 0 9px;
+    font-size: 25px;
+    letter-spacing: -.04em;
+}
+
+.db-home-layer p,
+.db-home-card p,
+.db-home-agent-copy p {
+    color: #8f8f99;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.db-home-flow {
+    margin-top: 20px;
+    text-align: center;
+    color: #606069;
+    font-size: 12px;
+}
+
+.db-home-section {
+    padding: 90px 0;
+}
+
+.db-home-section-head {
+    max-width: 760px;
+    margin-bottom: 42px;
+}
+
+.db-home-section h2 {
+    margin: 12px 0 16px;
+    font-size: clamp(36px, 5vw, 62px);
+    line-height: 1;
+    letter-spacing: -.06em;
+}
+
+.db-home-lead {
+    color: #92929c;
+    font-size: 18px;
+    line-height: 1.65;
+}
+
+.db-home-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.db-home-card {
+    min-height: 280px;
+    padding: 28px;
+}
+
+.db-home-card h3 {
+    margin: 65px 0 12px;
+    font-size: 25px;
+    letter-spacing: -.04em;
+}
+
+.db-home-chain {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 28px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 22px;
+    background: rgba(255,255,255,.025);
+}
+
+.db-home-chain span {
+    padding: 10px 15px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 999px;
+    background: #09090b;
+    color: #ddd;
+    font-size: 13px;
+}
+
+.db-home-chain i {
+    color: #555;
+    font-style: normal;
+}
+
+.db-home-statement {
+    padding: 100px 0;
+    border-top: 1px solid rgba(255,255,255,.10);
+    border-bottom: 1px solid rgba(255,255,255,.10);
+    text-align: center;
+}
+
+.db-home-statement p {
+    max-width: 900px;
+    margin: 0 auto;
+    font-size: clamp(32px, 5vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -.06em;
+    font-weight: 700;
+}
+
+.db-home-muted {
+    color: #707079;
+}
+
+.db-home-agent {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.db-home-agent-copy,
+.db-home-agent-diagram {
+    padding: 32px;
+}
+
+.db-home-agent-copy h3 {
+    margin: 12px 0;
+    font-size: 32px;
+    letter-spacing: -.05em;
+}
+
+.db-home-diagram {
+    min-height: 330px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+}
+
+.db-home-node {
+    min-width: 190px;
+    padding: 13px 22px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 14px;
+    background: #09090b;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.db-home-arrow {
+    color: #5e5e67;
+}
+
+.db-home-cta {
+    padding: 115px 0 120px;
+    text-align: center;
+    background: radial-gradient(circle at 50% 60%, rgba(255,255,255,.06), transparent 28rem);
+}
+
+.db-home-cta h2 {
+    max-width: 850px;
+    margin: 10px auto 18px;
+}
+
+.db-home-cta p {
+    max-width: 620px;
+    margin: 0 auto 30px;
+    color: #8e8e98;
+}
+
+.db-home-footer {
+    padding: 28px 0;
+    border-top: 1px solid rgba(255,255,255,.10);
+    color: #696972;
+    font-size: 12px;
+}
+
+.db-home-footer-inner {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 800px) {
+    .db-home-links {
+        display: none;
+    }
+
+    .db-home-hero {
+        padding-top: 75px;
+    }
+
+    .db-home-architecture {
+        padding: 20px;
+    }
+
+    .db-home-layers,
+    .db-home-grid,
+    .db-home-agent {
+        grid-template-columns: 1fr;
+    }
+
+    .db-home-section {
+        padding: 65px 0;
+    }
+
+    .db-home-statement {
+        padding: 75px 0;
+    }
+}
+
 </head>
 
-<body>
+<body class="home-active">
+
+
+<!-- =========================================================
+     DUSRA BRAIN — HOME PAGE
+     This is an addition. Existing application markup remains
+     below and is hidden only while the homepage is active.
+========================================================= -->
+
+<div id="dusraHome" class="db-home">
+
+    <div class="db-home-wrap">
+        <nav class="db-home-nav">
+            <a href="#" class="db-home-brand">DUSRA BRAIN</a>
+
+            <div class="db-home-links">
+                <a href="#dbArchitecture">Architecture</a>
+                <a href="#dbMemory">Memory</a>
+                <a href="#dbDecisions">Decisions</a>
+                <a href="#dbAgent">AI Agent</a>
+            </div>
+
+            <a href="#" id="dusraEnterButton" class="db-home-enter">
+                Enter Dusra Brain
+            </a>
+        </nav>
+    </div>
+
+    <section class="db-home-hero">
+        <div class="db-home-wrap">
+            <div class="db-home-eyebrow">
+                <span class="db-home-dot"></span>
+                Personal AI Intelligence
+            </div>
+
+            <h1>Your Personal<br>AI Brain.</h1>
+
+            <p>
+                Personal Memory + Decision Intelligence + AI Agent —
+                one intelligence layer built around you.
+            </p>
+
+            <div class="db-home-actions">
+                <a href="#" id="dusraHeroEnter" class="db-home-primary">
+                    Enter Dusra Brain →
+                </a>
+
+                <a href="#dbArchitecture" class="db-home-secondary">
+                    Explore the architecture
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section id="dbArchitecture" class="db-home-wrap db-home-architecture">
+        <div class="db-home-kicker">The architecture</div>
+        <h2>Three layers. One personal intelligence.</h2>
+
+        <div class="db-home-layers">
+
+            <article class="db-home-layer">
+                <div class="db-home-number">01 / MEMORY</div>
+                <h3>Personal Memory</h3>
+                <p>
+                    Persistent context about your knowledge, experiences,
+                    projects, people and the things that matter to you.
+                </p>
+            </article>
+
+            <article class="db-home-layer">
+                <div class="db-home-number">02 / INTELLIGENCE</div>
+                <h3>Decision Intelligence</h3>
+                <p>
+                    Understand decisions across time — what you chose,
+                    why it changed, what happened and what you learned.
+                </p>
+            </article>
+
+            <article class="db-home-layer">
+                <div class="db-home-number">03 / ACTION</div>
+                <h3>AI Agent</h3>
+                <p>
+                    An intelligent layer that works with your personal
+                    context instead of treating every conversation as isolated.
+                </p>
+            </article>
+
+        </div>
+
+        <div class="db-home-flow">
+            MEMORY + DECISIONS → UNDERSTANDING → AI AGENT
+        </div>
+    </section>
+
+    <section id="dbMemory" class="db-home-section">
+        <div class="db-home-wrap">
+
+            <div class="db-home-section-head">
+                <div class="db-home-kicker">01 / Personal Memory</div>
+                <h2>Remember what matters.</h2>
+                <p class="db-home-lead">
+                    Your second brain should not depend on remembering the
+                    exact words you used yesterday. It should build a
+                    persistent understanding of your world.
+                </p>
+            </div>
+
+            <div class="db-home-grid">
+
+                <article class="db-home-card">
+                    <div class="db-home-number">01</div>
+                    <h3>Context</h3>
+                    <p>
+                        Keep important facts, experiences, projects,
+                        relationships and personal knowledge available over time.
+                    </p>
+                </article>
+
+                <article class="db-home-card">
+                    <div class="db-home-number">02</div>
+                    <h3>Recall</h3>
+                    <p>
+                        Find relevant information from your accumulated
+                        personal context instead of starting from zero.
+                    </p>
+                </article>
+
+                <article class="db-home-card">
+                    <div class="db-home-number">03</div>
+                    <h3>Continuity</h3>
+                    <p>
+                        Turn isolated conversations into a growing
+                        personal knowledge layer.
+                    </p>
+                </article>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="dbDecisions" class="db-home-section">
+        <div class="db-home-wrap">
+
+            <div class="db-home-section-head">
+                <div class="db-home-kicker">02 / Decision Intelligence</div>
+                <h2>Your decisions have a history.</h2>
+                <p class="db-home-lead">
+                    Dusra Brain connects decisions with their context and
+                    evolution, creating a record that can become more useful
+                    as your experience grows.
+                </p>
+            </div>
+
+            <div class="db-home-chain">
+                <span>Decision</span>
+                <i>→</i>
+                <span>Reason</span>
+                <i>→</i>
+                <span>Change</span>
+                <i>→</i>
+                <span>Outcome</span>
+                <i>→</i>
+                <span>Learning</span>
+            </div>
+
+        </div>
+    </section>
+
+    <div class="db-home-statement">
+        <div class="db-home-wrap">
+            <p>
+                Chat is a conversation.<br>
+                <span class="db-home-muted">Dusra Brain is your context.</span>
+            </p>
+        </div>
+    </div>
+
+    <section id="dbAgent" class="db-home-section">
+        <div class="db-home-wrap">
+
+            <div class="db-home-section-head">
+                <div class="db-home-kicker">03 / AI Agent</div>
+                <h2>An agent that works with your brain.</h2>
+                <p class="db-home-lead">
+                    The agent is not the brain by itself. It is the layer
+                    that works across your memory, decisions and current context.
+                </p>
+            </div>
+
+            <div class="db-home-agent">
+
+                <div class="db-home-agent-copy">
+                    <div class="db-home-number">
+                        PERSONAL CONTEXT → INTELLIGENCE
+                    </div>
+
+                    <h3>Recall. Understand. Act.</h3>
+
+                    <p>
+                        Dusra Brain is designed so the agent can operate
+                        with a persistent personal context rather than
+                        treating every interaction as a blank slate.
+                    </p>
+                </div>
+
+                <div class="db-home-agent-diagram">
+                    <div class="db-home-diagram">
+                        <div class="db-home-node">Your Dusra Brain</div>
+                        <div class="db-home-arrow">↓</div>
+                        <div class="db-home-node">Personal Context</div>
+                        <div class="db-home-arrow">↓</div>
+                        <div class="db-home-node">AI Agent</div>
+                        <div class="db-home-arrow">↓</div>
+                        <div class="db-home-node">Recall · Think · Act</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section class="db-home-cta">
+        <div class="db-home-wrap">
+
+            <div class="db-home-kicker">Build your second brain</div>
+
+            <h2>Start building your personal intelligence layer.</h2>
+
+            <p>
+                Your memories, your decisions, your context —
+                connected through one AI brain.
+            </p>
+
+            <a href="#" id="dusraCtaEnter" class="db-home-primary">
+                Enter Dusra Brain →
+            </a>
+
+        </div>
+    </section>
+
+    <footer class="db-home-footer">
+        <div class="db-home-wrap db-home-footer-inner">
+            <span>© 2026 Dusra Brain</span>
+            <span>Personal Memory · Decision Intelligence · AI Agent</span>
+        </div>
+    </footer>
+
+</div>
+
 
     <!-- =====================================================
          HEADER
@@ -7145,7 +7788,7 @@
 
             const response =
                 await fetch(
-                    "/api",
+                    "/api/memory",
                     {
                         method: "POST",
                         headers: {
@@ -7379,7 +8022,7 @@
 
                     const response =
                         await fetch(
-                            "/api",
+                            "/api/memory",
                             {
                                 method:
                                     "POST",
@@ -8965,6 +9608,48 @@
 
         }
     );
+
+
+    /* =========================================================
+       DUSRA BRAIN — HOME PAGE ENTRY
+       Reveals the EXISTING application; no backend/API changes.
+    ========================================================= */
+
+    function enterDusraBrain() {
+        document.body.classList.remove("home-active");
+
+        const home = document.getElementById("dusraHome");
+        if (home) {
+            home.style.display = "none";
+        }
+
+        if (typeof showView === "function" && typeof chatView !== "undefined") {
+            showView(chatView);
+        }
+
+        window.scrollTo(0, 0);
+
+        if (typeof messageInput !== "undefined" && messageInput) {
+            setTimeout(function() {
+                messageInput.focus();
+            }, 50);
+        }
+    }
+
+    [
+        "dusraEnterButton",
+        "dusraHeroEnter",
+        "dusraCtaEnter"
+    ].forEach(function(id) {
+        const button = document.getElementById(id);
+
+        if (button) {
+            button.addEventListener("click", function(event) {
+                event.preventDefault();
+                enterDusraBrain();
+            });
+        }
+    });
 
 </script>
 
