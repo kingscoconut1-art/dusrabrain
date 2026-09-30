@@ -17990,9 +17990,15 @@ class handler(
                 )
             )
 
+            # Step 4P is authoritative only for an explicit decision-
+            # evolution question. Do not let persisted decision history
+            # overwrite unrelated Planning / State / Consistency answers.
             if (
+                is_decision_evolution_question(message)
+                and
                 decision_evolution_answer_verification.get("verified")
-                and decision_evolution_answer.get("answered")
+                and
+                decision_evolution_answer.get("answered")
             ):
                 response = (
                     decision_evolution_answer_verification
@@ -18199,7 +18205,13 @@ class handler(
                         decision_change_evolution_trace,
 
                     "decision_evolution_answer_trace":
-                        decision_evolution_answer_trace,
+                        {
+                            **decision_evolution_answer_trace,
+                            "question_intent_triggered":
+                                is_decision_evolution_question(
+                                    message
+                                ),
+                        },
 
                     "decision_outcome_trace":
                         {
@@ -20832,6 +20844,40 @@ def build_decision_change_evolution_trace(evolution_result):
         "action_created": False,
         "read_only": True,
     }
+
+
+
+def is_decision_evolution_question(message):
+    """
+    True only when the user explicitly asks about the evolution/history
+    of a persisted decision. This prevents Step 4P from overwriting
+    unrelated 8I/8J/8K answers merely because decision history exists.
+    """
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    terms = (
+        "how did my decision change",
+        "how has my decision changed",
+        "how did my decision evolve",
+        "how has my decision evolved",
+        "decision evolution",
+        "decision history",
+        "how did i change my decision",
+        "what changed in my decision",
+        "what has changed in my decision",
+        "earlier decision compared",
+        "previous decision compared",
+        "why did my decision change",
+        "why has my decision changed",
+    )
+
+    return any(
+        term in text
+        for term in terms
+    )
 
 
 # ============================================================
