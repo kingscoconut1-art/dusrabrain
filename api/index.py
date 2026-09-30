@@ -17910,9 +17910,23 @@ class handler(
                     verification_result=decision_history_answer_verification,
                 )
             )
+            decision_history_answer_trace[
+                "authoritative_override_allowed"
+            ] = not is_plan_consistency_question(message)
 
-            if decision_history_answer_verification.get("verified") and decision_history_answer.get("answered"):
-                response = decision_history_answer_verification.get("answer", response).strip()
+            # Step 4L is authoritative only for a direct decision-history
+            # recall question. A plan-consistency question may mention
+            # previous decisions, but must remain under Phase 8K.
+            if (
+                not is_plan_consistency_question(message)
+                and
+                decision_history_answer_verification.get("verified")
+                and decision_history_answer.get("answered")
+            ):
+                response = decision_history_answer_verification.get(
+                    "answer",
+                    response
+                ).strip()
 
 
             # ------------------------------------------------
