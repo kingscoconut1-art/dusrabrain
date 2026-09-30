@@ -8418,10 +8418,119 @@ def build_decision_readiness_intelligence_chat_context(
     plan_state_context=None,
     consistency_context=None,
     unresolved_gap_context=None,
+    brain_entities=None,
+    brain_relationships=None,
+    evolution_context=None,
+    conflict_context=None,
 ):
     if not is_decision_readiness_question(message):
         return {
             "detected": False,
+            "analysis": None,
+        }
+
+    # A readiness question is not itself a planning question, so the
+    # existing 8I/8J/8K/8L chat-context wrappers intentionally do not fire.
+    # For 8M we therefore reconstruct those contexts directly using the
+    # already-retrieved memories and neutral internal analysis prompts.
+    #
+    # This keeps the user-facing question unchanged while allowing 8M to
+    # evaluate the current plan, its state, consistency, and explicit gaps.
+    readiness_plan_context = plan_context
+    readiness_plan_state_context = plan_state_context
+    readiness_consistency_context = consistency_context
+    readiness_unresolved_gap_context = unresolved_gap_context
+
+    try:
+        if not isinstance(readiness_plan_context, dict) or not (
+            readiness_plan_context.get("analysis")
+        ):
+            plan_analysis = analyze_memory_plan(
+                user_id=user_id,
+                message="What is my current plan?",
+                memories=memories,
+                brain_entities=brain_entities,
+                brain_relationships=brain_relationships,
+                evolution_context=evolution_context,
+                decision_context=None,
+                limit=100,
+            )
+            readiness_plan_context = {
+                "detected": True,
+                "analysis": plan_analysis,
+            }
+    except Exception:
+        readiness_plan_context = {
+            "detected": True,
+            "analysis": None,
+        }
+
+    try:
+        if not isinstance(
+            readiness_plan_state_context,
+            dict,
+        ) or not readiness_plan_state_context.get("analysis"):
+            state_analysis = analyze_plan_state_tracking(
+                user_id=user_id,
+                message="What is the current state of my plan?",
+                memories=memories,
+                plan_context=readiness_plan_context,
+                evolution_context=evolution_context,
+                limit=100,
+            )
+            readiness_plan_state_context = {
+                "detected": True,
+                "analysis": state_analysis,
+            }
+    except Exception:
+        readiness_plan_state_context = {
+            "detected": True,
+            "analysis": None,
+        }
+
+    try:
+        if not isinstance(
+            readiness_consistency_context,
+            dict,
+        ) or not readiness_consistency_context.get("analysis"):
+            consistency_analysis = analyze_plan_consistency(
+                user_id=user_id,
+                message="Is my current plan consistent with my previous decisions?",
+                memories=memories,
+                plan_context=readiness_plan_context,
+                plan_state_context=readiness_plan_state_context,
+                conflict_context=conflict_context,
+            )
+            readiness_consistency_context = {
+                "detected": True,
+                "analysis": consistency_analysis,
+            }
+    except Exception:
+        readiness_consistency_context = {
+            "detected": True,
+            "analysis": None,
+        }
+
+    try:
+        if not isinstance(
+            readiness_unresolved_gap_context,
+            dict,
+        ) or not readiness_unresolved_gap_context.get("analysis"):
+            gap_analysis = analyze_unresolved_gaps(
+                user_id=user_id,
+                message="What remains unresolved in my current plan?",
+                memories=memories,
+                plan_context=readiness_plan_context,
+                plan_state_context=readiness_plan_state_context,
+                consistency_context=readiness_consistency_context,
+            )
+            readiness_unresolved_gap_context = {
+                "detected": True,
+                "analysis": gap_analysis,
+            }
+    except Exception:
+        readiness_unresolved_gap_context = {
+            "detected": True,
             "analysis": None,
         }
 
@@ -8430,10 +8539,10 @@ def build_decision_readiness_intelligence_chat_context(
             user_id=user_id,
             message=message,
             memories=memories,
-            plan_context=plan_context,
-            plan_state_context=plan_state_context,
-            consistency_context=consistency_context,
-            unresolved_gap_context=unresolved_gap_context,
+            plan_context=readiness_plan_context,
+            plan_state_context=readiness_plan_state_context,
+            consistency_context=readiness_consistency_context,
+            unresolved_gap_context=readiness_unresolved_gap_context,
         )
     except Exception:
         analysis = None
@@ -8441,6 +8550,10 @@ def build_decision_readiness_intelligence_chat_context(
     return {
         "detected": True,
         "analysis": analysis,
+        "plan_context": readiness_plan_context,
+        "plan_state_context": readiness_plan_state_context,
+        "consistency_context": readiness_consistency_context,
+        "unresolved_gap_context": readiness_unresolved_gap_context,
     }
 
 
@@ -18718,6 +18831,10 @@ class handler(
                     plan_state_context=memory_plan_state_context,
                     consistency_context=memory_plan_consistency_context,
                     unresolved_gap_context=memory_unresolved_gap_context,
+                    brain_entities=brain_entities,
+                    brain_relationships=brain_relationships,
+                    evolution_context=memory_evolution_context,
+                    conflict_context=memory_conflict_context,
                 )
             )
 
