@@ -7185,6 +7185,629 @@ def build_memory_conflict_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8G — MEMORY EVIDENCE STRENGTH INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Measure how strongly a stored claim is supported by the available
+#   memory/evidence context.
+#
+# Important boundary:
+#   Evidence strength is NOT truth.
+#   A high score means the stored context provides stronger support for
+#   the claim; it does not independently verify that the claim is true.
+#
+# Signals:
+#   - number of supporting memories
+#   - subject alignment
+#   - semantic/lexical relevance already calculated upstream
+#   - explicit decision/fact language
+#   - importance
+#   - version/history support
+#   - conflict penalty
+#
+# This phase is READ-ONLY.
+#
+# It does NOT:
+#   - rewrite memories
+#   - delete memories
+#   - declare facts true
+#   - choose a winner between conflicting memories
+#   - automatically consolidate
+# ============================================================
+
+
+def _evidence_strength_tokens(text):
+    return {
+        token.lower()
+        for token in re.findall(
+            r"[A-Za-z0-9_'-]+",
+            str(text or "")
+        )
+        if len(token) >= 3
+    }
+
+
+def _evidence_strength_overlap(
+    claim,
+    memory_text,
+):
+    claim_tokens = _evidence_strength_tokens(
+        claim
+    )
+    memory_tokens = _evidence_strength_tokens(
+        memory_text
+    )
+
+    if not claim_tokens or not memory_tokens:
+        return 0.0
+
+    intersection = len(
+        claim_tokens & memory_tokens
+    )
+    union = len(
+        claim_tokens | memory_tokens
+    )
+
+    return round(
+        intersection / max(1, union),
+        4,
+    )
+
+
+def _evidence_strength_explicitness(text):
+    value = str(text or "").strip().lower()
+
+    if not value:
+        return 0.0
+
+    explicit_markers = (
+        "i decided",
+        "i have decided",
+        "i chose",
+        "i selected",
+        "my decision",
+        "i confirmed",
+        "i approved",
+        "i rejected",
+        "i will",
+        "i plan to",
+        "i am planning to",
+        "user decided",
+        "user has decided",
+        "user confirmed",
+        "user selected",
+        "user approved",
+        "user rejected",
+        "user is planning",
+        "user plans",
+    )
+
+    factual_markers = (
+        "is ",
+        "are ",
+        "has ",
+        "have ",
+        "will ",
+        "currently ",
+        "focus",
+        "focused",
+        "project",
+        "venture",
+        "business",
+    )
+
+    decision_hits = sum(
+        1
+        for marker in explicit_markers
+        if marker in value
+    )
+
+    factual_hits = sum(
+        1
+        for marker in factual_markers
+        if marker in value
+    )
+
+    score = min(
+        1.0,
+        decision_hits * 0.45
+        + factual_hits * 0.10
+    )
+
+    return round(
+        score,
+        4,
+    )
+
+
+def _evidence_strength_version_support(
+    memory_id,
+    user_id,
+):
+    if not memory_id:
+        return {
+            "version_count": 0,
+            "version_support": 0.0,
+        }
+
+    try:
+        ensure_memory_versions_table()
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM memory_versions
+                    WHERE user_id = %s
+                      AND memory_id = %s
+                    """,
+                    (
+                        user_id,
+                        int(memory_id),
+                    )
+                )
+
+                row = cur.fetchone()
+
+        version_count = int(
+            row[0] or 0
+        )
+
+    except Exception:
+        version_count = 0
+
+    if version_count >= 3:
+        score = 1.0
+    elif version_count == 2:
+        score = 0.75
+    elif version_count == 1:
+        score = 0.50
+    else:
+        score = 0.0
+
+    return {
+        "version_count": version_count,
+        "version_support": score,
+    }
+
+
+def _evidence_strength_score(
+    support_count,
+    subject_alignment,
+    relevance,
+    explicitness,
+    importance,
+    version_support,
+    conflict_penalty,
+):
+    count_signal = min(
+        1.0,
+        max(
+            0.0,
+            float(support_count or 0)
+        ) / 4.0
+    )
+
+    importance_signal = (
+        max(
+            0.0,
+            min(
+                10.0,
+                float(importance or 5)
+            )
+        )
+        / 10.0
+    )
+
+    score = (
+        count_signal * 0.20
+        + subject_alignment * 0.20
+        + relevance * 0.20
+        + explicitness * 0.15
+        + importance_signal * 0.10
+        + version_support * 0.05
+        + (1.0 - conflict_penalty) * 0.10
+    )
+
+    return round(
+        max(
+            0.0,
+            min(1.0, score)
+        ),
+        4,
+    )
+
+
+def _evidence_strength_label(score):
+    value = float(score or 0.0)
+
+    if value >= 0.80:
+        return "strong_support"
+
+    if value >= 0.60:
+        return "moderate_support"
+
+    if value >= 0.40:
+        return "limited_support"
+
+    return "weak_support"
+
+
+def _evidence_strength_conflict_penalty(
+    memory_id,
+    conflict_result,
+):
+    if not isinstance(
+        conflict_result,
+        dict
+    ):
+        return 0.0
+
+    for item in (
+        conflict_result.get(
+            "potential_conflicts"
+        )
+        or []
+    ):
+        ids = item.get(
+            "memory_ids"
+        ) or []
+
+        if int(memory_id or 0) in {
+            int(value or 0)
+            for value in ids
+        }:
+            return 0.50
+
+    return 0.0
+
+
+def analyze_memory_evidence_strength(
+    user_id,
+    claim,
+    subject="",
+    memories=None,
+    limit=80,
+):
+    """
+    Assess support strength for a user-provided claim using stored
+    memories. The result is informational and does not establish truth.
+    """
+    claim = str(
+        claim or ""
+    ).strip()
+
+    subject = str(
+        subject or ""
+    ).strip()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 80
+
+    limit = max(
+        1,
+        min(300, limit)
+    )
+
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=claim,
+            session_id="default",
+            limit=limit,
+        )
+
+    candidates = list(
+        memories or []
+    )[:limit]
+
+    # Conflict intelligence is used only as a penalty signal. It does not
+    # determine which memory is correct.
+    try:
+        conflict_result = analyze_memory_conflicts(
+            user_id=user_id,
+            subject=subject,
+            limit=min(
+                120,
+                max(20, limit)
+            ),
+        )
+    except Exception:
+        conflict_result = None
+
+    scored = []
+
+    for memory in candidates:
+        memory_id = int(
+            memory.get("id") or 0
+        )
+
+        memory_subject = str(
+            memory.get(
+                "subject",
+                "general"
+            )
+            or "general"
+        ).strip()
+
+        subject_alignment = 1.0 if (
+            subject
+            and memory_subject.lower()
+            == subject.lower()
+        ) else 0.0
+
+        if not subject_alignment and subject:
+            subject_alignment = 0.50 if (
+                subject.lower()
+                in str(
+                    memory.get(
+                        "memory",
+                        ""
+                    )
+                ).lower()
+            ) else 0.0
+
+        overlap = _evidence_strength_overlap(
+            claim,
+            memory.get(
+                "memory",
+                ""
+            ),
+        )
+
+        semantic_score = float(
+            memory.get(
+                "semantic_score",
+                0.0
+            )
+            or 0.0
+        )
+
+        bm25_score = float(
+            memory.get(
+                "bm25_score",
+                0.0
+            )
+            or 0.0
+        )
+
+        relevance = max(
+            overlap,
+            min(
+                1.0,
+                semantic_score
+            ),
+            min(
+                1.0,
+                bm25_score
+            ),
+        )
+
+        explicitness = (
+            _evidence_strength_explicitness(
+                memory.get(
+                    "memory",
+                    ""
+                )
+            )
+        )
+
+        version_support = (
+            _evidence_strength_version_support(
+                memory_id=memory_id,
+                user_id=user_id,
+            )
+        )
+
+        conflict_penalty = (
+            _evidence_strength_conflict_penalty(
+                memory_id=memory_id,
+                conflict_result=conflict_result,
+            )
+        )
+
+        score = _evidence_strength_score(
+            support_count=1,
+            subject_alignment=subject_alignment,
+            relevance=relevance,
+            explicitness=explicitness,
+            importance=memory.get(
+                "importance",
+                5
+            ),
+            version_support=version_support.get(
+                "version_support",
+                0.0
+            ),
+            conflict_penalty=conflict_penalty,
+        )
+
+        scored.append({
+            "memory_id": memory_id,
+            "memory": str(
+                memory.get(
+                    "memory",
+                    ""
+                )
+                or ""
+            ),
+            "subject": memory_subject,
+            "category": memory.get(
+                "category",
+                "general"
+            ),
+            "importance": int(
+                memory.get(
+                    "importance",
+                    5
+                )
+                or 5
+            ),
+            "created_at": memory.get(
+                "created_at"
+            ),
+            "support_score": score,
+            "support_label": (
+                _evidence_strength_label(
+                    score
+                )
+            ),
+            "signals": {
+                "subject_alignment": round(
+                    subject_alignment,
+                    4
+                ),
+                "text_overlap": overlap,
+                "semantic_relevance": round(
+                    semantic_score,
+                    4
+                ),
+                "bm25_relevance": round(
+                    bm25_score,
+                    4
+                ),
+                "explicitness": explicitness,
+                "version_support": version_support,
+                "conflict_penalty": conflict_penalty,
+            },
+        })
+
+    scored.sort(
+        key=lambda item: (
+            float(
+                item.get(
+                    "support_score",
+                    0.0
+                )
+            ),
+            int(
+                item.get(
+                    "importance",
+                    0
+                )
+                or 0
+            ),
+            str(
+                item.get(
+                    "created_at"
+                )
+                or ""
+            ),
+        ),
+        reverse=True,
+    )
+
+    supporting_memories = [
+        item
+        for item in scored
+        if float(
+            item.get(
+                "support_score",
+                0.0
+            )
+        ) >= 0.40
+    ]
+
+    if supporting_memories:
+        overall_score = round(
+            sum(
+                float(
+                    item.get(
+                        "support_score",
+                        0.0
+                    )
+                )
+                for item in supporting_memories
+            )
+            / len(supporting_memories),
+            4,
+        )
+    else:
+        overall_score = 0.0
+
+    return {
+        "evidence_strength_intelligence": True,
+        "read_only": True,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+        "claim": claim,
+        "subject": subject,
+        "overall_support_score": overall_score,
+        "overall_support_label": (
+            _evidence_strength_label(
+                overall_score
+            )
+        ),
+        "candidate_count": len(candidates),
+        "supporting_memory_count": len(
+            supporting_memories
+        ),
+        "supporting_memories": (
+            supporting_memories[:30]
+        ),
+        "basis": [
+            "stored_memory_content",
+            "subject_alignment",
+            "retrieval_relevance",
+            "explicitness_signal",
+            "importance",
+            "version_history",
+            "conflict_penalty",
+        ],
+    }
+
+
+def build_memory_evidence_trace(result):
+    if not isinstance(
+        result,
+        dict
+    ):
+        return {
+            "detected": False,
+            "overall_support_score": 0.0,
+            "read_only": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get(
+                "evidence_strength_intelligence",
+                False
+            )
+        ),
+        "overall_support_score": float(
+            result.get(
+                "overall_support_score",
+                0.0
+            )
+            or 0.0
+        ),
+        "overall_support_label": str(
+            result.get(
+                "overall_support_label",
+                "weak_support"
+            )
+        ),
+        "supporting_memory_count": int(
+            result.get(
+                "supporting_memory_count",
+                0
+            )
+            or 0
+        ),
+        "truth_not_established": True,
+        "read_only": True,
+        "automatic_mutation": False,
+    }
+
+
+
 # ============================================================
 # PHASE 8F — MEMORY CONFLICT & CONTRADICTION INTELLIGENCE
 # ============================================================
@@ -11516,6 +12139,49 @@ class handler(
         # STEP 22 — BRAIN LEARNING REVIEW HISTORY
 
         # ----------------------------------------------------
+        # PHASE 8G — MEMORY EVIDENCE STRENGTH
+        # ----------------------------------------------------
+
+        if params.get(
+            "memory_evidence"
+        ) == ["true"]:
+
+            try:
+                result = analyze_memory_evidence_strength(
+                    user_id=user_id,
+                    claim=params.get(
+                        "claim",
+                        [""]
+                    )[0],
+                    subject=params.get(
+                        "subject",
+                        [""]
+                    )[0],
+                    limit=params.get(
+                        "limit",
+                        ["80"]
+                    )[0],
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200,
+                )
+
+            except Exception as error:
+                send_json(
+                    self,
+                    {
+                        "error": str(error)
+                    },
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8F — MEMORY CONFLICT INTELLIGENCE
         # ----------------------------------------------------
 
@@ -12203,6 +12869,9 @@ class handler(
 
                 "memory_conflict_natural_language_integration":
                     True,
+
+                "memory_evidence_strength_intelligence":
+                    True,
             }
         )
 
@@ -12260,6 +12929,46 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8G — MEMORY EVIDENCE STRENGTH
+            # ------------------------------------------------
+
+            if action == "analyze_memory_evidence":
+
+                result = analyze_memory_evidence_strength(
+                    user_id=user_id,
+                    claim=body.get(
+                        "claim",
+                        ""
+                    ),
+                    subject=body.get(
+                        "subject",
+                        ""
+                    ),
+                    memories=body.get(
+                        "memories"
+                    ),
+                    limit=body.get(
+                        "limit",
+                        80
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "evidence_trace":
+                            build_memory_evidence_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
 
             # ------------------------------------------------
             # PHASE 8F — MEMORY CONFLICT INTELLIGENCE
