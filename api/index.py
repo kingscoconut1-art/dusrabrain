@@ -6958,6 +6958,233 @@ Return ONLY JSON:
 
 
 
+
+# ============================================================
+# PHASE 8F.1 — NATURAL LANGUAGE CONFLICT INTEGRATION
+# ============================================================
+#
+# Connect Phase 8F deterministic conflict analysis to normal chat.
+#
+# This layer is READ-ONLY. It does not mutate memory, select a winner,
+# or turn a possible conflict into a fact.
+# ============================================================
+
+def is_memory_conflict_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    conflict_terms = (
+        "conflicting memories",
+        "conflicting memory",
+        "memories conflict",
+        "memory conflict",
+        "memories contradict",
+        "memory contradict",
+        "contradictory memories",
+        "contradiction in my memories",
+        "contradictions in my memories",
+        "potentially conflicting",
+        "potential conflict",
+        "any conflict",
+        "any contradictions",
+        "are any of my memories",
+    )
+
+    return any(
+        term in text
+        for term in conflict_terms
+    )
+
+
+def build_memory_conflict_chat_context(
+    user_id,
+    message,
+    memories,
+):
+    """
+    Run the deterministic 8F analyzer for a natural-language conflict
+    question. Stored memories remain the factual evidence.
+    """
+    if not is_memory_conflict_question(message):
+        return {
+            "detected": False,
+            "subject": "",
+            "analysis": None,
+        }
+
+    subject = infer_memory_evolution_subject(
+        message,
+        memories,
+    )
+
+    try:
+        analysis = analyze_memory_conflicts(
+            user_id=user_id,
+            subject=subject,
+            limit=120,
+        )
+    except Exception:
+        analysis = None
+
+    if not isinstance(analysis, dict):
+        analysis = {
+            "conflict_intelligence": False,
+            "read_only": True,
+            "automatic_mutation": False,
+            "subject": subject,
+            "memory_count": 0,
+            "checked_pairs": 0,
+            "potential_conflict_count": 0,
+            "potential_conflicts": [],
+        }
+
+    return {
+        "detected": True,
+        "subject": subject,
+        "analysis": analysis,
+    }
+
+
+def build_memory_conflict_prompt_context(
+    conflict_context,
+):
+    """
+    Convert deterministic 8F output into compact model context.
+    No new personal facts are created here.
+    """
+    if not isinstance(conflict_context, dict):
+        return "detected=false"
+
+    if not conflict_context.get("detected"):
+        return "detected=false"
+
+    analysis = conflict_context.get(
+        "analysis"
+    ) or {}
+
+    lines = [
+        "detected=true",
+        "subject="
+        + str(
+            conflict_context.get("subject")
+            or ""
+        ),
+        "read_only="
+        + str(
+            bool(
+                analysis.get(
+                    "read_only",
+                    True
+                )
+            )
+        ),
+        "automatic_mutation="
+        + str(
+            bool(
+                analysis.get(
+                    "automatic_mutation",
+                    False
+                )
+            )
+        ),
+        "memory_count="
+        + str(
+            int(
+                analysis.get(
+                    "memory_count",
+                    0
+                ) or 0
+            )
+        ),
+        "checked_pairs="
+        + str(
+            int(
+                analysis.get(
+                    "checked_pairs",
+                    0
+                ) or 0
+            )
+        ),
+        "potential_conflict_count="
+        + str(
+            int(
+                analysis.get(
+                    "potential_conflict_count",
+                    0
+                ) or 0
+            )
+        ),
+    ]
+
+    conflicts = (
+        analysis.get(
+            "potential_conflicts"
+        )
+        or []
+    )
+
+    if not conflicts:
+        lines.append(
+            "RESULT=no_apparent_conflict"
+        )
+
+    for item in conflicts[:20]:
+        assessment = (
+            item.get("assessment")
+            or {}
+        )
+
+        lines.append(
+            "CONFLICT ANALYSIS"
+            + " | classification="
+            + str(
+                item.get(
+                    "classification",
+                    "potential_conflict"
+                )
+            )
+            + " | earlier_memory_id="
+            + str(
+                item.get(
+                    "earlier_memory_id"
+                )
+            )
+            + " | later_memory_id="
+            + str(
+                item.get(
+                    "later_memory_id"
+                )
+            )
+            + " | overlap="
+            + str(
+                assessment.get(
+                    "overlap",
+                    0
+                )
+            )
+            + " | temporal_relation="
+            + str(
+                assessment.get(
+                    "temporal_relation",
+                    "unknown"
+                )
+            )
+            + " | action="
+            + str(
+                item.get(
+                    "action",
+                    "review_chronology"
+                )
+            )
+        )
+
+    return "\n".join(lines)
+
+
+
+
 # ============================================================
 # PHASE 8F — MEMORY CONFLICT & CONTRADICTION INTELLIGENCE
 # ============================================================
@@ -9992,6 +10219,7 @@ def generate_grounded_answer(
     history,
     evolution_context=None,
     quality_context=None,
+    conflict_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -10078,6 +10306,21 @@ MEMORY EVOLUTION CONTEXT:
 
 MEMORY QUALITY / LIFECYCLE CONTEXT:
 {build_memory_quality_prompt_context(quality_context)}
+
+MEMORY CONFLICT / CONTRADICTION CONTEXT:
+{build_memory_conflict_prompt_context(conflict_context)}
+
+CONFLICT QUESTION HANDLING:
+
+If MEMORY CONFLICT / CONTRADICTION CONTEXT is marked detected=true,
+answer the user's conflict question using the deterministic 8F analysis.
+Treat "no apparent conflict" as the result only when the supplied analysis
+has zero potential conflicts. If potential conflicts exist, explain them
+as potential conflicts or potential evolution candidates, preserving the
+earlier/later chronology. Never claim that a later memory automatically
+makes an earlier memory false. Never select a winner unless the stored
+evidence explicitly establishes a later decision. Do not invent conflict
+details that are absent from the supplied analysis.
 
 QUALITY QUESTION HANDLING:
 
@@ -11957,6 +12200,9 @@ class handler(
 
                 "memory_conflict_intelligence":
                     True,
+
+                "memory_conflict_natural_language_integration":
+                    True,
             }
         )
 
@@ -12602,6 +12848,18 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8F.1
+            # NATURAL LANGUAGE MEMORY CONFLICT CONTEXT
+            # ------------------------------------------------
+
+            memory_conflict_context = build_memory_conflict_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -12616,6 +12874,7 @@ class handler(
                 history=history,
                 evolution_context=memory_evolution_context,
                 quality_context=memory_quality_context,
+                conflict_context=memory_conflict_context,
             )
 
             response = grounded_result.get(
