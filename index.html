@@ -87,14 +87,18 @@
         .message {
             margin-bottom: 16px;
             display: flex;
+            flex-direction: column;
+            width: 100%;
         }
 
         .message.user {
             justify-content: flex-end;
+            align-items: flex-end;
         }
 
         .bubble {
-            max-width: 80%;
+            width: fit-content;
+            max-width: 92%;
             padding: 12px 15px;
             border-radius: 12px;
             line-height: 1.5;
@@ -112,7 +116,8 @@
         }
 
         .evidence-trace {
-            max-width: 80%;
+            width: 100%;
+            max-width: 92%;
             margin-top: 8px;
             margin-left: 0;
             border: 1px solid #dbe3ec;
@@ -141,6 +146,13 @@
             border-radius: 999px;
             background: #dcfce7;
             color: #166534;
+        }
+
+        .memory-intelligence-intro {
+            padding: 9px 12px 0;
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.45;
         }
 
         .evidence-trace-list {
@@ -207,8 +219,11 @@
         }
 
         @media (max-width: 700px) {
-            .evidence-trace {
+            .bubble,
+            .evidence-trace,
+            .brain-runtime-trace {
                 max-width: 100%;
+                width: 100%;
             }
         }
 
@@ -1637,94 +1652,9 @@
            FULL API ↔ UI PARITY — RECALL + REASONING + REVIEW HISTORY
         ===================================================== */
 
-
-        .brain-memory-intelligence {
-            margin: 12px 0 4px;
-            padding: 14px;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            background: #ffffff;
-        }
-
-        .brain-memory-intelligence-title {
-            font-size: 14px;
-            font-weight: 800;
-            color: #1f2937;
-            margin-bottom: 4px;
-        }
-
-        .brain-memory-intelligence-intro {
-            font-size: 12px;
-            color: #64748b;
-            line-height: 1.45;
-            margin-bottom: 10px;
-        }
-
-        .brain-memory-intelligence-list {
-            display: grid;
-            gap: 8px;
-        }
-
-        .brain-memory-intelligence-card {
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 11px 12px;
-            background: #f8fafc;
-        }
-
-        .brain-memory-intelligence-top {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            margin-bottom: 7px;
-        }
-
-        .brain-memory-intelligence-number {
-            width: 22px;
-            height: 22px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            background: #111827;
-            color: #ffffff;
-            font-size: 11px;
-            font-weight: 800;
-            flex-shrink: 0;
-        }
-
-        .brain-memory-intelligence-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-
-        .brain-memory-intelligence-score,
-        .brain-memory-intelligence-tag {
-            display: inline-block;
-            padding: 3px 7px;
-            border-radius: 999px;
-            font-size: 10px;
-            font-weight: 700;
-            background: #eef2ff;
-            color: #3730a3;
-        }
-
-        .brain-memory-intelligence-text {
-            color: #334155;
-            font-size: 13px;
-            line-height: 1.5;
-        }
-
-        .brain-memory-intelligence-why {
-            margin-top: 7px;
-            color: #64748b;
-            font-size: 11px;
-            line-height: 1.4;
-        }
-
         .brain-runtime-trace {
-            max-width: 80%;
+            width: 100%;
+            max-width: 92%;
             margin-top: 8px;
             border: 1px solid #dbe3ec;
             border-radius: 12px;
@@ -2924,9 +2854,9 @@
             document.createElement("span");
 
         title.textContent =
-            "Evidence Trace · " +
+            "🧠 Memory Intelligence · " +
             trace.length +
-            (trace.length === 1 ? " source" : " sources");
+            (trace.length === 1 ? " memory" : " memories");
 
 
         const status =
@@ -2949,6 +2879,12 @@
         header.appendChild(title);
         header.appendChild(status);
         wrapper.appendChild(header);
+
+        const intro = document.createElement("div");
+        intro.className = "memory-intelligence-intro";
+        intro.textContent =
+            "These are the memories and evidence Dusra Brain used to ground this answer.";
+        wrapper.appendChild(intro);
 
 
         const list =
@@ -2982,8 +2918,9 @@
 
             type.textContent =
                 String(
-                    item.source_type ||
-                    "source"
+                    item.source_type === "memory"
+                        ? "Memory"
+                        : (item.source_type || "Source")
                 );
 
 
@@ -3140,90 +3077,6 @@
 
         if (Object.keys(context).length) {
             const counts = context.source_counts || {};
-
-            const contextMemories = Array.isArray(context.memories)
-                ? context.memories
-                : [];
-
-            if (contextMemories.length) {
-                const memorySection = document.createElement("div");
-                memorySection.className = "brain-memory-intelligence";
-
-                const memoryTitle = document.createElement("div");
-                memoryTitle.className = "brain-memory-intelligence-title";
-                memoryTitle.textContent = "🧠 Memory used";
-                memorySection.appendChild(memoryTitle);
-
-                const memoryIntro = document.createElement("div");
-                memoryIntro.className = "brain-memory-intelligence-intro";
-                memoryIntro.textContent = "These are the memories Dusra Brain selected as relevant to this question.";
-                memorySection.appendChild(memoryIntro);
-
-                const memoryList = document.createElement("div");
-                memoryList.className = "brain-memory-intelligence-list";
-
-                contextMemories.slice(0, 5).forEach(function(memory, index) {
-                    const card = document.createElement("div");
-                    card.className = "brain-memory-intelligence-card";
-
-                    const top = document.createElement("div");
-                    top.className = "brain-memory-intelligence-top";
-
-                    const number = document.createElement("span");
-                    number.className = "brain-memory-intelligence-number";
-                    number.textContent = String(index + 1);
-
-                    const meta = document.createElement("div");
-                    meta.className = "brain-memory-intelligence-meta";
-
-                    const score = Number(memory.recall_score);
-                    if (Number.isFinite(score)) {
-                        const scoreTag = document.createElement("span");
-                        scoreTag.className = "brain-memory-intelligence-score";
-                        scoreTag.textContent = "Relevance " + score.toFixed(2);
-                        meta.appendChild(scoreTag);
-                    }
-
-                    if (memory.bm25_score !== undefined && memory.bm25_score !== null) {
-                        const lexicalTag = document.createElement("span");
-                        lexicalTag.className = "brain-memory-intelligence-tag";
-                        lexicalTag.textContent = "Keyword match";
-                        meta.appendChild(lexicalTag);
-                    }
-
-                    if (memory.subject) {
-                        const subjectTag = document.createElement("span");
-                        subjectTag.className = "brain-memory-intelligence-tag";
-                        subjectTag.textContent = String(memory.subject);
-                        meta.appendChild(subjectTag);
-                    }
-
-                    top.appendChild(number);
-                    top.appendChild(meta);
-                    card.appendChild(top);
-
-                    const memoryText = document.createElement("div");
-                    memoryText.className = "brain-memory-intelligence-text";
-                    memoryText.textContent = String(memory.memory || memory.text || "Memory content unavailable.");
-                    card.appendChild(memoryText);
-
-                    const reasons = Array.isArray(memory.recall_reasons)
-                        ? memory.recall_reasons
-                        : [];
-
-                    if (reasons.length) {
-                        const why = document.createElement("div");
-                        why.className = "brain-memory-intelligence-why";
-                        why.textContent = "Why used: " + reasons.slice(0, 3).join(" · ");
-                        card.appendChild(why);
-                    }
-
-                    memoryList.appendChild(card);
-                });
-
-                memorySection.appendChild(memoryList);
-                body.appendChild(memorySection);
-            }
             const row = document.createElement("div");
             row.className = "brain-runtime-trace-row";
             row.innerHTML =
