@@ -1019,6 +1019,618 @@ def _bm25_rank_memories(query, memories, limit=80):
     }
 
 
+# ============================================================
+# PHASE 8C — SEMANTIC MEMORY RETRIEVAL
+# ============================================================
+#
+# Adds meaning-based retrieval on top of Phase 8A:
+#   1. Existing subject/session candidates
+#   2. BM25 lexical relevance
+#   3. OpenAI text-embedding-3-small semantic similarity
+#   4. Existing Recall Intelligence ranking
+#
+# Embeddings are cached in Postgres as JSON text so this phase
+# does NOT require pgvector, numpy, or a new Python dependency.
+#
+# If OPENAI_API_KEY is not configured or the embedding service
+# fails, retrieval safely falls back to Phase 8A BM25 behavior.
+# Stored memories are never changed by retrieval.
+# ============================================================
+
+SEMANTIC_EMBEDDING_MODEL = "text-embedding-3-small"
+SEMANTIC_EMBEDDING_WEIGHT = 0.70
+LEXICAL_EMBEDDING_WEIGHT = 0.30
+
+
+def get_openai_api_key():
+    return os.environ.get("OPENAI_API_KEY")
+
+
+def ensure_semantic_memory_embeddings_table():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_semantic_embeddings
+                (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    memory_id INTEGER NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    dimensions INTEGER NOT NULL,
+                    embedding TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, memory_id)
+                )
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_memory_semantic_embeddings_user
+                ON memory_semantic_embeddings(user_id)
+                """
+            )
+
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS
+                idx_memory_semantic_embeddings_memory
+                ON memory_semantic_embeddings(memory_id)
+                """
+            )
+
+        conn.commit()
+
+
+def semantic_memory_text(memory):
+    return " ".join(
+        [
+            str(memory.get("memory") or "").strip(),
+            "subject: " + str(memory.get("subject") or "").strip(),
+            "category: " + str(memory.get("category") or "").strip(),
+        ]
+    ).strip()
+
+
+def semantic_content_hash(text):
+    return hashlib.sha256(
+        str(text or "").encode("utf-8")
+    ).hexdigest()
+
+
+def openai_embedding_request(texts):
+    api_key = get_openai_api_key()
+
+    if not api_key:
+        raise Exception("OPENAI_API_KEY is missing")
+
+    clean_texts = [
+        str(item or "").strip()
+        for item in texts
+    ]
+
+    if not clean_texts:
+        return []
+
+    payload = {
+        "model": SEMANTIC_EMBEDDING_MODEL,
+        "input": clean_texts,
+    }
+
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/embeddings",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + api_key,
+            "User-Agent": "Dusra-Brain",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(
+        request,
+        timeout=60
+    ) as response:
+        raw = response.read().decode("utf-8")
+        data = json.loads(raw)
+
+    rows = data.get("data") or []
+    rows.sort(
+        key=lambda item: int(item.get("index", 0))
+    )
+
+    embeddings = []
+
+    for row in rows:
+        vector = row.get("embedding")
+
+        if not isinstance(vector, list) or not vector:
+            raise Exception("Invalid embedding returned")
+
+        embeddings.append(vector)
+
+    if len(embeddings) != len(clean_texts):
+        raise Exception("Embedding count mismatch")
+
+    return embeddings
+
+
+def _vector_norm(vector):
+    total = 0.0
+
+    for value in vector or []:
+        try:
+            number = float(value)
+        except Exception:
+            number = 0.0
+
+        total += number * number
+
+    return total ** 0.5
+
+
+def cosine_similarity(left, right):
+    if not left or not right:
+        return 0.0
+
+    length = min(
+        len(left),
+        len(right)
+    )
+
+    if length <= 0:
+        return 0.0
+
+    dot = 0.0
+    left_norm = 0.0
+    right_norm = 0.0
+
+    for index in range(length):
+        try:
+            a = float(left[index])
+        except Exception:
+            a = 0.0
+
+        try:
+            b = float(right[index])
+        except Exception:
+            b = 0.0
+
+        dot += a * b
+        left_norm += a * a
+        right_norm += b * b
+
+    denominator = (
+        (left_norm ** 0.5)
+        * (right_norm ** 0.5)
+    )
+
+    if denominator <= 0:
+        return 0.0
+
+    return dot / denominator
+
+
+def _load_cached_memory_embeddings(
+    user_id,
+    memories
+):
+    if not memories:
+        return {}
+
+    memory_ids = [
+        int(item["id"])
+        for item in memories
+        if item.get("id") is not None
+    ]
+
+    if not memory_ids:
+        return {}
+
+    ensure_semantic_memory_embeddings_table()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    memory_id,
+                    content_hash,
+                    model,
+                    dimensions,
+                    embedding
+                FROM memory_semantic_embeddings
+                WHERE user_id = %s
+                  AND memory_id = ANY(%s)
+                  AND model = %s
+                """,
+                (
+                    user_id,
+                    memory_ids,
+                    SEMANTIC_EMBEDDING_MODEL,
+                )
+            )
+
+            rows = cur.fetchall()
+
+    result = {}
+
+    for row in rows:
+        try:
+            vector = json.loads(
+                row[4]
+            )
+        except Exception:
+            continue
+
+        result[int(row[0])] = {
+            "content_hash": str(row[1] or ""),
+            "model": str(row[2] or ""),
+            "dimensions": int(row[3] or 0),
+            "embedding": vector,
+        }
+
+    return result
+
+
+def _store_memory_embeddings(
+    user_id,
+    memory_embeddings
+):
+    if not memory_embeddings:
+        return
+
+    ensure_semantic_memory_embeddings_table()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for item in memory_embeddings:
+                cur.execute(
+                    """
+                    INSERT INTO memory_semantic_embeddings
+                    (
+                        user_id,
+                        memory_id,
+                        content_hash,
+                        model,
+                        dimensions,
+                        embedding,
+                        updated_at
+                    )
+                    VALUES
+                    (
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        CURRENT_TIMESTAMP
+                    )
+                    ON CONFLICT (user_id, memory_id)
+                    DO UPDATE SET
+                        content_hash = EXCLUDED.content_hash,
+                        model = EXCLUDED.model,
+                        dimensions = EXCLUDED.dimensions,
+                        embedding = EXCLUDED.embedding,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        user_id,
+                        int(item["memory_id"]),
+                        item["content_hash"],
+                        SEMANTIC_EMBEDDING_MODEL,
+                        int(item["dimensions"]),
+                        json.dumps(
+                            item["embedding"],
+                            separators=(",", ":")
+                        ),
+                    )
+                )
+
+        conn.commit()
+
+
+def semantic_rank_memories(
+    user_id,
+    message,
+    memories
+):
+    """
+    Add semantic_score to every candidate.
+
+    Missing/stale embeddings are generated in one batched request
+    and cached. This keeps subsequent searches fast.
+    """
+    documents = list(memories or [])
+
+    if not documents:
+        return [], {
+            "enabled": bool(get_openai_api_key()),
+            "algorithm": "semantic_cosine",
+            "candidate_count": 0,
+            "embedded_count": 0,
+            "selected_count": 0,
+        }
+
+    if not get_openai_api_key():
+        return documents, {
+            "enabled": False,
+            "algorithm": "semantic_cosine",
+            "candidate_count": len(documents),
+            "embedded_count": 0,
+            "selected_count": len(documents),
+            "fallback": "bm25",
+        }
+
+    cached = _load_cached_memory_embeddings(
+        user_id,
+        documents
+    )
+
+    stale = []
+    usable = {}
+
+    for memory in documents:
+        memory_id = memory.get("id")
+
+        if memory_id is None:
+            continue
+
+        content = semantic_memory_text(memory)
+        content_hash = semantic_content_hash(content)
+        cached_item = cached.get(int(memory_id))
+
+        if (
+            cached_item
+            and cached_item.get("content_hash") == content_hash
+            and cached_item.get("embedding")
+        ):
+            usable[int(memory_id)] = cached_item.get(
+                "embedding"
+            )
+        else:
+            stale.append(
+                {
+                    "memory_id": int(memory_id),
+                    "content_hash": content_hash,
+                    "text": content,
+                }
+            )
+
+    if stale:
+        texts = [
+            item["text"]
+            for item in stale
+        ]
+
+        try:
+            vectors = openai_embedding_request(
+                texts
+            )
+
+            to_store = []
+
+            for item, vector in zip(
+                stale,
+                vectors
+            ):
+                usable[item["memory_id"]] = vector
+
+                to_store.append(
+                    {
+                        "memory_id": item["memory_id"],
+                        "content_hash": item["content_hash"],
+                        "dimensions": len(vector),
+                        "embedding": vector,
+                    }
+                )
+
+            _store_memory_embeddings(
+                user_id,
+                to_store
+            )
+
+        except Exception:
+            return documents, {
+                "enabled": True,
+                "algorithm": "semantic_cosine",
+                "candidate_count": len(documents),
+                "embedded_count": len(usable),
+                "selected_count": len(documents),
+                "fallback": "bm25",
+            }
+
+    try:
+        query_vector = openai_embedding_request(
+            [message]
+        )[0]
+    except Exception:
+        return documents, {
+            "enabled": True,
+            "algorithm": "semantic_cosine",
+            "candidate_count": len(documents),
+            "embedded_count": len(usable),
+            "selected_count": len(documents),
+            "fallback": "bm25",
+        }
+
+    ranked = []
+
+    for memory in documents:
+        memory_id = memory.get("id")
+
+        semantic_score = 0.0
+
+        if memory_id is not None:
+            semantic_score = cosine_similarity(
+                query_vector,
+                usable.get(int(memory_id), [])
+            )
+
+        # Cosine similarity normally falls in [-1, 1].
+        # Clamp to a stable 0..1 relevance range.
+        semantic_score = max(
+            0.0,
+            min(
+                1.0,
+                (semantic_score + 1.0) / 2.0
+            )
+        )
+
+        item = dict(memory)
+        item["semantic_score"] = round(
+            semantic_score,
+            6
+        )
+        ranked.append(item)
+
+    return ranked, {
+        "enabled": True,
+        "algorithm": "semantic_cosine",
+        "candidate_count": len(documents),
+        "embedded_count": len(usable),
+        "selected_count": len(ranked),
+        "model": SEMANTIC_EMBEDDING_MODEL,
+    }
+
+
+def _normalize_bm25_scores(memories):
+    scores = [
+        float(item.get("bm25_score") or 0.0)
+        for item in memories
+    ]
+
+    if not scores:
+        return
+
+    maximum = max(scores)
+    minimum = min(scores)
+    spread = maximum - minimum
+
+    for item in memories:
+        score = float(
+            item.get("bm25_score") or 0.0
+        )
+
+        if maximum <= 0:
+            normalized = 0.0
+        elif spread <= 0:
+            normalized = 1.0
+        else:
+            normalized = (
+                (score - minimum)
+                / spread
+            )
+
+        item["bm25_normalized"] = round(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    normalized
+                )
+            ),
+            6
+        )
+
+
+def hybrid_semantic_retrieve_memories(
+    user_id,
+    message,
+    candidates,
+    limit=80
+):
+    """
+    Blend Phase 8A lexical relevance with Phase 8C semantic relevance.
+
+    Semantic: 70%
+    Lexical: 30%
+    """
+    bm25_candidates, bm25_meta = _bm25_rank_memories(
+        message,
+        candidates,
+        limit=max(
+            len(candidates),
+            int(limit or 80)
+        )
+    )
+
+    _normalize_bm25_scores(
+        bm25_candidates
+    )
+
+    semantic_candidates, semantic_meta = semantic_rank_memories(
+        user_id,
+        message,
+        bm25_candidates
+    )
+
+    ranked = []
+
+    for memory in semantic_candidates:
+        semantic_score = float(
+            memory.get("semantic_score") or 0.0
+        )
+
+        lexical_score = float(
+            memory.get("bm25_normalized") or 0.0
+        )
+
+        combined_score = (
+            semantic_score
+            * SEMANTIC_EMBEDDING_WEIGHT
+            + lexical_score
+            * LEXICAL_EMBEDDING_WEIGHT
+        )
+
+        item = dict(memory)
+        item["hybrid_score"] = round(
+            combined_score,
+            6
+        )
+
+        reasons = list(
+            item.get("recall_reasons") or []
+        )
+
+        if semantic_score >= 0.65:
+            if "semantic match" not in reasons:
+                reasons.append("semantic match")
+
+        item["hybrid_reasons"] = reasons
+        ranked.append(item)
+
+    ranked.sort(
+        key=lambda item: (
+            float(item.get("hybrid_score") or 0.0),
+            float(item.get("semantic_score") or 0.0),
+            float(item.get("bm25_score") or 0.0),
+            int(item.get("importance") or 0),
+        ),
+        reverse=True
+    )
+
+    selected = ranked[
+        :max(1, int(limit or 80))
+    ]
+
+    return selected, {
+        "algorithm": "hybrid_semantic_bm25",
+        "semantic_weight": SEMANTIC_EMBEDDING_WEIGHT,
+        "lexical_weight": LEXICAL_EMBEDDING_WEIGHT,
+        "candidate_count": len(candidates or []),
+        "selected_count": len(selected),
+        "bm25": bm25_meta,
+        "semantic": semantic_meta,
+    }
+
+
 def hybrid_retrieve_memories(
     user_id,
     message,
@@ -1036,11 +1648,14 @@ def hybrid_retrieve_memories(
         )
     )
 
-    return _bm25_rank_memories(
-        message,
-        candidates,
+    selected, semantic_meta = hybrid_semantic_retrieve_memories(
+        user_id=user_id,
+        message=message,
+        candidates=candidates,
         limit=limit
     )
+
+    return selected, semantic_meta
 
 
 def get_relevant_memories(
@@ -6560,6 +7175,16 @@ def score_recall_memory(message, memory, session_id, intent):
         memory.get("created_at")
     )
 
+    semantic_score = max(
+        0.0,
+        min(
+            1.0,
+            float(
+                memory.get("semantic_score") or 0.0
+            )
+        )
+    )
+
     score = (
         token_score * 40.0
         + (30.0 if subject_match else 0.0)
@@ -6567,6 +7192,7 @@ def score_recall_memory(message, memory, session_id, intent):
         + (8.0 if session_match else 0.0)
         + importance * 7.0
         + recency * 5.0
+        + semantic_score * 25.0
     )
 
     reasons = []
@@ -6575,6 +7201,8 @@ def score_recall_memory(message, memory, session_id, intent):
         reasons.append("subject match")
     if overlap:
         reasons.append("keyword overlap")
+    if semantic_score >= 0.65:
+        reasons.append("semantic match")
     if category_match:
         reasons.append("category match")
     if session_match:
@@ -9162,6 +9790,16 @@ class handler(
                             "GROQ_API_KEY"
                         )
                     ),
+
+                "semantic_embeddings_detected":
+                    bool(
+                        os.environ.get(
+                            "OPENAI_API_KEY"
+                        )
+                    ),
+
+                "semantic_embedding_model":
+                    SEMANTIC_EMBEDDING_MODEL,
 
                 "database_detected":
                     bool(
