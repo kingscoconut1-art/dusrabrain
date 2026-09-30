@@ -1,5 +1,6 @@
 import json
 import hashlib
+import math
 import os
 import re
 import urllib.request
@@ -873,6 +874,173 @@ def get_subject_memories(
         }
         for row in rows
     ]
+
+
+
+# ============================================================
+# PHASE 8A — HYBRID MEMORY RETRIEVAL
+# ============================================================
+#
+# Candidate retrieval foundation:
+#   1. Existing subject/session retrieval
+#   2. BM25 lexical relevance
+#   3. Existing Recall Intelligence ranking
+#
+# No stored memory is changed.
+# No database extension is required.
+# Semantic embeddings are reserved for Phase 8B.
+# ============================================================
+
+def _bm25_tokens(text):
+    return [
+        token
+        for token in recall_tokens(str(text or ""))
+        if token
+    ]
+
+
+def _bm25_rank_memories(query, memories, limit=80):
+    documents = list(memories or [])
+
+    if not documents:
+        return [], {
+            "algorithm": "bm25",
+            "candidate_count": 0,
+            "selected_count": 0,
+        }
+
+    query_tokens = _bm25_tokens(query)
+
+    if not query_tokens:
+        selected = documents[:max(1, int(limit or 80))]
+        return selected, {
+            "algorithm": "bm25",
+            "candidate_count": len(documents),
+            "selected_count": len(selected),
+            "query_token_count": 0,
+        }
+
+    tokenized_documents = []
+    document_frequency = {}
+
+    for memory in documents:
+        text = " ".join([
+            str(memory.get("memory") or ""),
+            str(memory.get("subject") or ""),
+            str(memory.get("category") or ""),
+        ])
+        tokens = _bm25_tokens(text)
+        tokenized_documents.append(tokens)
+
+        for token in set(tokens):
+            document_frequency[token] = (
+                document_frequency.get(token, 0) + 1
+            )
+
+    document_count = len(documents)
+    average_length = (
+        sum(len(tokens) for tokens in tokenized_documents)
+        / max(1, document_count)
+    )
+
+    k1 = 1.5
+    b = 0.75
+    ranked = []
+
+    for index, memory in enumerate(documents):
+        tokens = tokenized_documents[index]
+        term_frequency = {}
+
+        for token in tokens:
+            term_frequency[token] = (
+                term_frequency.get(token, 0) + 1
+            )
+
+        document_length = len(tokens)
+        score = 0.0
+
+        for term in query_tokens:
+            tf = term_frequency.get(term, 0)
+            if tf <= 0:
+                continue
+
+            df = document_frequency.get(term, 0)
+
+            idf = math.log(
+                1.0
+                + (
+                    (document_count - df + 0.5)
+                    / (df + 0.5)
+                )
+            )
+
+            denominator = (
+                tf
+                + k1
+                * (
+                    1.0
+                    - b
+                    + b
+                    * (
+                        document_length
+                        / max(1.0, average_length)
+                    )
+                )
+            )
+
+            score += (
+                idf
+                * (
+                    (tf * (k1 + 1.0))
+                    / max(0.0001, denominator)
+                )
+            )
+
+        item = dict(memory)
+        item["bm25_score"] = round(score, 6)
+        ranked.append(item)
+
+    ranked.sort(
+        key=lambda item: (
+            float(item.get("bm25_score") or 0.0),
+            int(item.get("importance") or 0),
+            str(item.get("created_at") or ""),
+        ),
+        reverse=True
+    )
+
+    selected = ranked[:max(1, int(limit or 80))]
+
+    return selected, {
+        "algorithm": "bm25",
+        "candidate_count": len(ranked),
+        "selected_count": len(selected),
+        "query_token_count": len(query_tokens),
+    }
+
+
+def hybrid_retrieve_memories(
+    user_id,
+    message,
+    session_id="default",
+    candidate_limit=200,
+    limit=80
+):
+    candidates = get_relevant_memories(
+        user_id,
+        message,
+        session_id=session_id,
+        limit=max(
+            int(candidate_limit or 200),
+            int(limit or 80)
+        )
+    )
+
+    return _bm25_rank_memories(
+        message,
+        candidates,
+        limit=limit
+    )
 
 
 def get_relevant_memories(
@@ -9136,104 +9304,6 @@ class handler(
 
                 return
 
-            # ------------------------------------------------
-            # BACKWARD-COMPATIBLE MEMORY EDIT/DELETE ACTIONS
-            # ------------------------------------------------
-            # The Memory UI sends POST /api actions. Keep these aliases
-            # ahead of the normal message validation so memory operations
-            # do not require a chat message. Edits use the versioned update
-            # path so existing memory history/versioning is preserved.
-            # ------------------------------------------------
-            if action == "update_memory":
-
-                memory_id = body.get("id")
-
-                if memory_id is None:
-                    send_json(
-                        self,
-                        {"updated": False, "error": "Memory ID is required"},
-                        400
-                    )
-                    return
-
-                try:
-                    result = update_memory_with_version(
-                        user_id=user_id,
-                        memory_id=int(memory_id),
-                        memory=body.get("memory"),
-                        category=body.get("category"),
-                        importance=body.get("importance"),
-                        subject=body.get("subject"),
-                        session_id=body.get("session_id"),
-                        change_reason=str(
-                            body.get("change_reason", "memory_updated")
-                            or "memory_updated"
-                        ),
-                    )
-
-                    send_json(
-                        self,
-                        result,
-                        200 if result.get("updated") or result.get("changed") is False else 400
-                    )
-                except Exception as error:
-                    send_json(
-                        self,
-                        {"updated": False, "error": str(error)},
-                        500
-                    )
-
-                return
-
-
-            if action == "delete_memory":
-
-                memory_id = body.get("id")
-
-                if memory_id is None:
-                    send_json(
-                        self,
-                        {"success": False, "error": "Memory ID is required"},
-                        400
-                    )
-                    return
-
-                try:
-                    with get_connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                """
-                                DELETE FROM memories
-                                WHERE id = %s AND user_id = %s
-                                RETURNING id
-                                """,
-                                (int(memory_id), user_id)
-                            )
-                            deleted = cur.fetchone()
-                        conn.commit()
-
-                    if not deleted:
-                        send_json(
-                            self,
-                            {"success": False, "error": "Memory not found"},
-                            404
-                        )
-                        return
-
-                    send_json(
-                        self,
-                        {"success": True, "deleted_id": deleted[0]}
-                    )
-                except Exception as error:
-                    send_json(
-                        self,
-                        {"success": False, "error": str(error)},
-                        500
-                    )
-
-                return
-
-
             if action == "update_memory_version":
 
                 memory_id = body.get(
@@ -9441,14 +9511,16 @@ class handler(
 
 
             # ------------------------------------------------
-            # SMART MEMORY RETRIEVAL
+            # PHASE 8A
+            # HYBRID MEMORY RETRIEVAL
             # ------------------------------------------------
 
-            memories = get_relevant_memories(
+            memories, hybrid_recall_meta = hybrid_retrieve_memories(
                 user_id,
                 message,
                 session_id=session_id,
-                limit=50
+                candidate_limit=200,
+                limit=80
             )
 
 
@@ -9462,6 +9534,10 @@ class handler(
                 memories=memories,
                 session_id=session_id,
                 limit=30
+            )
+
+            recall_meta["hybrid_retrieval"] = (
+                hybrid_recall_meta
             )
 
 
