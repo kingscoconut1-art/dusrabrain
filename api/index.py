@@ -8028,6 +8028,498 @@ def build_plan_consistency_prompt_context(
 
 
 
+
+# ============================================================
+# PHASE 8L — UNRESOLVED QUESTIONS & DECISION GAPS INTELLIGENCE
+# ============================================================
+#
+# Purpose:
+#   Surface only what remains explicitly unresolved, undecided, or
+#   unsupported in the stored plan context.
+#
+# Classifications:
+#   - unresolved_items
+#   - decision_gap
+#   - information_gap
+#   - no_known_gap
+#   - insufficient_evidence
+#
+# Boundaries:
+#   - READ-ONLY
+#   - no recommendation
+#   - no decision for the user
+#   - no invented missing facts
+#   - "not stored" is different from "not true"
+# ============================================================
+
+
+def is_unresolved_gap_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    terms = (
+        "what remains unresolved",
+        "what is still unresolved",
+        "what remains open",
+        "what is still open",
+        "what is still pending",
+        "what remains pending",
+        "what remains undecided",
+        "what is still undecided",
+        "what decisions are pending",
+        "what decision is still pending",
+        "what do i still need to decide",
+        "what do i need to decide",
+        "what do i still need to figure out",
+        "what do i still need to figure",
+        "what am i missing",
+        "what information am i missing",
+        "what information is missing",
+        "what information do i still need",
+        "what are the gaps",
+        "what are my decision gaps",
+        "what are the unresolved questions",
+        "what questions remain",
+        "what questions are still open",
+        "what is not yet decided",
+        "what has not been decided",
+        "what is unresolved in my plan",
+        "what remains unresolved in my plan",
+        "what is still unresolved in my plan",
+        "what is unresolved about my plan",
+        "decision gaps",
+        "unresolved questions",
+        "open questions",
+    )
+
+    return any(
+        term in text
+        for term in terms
+    )
+
+
+def _unresolved_gap_text(value):
+    if isinstance(value, dict):
+        return str(
+            value.get("memory")
+            or value.get("statement")
+            or value.get("decision")
+            or value.get("item")
+            or value.get("question")
+            or value.get("text")
+            or ""
+        ).strip()
+    return str(value or "").strip()
+
+
+def _extract_explicit_decision_gaps(
+    decisions,
+    open_items=None,
+):
+    gaps = []
+    seen = set()
+
+    for item in list(decisions or []) + list(open_items or []):
+        value = _unresolved_gap_text(item)
+        lower = value.lower()
+
+        if not value:
+            continue
+
+        explicit_gap = any(
+            phrase in lower
+            for phrase in (
+                "whether",
+                "need to decide",
+                "need to determine",
+                "deciding",
+                "considering",
+                "pending",
+                "unresolved",
+                "not yet decided",
+                "wait",
+            )
+        )
+
+        if explicit_gap:
+            key = value.lower()
+            if key not in seen:
+                seen.add(key)
+                gaps.append({
+                    "text": value,
+                    "type": "decision_gap",
+                    "explicit": True,
+                })
+
+    return gaps[:20]
+
+
+def analyze_unresolved_gaps(
+    user_id,
+    message,
+    memories=None,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+):
+    """
+    Deterministically surface unresolved/open items that are explicitly
+    represented in stored planning context.
+
+    This does not infer what the user should decide and does not treat
+    absent information as proof that something is objectively missing.
+    """
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=100,
+        )
+
+    memories = list(memories or [])
+
+    plan_analysis = {}
+    if isinstance(plan_context, dict):
+        plan_analysis = (
+            plan_context.get("analysis")
+            if isinstance(
+                plan_context.get("analysis"),
+                dict,
+            )
+            else {}
+        )
+
+    state_analysis = {}
+    if isinstance(plan_state_context, dict):
+        state_analysis = (
+            plan_state_context.get("analysis")
+            if isinstance(
+                plan_state_context.get("analysis"),
+                dict,
+            )
+            else {}
+        )
+
+    consistency_analysis = {}
+    if isinstance(consistency_context, dict):
+        consistency_analysis = (
+            consistency_context.get("analysis")
+            if isinstance(
+                consistency_context.get("analysis"),
+                dict,
+            )
+            else {}
+        )
+
+    current_plan = _unresolved_gap_text(
+        plan_analysis.get("current_plan")
+    )
+
+    open_items = [
+        _unresolved_gap_text(item)
+        for item in (
+            plan_analysis.get("open_items")
+            or []
+        )
+    ]
+    open_items = [
+        item for item in open_items if item
+    ]
+
+    decisions = [
+        _unresolved_gap_text(item)
+        for item in (
+            plan_analysis.get("related_decisions")
+            or []
+        )
+    ]
+    decisions = [
+        item for item in decisions if item
+    ]
+
+    explicit_gaps = _extract_explicit_decision_gaps(
+        decisions=decisions,
+        open_items=open_items,
+    )
+
+    state_unresolved = [
+        _unresolved_gap_text(item)
+        for item in (
+            state_analysis.get("unresolved_items")
+            or []
+        )
+    ]
+    state_unresolved = [
+        item for item in state_unresolved if item
+    ]
+
+    # Preserve unique explicit wording only.
+    all_unresolved = []
+    seen = set()
+
+    for value in open_items + state_unresolved:
+        key = value.lower()
+        if key not in seen:
+            seen.add(key)
+            all_unresolved.append(value)
+
+    information_gaps = []
+
+    # Only report information gaps when the stored plan itself explicitly
+    # contains a missing-information / gap statement.
+    for value in memories:
+        memory_text = _unresolved_gap_text(value)
+        lower = memory_text.lower()
+
+        if not memory_text:
+            continue
+
+        if any(
+            phrase in lower
+            for phrase in (
+                "missing information",
+                "information gap",
+                "missing data",
+                "need more information",
+                "insufficient information",
+                "not enough information",
+            )
+        ):
+            if memory_text.lower() not in {
+                item.lower()
+                for item in information_gaps
+            }:
+                information_gaps.append(
+                    memory_text
+                )
+
+    classification = "no_known_gap"
+
+    if all_unresolved:
+        classification = "unresolved_items"
+    elif explicit_gaps:
+        classification = "decision_gap"
+    elif information_gaps:
+        classification = "information_gap"
+    elif not memories and not current_plan:
+        classification = "insufficient_evidence"
+    elif (
+        consistency_analysis.get("classification")
+        == "insufficient_evidence"
+    ):
+        classification = "insufficient_evidence"
+
+    # If the same item is both an open item and a decision gap, preserve
+    # the stronger explicit decision-gap label while retaining the wording.
+    if explicit_gaps:
+        classification = "decision_gap"
+
+    return {
+        "unresolved_gap_intelligence": True,
+        "classification": classification,
+        "current_plan": current_plan,
+        "unresolved_items": all_unresolved[:20],
+        "decision_gaps": explicit_gaps[:20],
+        "information_gaps": information_gaps[:20],
+        "decision_gap_count": len(explicit_gaps[:20]),
+        "unresolved_count": len(all_unresolved[:20]),
+        "information_gap_count": len(information_gaps[:20]),
+        "supporting_memory_count": len(memories),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_unresolved_gap_trace(result):
+    if not isinstance(result, dict):
+        return {
+            "detected": False,
+            "classification": "insufficient_evidence",
+            "read_only": True,
+        }
+
+    return {
+        "detected": bool(
+            result.get(
+                "unresolved_gap_intelligence"
+            )
+        ),
+        "classification": str(
+            result.get(
+                "classification",
+                "insufficient_evidence",
+            )
+        ),
+        "unresolved_count": int(
+            result.get(
+                "unresolved_count",
+                0,
+            )
+            or 0
+        ),
+        "decision_gap_count": int(
+            result.get(
+                "decision_gap_count",
+                0,
+            )
+            or 0
+        ),
+        "information_gap_count": int(
+            result.get(
+                "information_gap_count",
+                0,
+            )
+            or 0
+        ),
+        "supporting_memory_count": int(
+            result.get(
+                "supporting_memory_count",
+                0,
+            )
+            or 0
+        ),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+    }
+
+
+def build_unresolved_gap_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+):
+    if not is_unresolved_gap_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_unresolved_gaps(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            plan_state_context=plan_state_context,
+            consistency_context=consistency_context,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
+
+def build_unresolved_gap_prompt_context(
+    gap_context,
+):
+    if not isinstance(gap_context, dict):
+        return "detected=false"
+
+    if not gap_context.get("detected"):
+        return "detected=false"
+
+    result = (
+        gap_context.get("analysis")
+        or {}
+    )
+
+    lines = [
+        "detected=true",
+        "classification="
+        + str(
+            result.get(
+                "classification",
+                "insufficient_evidence",
+            )
+        ),
+        "read_only=true",
+        "prescriptive=false",
+        "truth_not_established=true",
+        "CURRENT_PLAN="
+        + str(
+            result.get(
+                "current_plan",
+                "",
+            )
+            or ""
+        ),
+        "UNRESOLVED_COUNT="
+        + str(
+            result.get(
+                "unresolved_count",
+                0,
+            )
+        ),
+        "DECISION_GAP_COUNT="
+        + str(
+            result.get(
+                "decision_gap_count",
+                0,
+            )
+        ),
+        "INFORMATION_GAP_COUNT="
+        + str(
+            result.get(
+                "information_gap_count",
+                0,
+            )
+        ),
+    ]
+
+    for index, item in enumerate(
+        result.get("unresolved_items") or [],
+        start=1,
+    ):
+        lines.append(
+            "UNRESOLVED_ITEM_"
+            + str(index)
+            + "="
+            + str(item)
+        )
+
+    for index, item in enumerate(
+        result.get("decision_gaps") or [],
+        start=1,
+    ):
+        if isinstance(item, dict):
+            value = item.get("text") or ""
+        else:
+            value = str(item)
+
+        lines.append(
+            "DECISION_GAP_"
+            + str(index)
+            + "="
+            + str(value)
+        )
+
+    for index, item in enumerate(
+        result.get("information_gaps") or [],
+        start=1,
+    ):
+        lines.append(
+            "INFORMATION_GAP_"
+            + str(index)
+            + "="
+            + str(item)
+        )
+
+    return "\n".join(lines)
+
+
 # ============================================================
 # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
 # ============================================================
@@ -14333,6 +14825,7 @@ def generate_grounded_answer(
     plan_context=None,
     plan_state_context=None,
     plan_consistency_context=None,
+    unresolved_gap_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -14465,6 +14958,19 @@ opposing evidence without choosing which personal decision is "right".
 If there is only an unresolved item, describe it as unresolved or a
 potential tension, not as a contradiction. Never turn this analysis into
 a recommendation unless the user explicitly asks for one.
+
+UNRESOLVED QUESTIONS / DECISION GAPS CONTEXT:
+{build_unresolved_gap_prompt_context(unresolved_gap_context)}
+
+UNRESOLVED GAP HANDLING:
+
+If UNRESOLVED QUESTIONS / DECISION GAPS CONTEXT is marked detected=true,
+report only unresolved items explicitly supported by the supplied context.
+Distinguish an unresolved decision from an information gap. Do not invent
+missing facts, deadlines, options, dependencies, or questions. "Not stored"
+means the information is absent from the supplied evidence; it does not mean
+the underlying fact is false. Do not turn a gap into a recommendation or
+choose what the user should do.
 
 PLAN EVOLUTION / STATE TRACKING CONTEXT:
 {build_plan_state_prompt_context(plan_state_context)}
@@ -16707,6 +17213,50 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8L — UNRESOLVED QUESTIONS & DECISION GAPS
+            # ------------------------------------------------
+
+            if action == "analyze_unresolved_gaps":
+
+                result = analyze_unresolved_gaps(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            ""
+                        )
+                    ),
+                    memories=body.get(
+                        "memories"
+                    ),
+                    plan_context=body.get(
+                        "plan_context"
+                    ),
+                    plan_state_context=body.get(
+                        "plan_state_context"
+                    ),
+                    consistency_context=body.get(
+                        "consistency_context"
+                    ),
+                )
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "unresolved_gap_trace":
+                            build_unresolved_gap_trace(
+                                result
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
+
+            # ------------------------------------------------
             # PHASE 8J — PLAN EVOLUTION & STATE TRACKING
             # ------------------------------------------------
 
@@ -17542,6 +18092,21 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8L
+            # NATURAL LANGUAGE UNRESOLVED / DECISION GAP CONTEXT
+            # ------------------------------------------------
+
+            memory_unresolved_gap_context = build_unresolved_gap_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+                plan_context=memory_plan_context,
+                plan_state_context=memory_plan_state_context,
+                consistency_context=memory_plan_consistency_context,
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -17562,6 +18127,7 @@ class handler(
                 plan_context=memory_plan_context,
                 plan_state_context=memory_plan_state_context,
                 plan_consistency_context=memory_plan_consistency_context,
+                unresolved_gap_context=memory_unresolved_gap_context,
             )
 
             response = grounded_result.get(
@@ -17912,13 +18478,17 @@ class handler(
             )
             decision_history_answer_trace[
                 "authoritative_override_allowed"
-            ] = not is_plan_consistency_question(message)
+            ] = (
+                not is_plan_consistency_question(message)
+                and not is_unresolved_gap_question(message)
+            )
 
             # Step 4L is authoritative only for a direct decision-history
-            # recall question. A plan-consistency question may mention
-            # previous decisions, but must remain under Phase 8K.
+            # recall question. Plan-consistency and unresolved-gap questions
+            # must remain under their dedicated intelligence layers.
             if (
                 not is_plan_consistency_question(message)
+                and not is_unresolved_gap_question(message)
                 and
                 decision_history_answer_verification.get("verified")
                 and decision_history_answer.get("answered")
@@ -18009,6 +18579,7 @@ class handler(
             # overwrite unrelated Planning / State / Consistency answers.
             if (
                 is_decision_evolution_question(message)
+                and not is_unresolved_gap_question(message)
                 and
                 decision_evolution_answer_verification.get("verified")
                 and
@@ -18226,6 +18797,13 @@ class handler(
                                     message
                                 ),
                         },
+
+                    "unresolved_gap_trace":
+                        build_unresolved_gap_trace(
+                            memory_unresolved_gap_context.get(
+                                "analysis"
+                            )
+                        ),
 
                     "decision_outcome_trace":
                         {
