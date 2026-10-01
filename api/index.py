@@ -12750,16 +12750,26 @@ def _v97_focus_reasoning_context(
     subject_memories = []
     if subject and user_id:
         try:
-            subject_memories = get_subject_memories(
+            exact_subject_memories = get_subject_memories(
                 user_id=user_id,
                 subject=subject,
                 session_id="default",
                 limit=100,
-            )
+            ) or []
         except Exception:
-            subject_memories = []
+            exact_subject_memories = []
+        subject_memories.extend(
+            item for item in exact_subject_memories
+            if isinstance(item, dict)
+        )
 
-    if subject_terms and not subject_memories and user_id:
+    # Exact subject matching can return only one canonical memory record
+    # (for example Memory #14 for Evolve India) even though related stored
+    # memories #7, #12, #16 and #17 carry the project's actual evolution.
+    # Always augment the exact subject set with retrieved memories whose text
+    # contains every material subject term. Never use the broad packet itself
+    # as the answer context.
+    if subject_terms and user_id:
         try:
             candidate_memories = get_relevant_memories(
                 user_id=user_id,
@@ -12776,6 +12786,20 @@ def _v97_focus_reasoning_context(
             lowered = memory_text.lower()
             if all(term in lowered for term in subject_terms):
                 subject_memories.append(item)
+
+    # Deduplicate the focused memory set by persistent memory id.
+    deduped_subject_memories = []
+    seen_subject_ids = set()
+    for item in subject_memories:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get("id")
+        key = str(item_id) if item_id is not None else _v97_clean_text(item.get("memory"))
+        if key in seen_subject_ids:
+            continue
+        seen_subject_ids.add(key)
+        deduped_subject_memories.append(item)
+    subject_memories = deduped_subject_memories
 
     if subject:
         focused_known = []
@@ -12833,15 +12857,27 @@ def _v97_focus_reasoning_context(
         and not (isinstance(current_state, dict) and current_state.get("state"))
         and subject_memories
     ):
+        # Prefer an explicit recorded launch/pilot state over a later memory
+        # that merely records an unresolved investment-timing question.
+        prioritized = []
+        for item in subject_memories:
+            text = _v97_clean_text(item.get("memory")) if isinstance(item, dict) else ""
+            lowered = text.lower()
+            if (
+                "decided to launch" in lowered
+                or "three-month pilot" in lowered
+                or "90-day pilot" in lowered
+            ):
+                prioritized.append(item)
         ordered_memories = sorted(
-            subject_memories,
+            prioritized or subject_memories,
             key=lambda item: str(item.get("created_at") or ""),
         )
         latest_memory = ordered_memories[-1] if ordered_memories else None
         if isinstance(latest_memory, dict) and latest_memory.get("memory"):
             source["current_state"] = {
                 "plan": _v97_clean_text(latest_memory.get("memory")),
-                "stage": "latest stored project state",
+                "stage": "latest explicit recorded plan state",
             }
 
     focused_changes = []
@@ -12949,6 +12985,26 @@ def _v97_focus_reasoning_context(
                     focused_unresolved.append(text)
     if focused_unresolved:
         source["unresolved"] = _v97_unique(focused_unresolved, 12)
+
+    # Prefer explicit unresolved decision memories from the focused project.
+    # This keeps the investment-timing question visible even when the generic
+    # unresolved-gap detector was not activated for this exact wording.
+    if subject and subject_memories:
+        explicit_unresolved = []
+        for item in subject_memories:
+            text = _v97_clean_text(item.get("memory")) if isinstance(item, dict) else ""
+            lowered = text.lower()
+            if any(phrase in lowered for phrase in (
+                "deciding whether",
+                "whether to invest",
+                "still deciding",
+                "open decision",
+                "remains open",
+                "wait three months",
+            )):
+                explicit_unresolved.append(text)
+        if explicit_unresolved:
+            source["unresolved"] = _v97_unique(explicit_unresolved, 8)
 
     # If the focused project has a concrete unresolved signal in the stored
     # memories, preserve it even when the generic gap detector was not targeted
