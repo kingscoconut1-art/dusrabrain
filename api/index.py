@@ -11821,6 +11821,312 @@ def build_plan_state_trace_v93(analysis):
         "evidence_basis": "persisted_memory_versions",
     }
 
+# ============================================================
+# V9.4 — PERSONAL CONTEXT ASSEMBLY / AI AGENT CONTEXT LAYER
+# ============================================================
+# Purpose:
+#   Assemble a compact, evidence-aware context packet from the existing
+#   Dusra Brain intelligence layers so a future AI Agent can work from the
+#   user's accumulated context instead of treating every message as an
+#   isolated conversation.
+#
+# Design boundaries:
+#   - READ-ONLY
+#   - no memory mutation
+#   - no decision mutation
+#   - no outcome inference
+#   - no recommendation
+#   - no action execution
+#   - reuses existing retrieval/intelligence layers
+#   - preserves source IDs and traceability
+# ============================================================
+
+
+def _v94_clean_text(value, limit=1200):
+    text = " ".join(str(value or "").strip().split())
+    return text[:limit]
+
+
+def _v94_unique_strings(values, limit=20):
+    result = []
+    seen = set()
+    for value in values or []:
+        text = _v94_clean_text(value)
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _v94_memory_items(memories, limit=12):
+    items = []
+    for memory in memories or []:
+        if not isinstance(memory, dict):
+            continue
+        memory_id = memory.get("id")
+        text = _v94_clean_text(
+            memory.get("memory") or memory.get("text") or ""
+        )
+        if not text:
+            continue
+        items.append({
+            "memory_id": memory_id,
+            "memory": text,
+            "category": _v94_clean_text(memory.get("category"), 120),
+            "subject": _v94_clean_text(memory.get("subject"), 160),
+            "importance": memory.get("importance"),
+            "created_at": memory.get("created_at"),
+            "semantic_score": memory.get("semantic_score"),
+            "bm25_score": memory.get("bm25_score"),
+        })
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _v94_trace_sources(evidence_trace, limit=12):
+    result = []
+    seen = set()
+    for source in evidence_trace or []:
+        if not isinstance(source, dict):
+            continue
+        key = (
+            str(source.get("source_type") or ""),
+            str(source.get("source_id") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "source_type": key[0],
+            "source_id": source.get("source_id"),
+            "label": _v94_clean_text(source.get("label"), 180),
+            "text": _v94_clean_text(
+                source.get("text")
+                or source.get("memory")
+                or source.get("decision")
+                or source.get("outcome")
+                or ""
+            ),
+        })
+        if len(result) >= limit:
+            break
+    return result
+
+
+def build_agent_context_v94(
+    message,
+    memories=None,
+    evidence_trace=None,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+    readiness_context=None,
+    decision_outcome_context=None,
+    project_state_context=None,
+    brain_entities=None,
+    brain_relationships=None,
+):
+    """Assemble existing intelligence into a read-only agent context packet."""
+    plan_analysis = {}
+    if isinstance(plan_context, dict):
+        plan_analysis = plan_context.get("analysis") or {}
+        if not isinstance(plan_analysis, dict):
+            plan_analysis = {}
+
+    state_analysis = {}
+    if isinstance(plan_state_context, dict):
+        state_analysis = plan_state_context.get("analysis") or {}
+        if not isinstance(state_analysis, dict):
+            state_analysis = {}
+
+    consistency_analysis = {}
+    if isinstance(consistency_context, dict):
+        consistency_analysis = consistency_context.get("analysis") or {}
+        if not isinstance(consistency_analysis, dict):
+            consistency_analysis = {}
+
+    gap_analysis = {}
+    if isinstance(unresolved_gap_context, dict):
+        gap_analysis = unresolved_gap_context.get("analysis") or {}
+        if not isinstance(gap_analysis, dict):
+            gap_analysis = {}
+
+    readiness_analysis = {}
+    if isinstance(readiness_context, dict):
+        readiness_analysis = readiness_context.get("analysis") or {}
+        if not isinstance(readiness_analysis, dict):
+            readiness_analysis = {}
+
+    project_analysis = {}
+    if isinstance(project_state_context, dict):
+        project_analysis = project_state_context.get("analysis") or {}
+        if not isinstance(project_analysis, dict):
+            project_analysis = {}
+
+    outcome = decision_outcome_context if isinstance(decision_outcome_context, dict) else {}
+
+    current_plan = _v94_clean_text(
+        project_analysis.get("current_plan")
+        or plan_analysis.get("current_plan")
+        or gap_analysis.get("current_plan")
+    )
+
+    current_stage = _v94_clean_text(
+        project_analysis.get("current_stage")
+        or plan_analysis.get("current_stage")
+    )
+
+    unresolved = _v94_unique_strings(
+        list(gap_analysis.get("unresolved_items") or [])
+        + list(gap_analysis.get("decision_gaps") or [])
+        + list(gap_analysis.get("information_gaps") or []),
+        15,
+    )
+
+    objectives = _v94_unique_strings(
+        list(project_analysis.get("objectives") or [])
+        + list(plan_analysis.get("objectives") or []),
+        10,
+    )
+
+    relationships = []
+    for relationship in brain_relationships or []:
+        if not isinstance(relationship, dict):
+            continue
+        relationships.append({
+            "from": _v94_clean_text(relationship.get("from"), 160),
+            "relation": _v94_clean_text(
+                relationship.get("relation")
+                or relationship.get("relationship"),
+                100,
+            ),
+            "to": _v94_clean_text(relationship.get("to"), 160),
+            "confidence": relationship.get("confidence"),
+        })
+        if len(relationships) >= 12:
+            break
+
+    entities = []
+    for entity in brain_entities or []:
+        if not isinstance(entity, dict):
+            continue
+        name = _v94_clean_text(entity.get("name"), 160)
+        if name:
+            entities.append({
+                "name": name,
+                "type": _v94_clean_text(entity.get("type"), 100),
+            })
+        if len(entities) >= 20:
+            break
+
+    packet = {
+        "version": "9.4",
+        "message": _v94_clean_text(message),
+        "memories": _v94_memory_items(memories),
+        "current_plan": current_plan,
+        "current_stage": current_stage,
+        "objectives": objectives,
+        "plan_state": {
+            "subject": _v94_clean_text(state_analysis.get("subject"), 160),
+            "state_count": int(state_analysis.get("state_count") or 0),
+            "transition_count": int(state_analysis.get("transition_count") or 0),
+            "initial_state": _v94_clean_text(
+                (state_analysis.get("initial_state") or {}).get("state")
+            ),
+            "current_state": _v94_clean_text(
+                (state_analysis.get("current_state") or {}).get("state")
+            ),
+        },
+        "consistency": {
+            "classification": _v94_clean_text(
+                consistency_analysis.get("classification"), 120
+            ),
+            "conflict_count": int(
+                consistency_analysis.get("conflict_count") or 0
+            ),
+        },
+        "unresolved": {
+            "classification": _v94_clean_text(
+                gap_analysis.get("classification"), 120
+            ),
+            "items": unresolved,
+            "decision_gap_count": int(gap_analysis.get("decision_gap_count") or 0),
+            "information_gap_count": int(gap_analysis.get("information_gap_count") or 0),
+        },
+        "decision_readiness": {
+            "status": _v94_clean_text(
+                readiness_analysis.get("status"), 120
+            ),
+            "reason": _v94_clean_text(
+                readiness_analysis.get("reason"), 300
+            ),
+            "decision_gap_count": int(
+                readiness_analysis.get("decision_gap_count") or 0
+            ),
+            "information_gap_count": int(
+                readiness_analysis.get("information_gap_count") or 0
+            ),
+        },
+        "decision_outcomes": {
+            "detected": bool(outcome.get("detected")),
+            "count": int(outcome.get("count") or len(outcome.get("outcomes") or [])),
+            "confirmed_only": True,
+        },
+        "entities": entities,
+        "relationships": relationships,
+        "evidence": _v94_trace_sources(evidence_trace),
+        "guardrails": {
+            "read_only": True,
+            "prescriptive": False,
+            "automatic_mutation": False,
+            "outcome_inferred": False,
+            "decision_modified": False,
+            "memory_modified": False,
+        },
+    }
+
+    return packet
+
+
+def build_agent_context_trace_v94(packet):
+    """Compact public trace for verifying V9.4 context assembly."""
+    value = packet if isinstance(packet, dict) else {}
+    memories = value.get("memories") or []
+    evidence = value.get("evidence") or []
+    plan_state = value.get("plan_state") or {}
+    unresolved = value.get("unresolved") or {}
+    guardrails = value.get("guardrails") or {}
+
+    return {
+        "built": bool(value),
+        "version": "9.4",
+        "memory_count": len(memories),
+        "evidence_count": len(evidence),
+        "entity_count": len(value.get("entities") or []),
+        "relationship_count": len(value.get("relationships") or []),
+        "has_current_plan": bool(value.get("current_plan")),
+        "has_current_stage": bool(value.get("current_stage")),
+        "plan_state_count": int(plan_state.get("state_count") or 0),
+        "plan_transition_count": int(plan_state.get("transition_count") or 0),
+        "unresolved_count": len(unresolved.get("items") or []),
+        "decision_gap_count": int(unresolved.get("decision_gap_count") or 0),
+        "information_gap_count": int(unresolved.get("information_gap_count") or 0),
+        "read_only": bool(guardrails.get("read_only", True)),
+        "prescriptive": bool(guardrails.get("prescriptive", False)),
+        "automatic_mutation": bool(guardrails.get("automatic_mutation", False)),
+        "outcome_inferred": bool(guardrails.get("outcome_inferred", False)),
+        "decision_modified": bool(guardrails.get("decision_modified", False)),
+        "memory_modified": bool(guardrails.get("memory_modified", False)),
+    }
+
 # PHASE 9.2 — PLAN EVIDENCE & GROUNDING
 # ============================================================
 #
@@ -20960,6 +21266,8 @@ class handler(
                     True,
                 "plan_consistency_tension_intelligence":
                     True,
+                "agent_context_assembly_v94":
+                    True,
             }
         )
 
@@ -21139,9 +21447,6 @@ class handler(
                         "evidence_trace": [],
                         "evidence_count": 0,
                         "grounded": bool(outcome_result.get("persisted")),
-                        "plan_state_tracking_trace":
-                        plan_state_trace_v93,
-
                     "decision_outcome_trace":
                             build_decision_outcome_trace(
                                 outcome_result
@@ -23713,6 +24018,29 @@ class handler(
                     }
 
             # ------------------------------------------------
+            # V9.4 — PERSONAL CONTEXT / AI AGENT CONTEXT ASSEMBLY
+            # ------------------------------------------------
+            # Read-only context packet built from existing intelligence.
+            agent_context_v94 = build_agent_context_v94(
+                message=message,
+                memories=memories,
+                evidence_trace=evidence_trace,
+                plan_context=memory_plan_context,
+                plan_state_context=memory_plan_state_context,
+                consistency_context=memory_plan_consistency_context,
+                unresolved_gap_context=memory_unresolved_gap_context,
+                readiness_context=memory_decision_readiness_context,
+                decision_outcome_context=memory_decision_outcome_history_context,
+                project_state_context=memory_project_state_context,
+                brain_entities=brain_entities,
+                brain_relationships=brain_relationships,
+            )
+
+            agent_context_trace_v94 = build_agent_context_trace_v94(
+                agent_context_v94
+            )
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -23866,6 +24194,12 @@ class handler(
 
                     "decision_context_trace":
                         decision_context_trace,
+
+                    "agent_context_trace_v94":
+                        agent_context_trace_v94,
+
+                    "agent_context_v94":
+                        agent_context_v94,
 
                     "decision_context_interpretation_trace":
                         decision_context_interpretation_trace,
