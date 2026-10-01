@@ -12127,6 +12127,155 @@ def build_agent_context_trace_v94(packet):
         "memory_modified": bool(guardrails.get("memory_modified", False)),
     }
 
+# ============================================================
+# V9.5 — AI AGENT CONTEXT GROUNDING & SAFETY GATE
+# ============================================================
+
+
+def _v95_clean_text(value, limit=500):
+    text = " ".join(str(value or "").strip().split())
+    return text[:limit]
+
+
+def _v95_list(value, limit=20):
+    if not isinstance(value, (list, tuple)):
+        return []
+    result = []
+    for item in value:
+        text = _v95_clean_text(item, 500)
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _v95_evidence_text(source):
+    if not isinstance(source, dict):
+        return ""
+    return _v95_clean_text(
+        " ".join(str(source.get(key) or "") for key in (
+            "text", "label", "title", "memory", "decision", "outcome", "learning"
+        )),
+        1200,
+    ).lower()
+
+
+def _v95_supported(value, evidence):
+    text = _v95_clean_text(value, 600).lower()
+    if not text:
+        return False
+    words = [token for token in re.findall(r"[a-z0-9]+", text) if len(token) >= 4]
+    if not words:
+        return False
+    evidence_text = " ".join(_v95_evidence_text(item) for item in evidence if isinstance(item, dict))
+    if not evidence_text:
+        return False
+    hits = sum(1 for word in set(words) if word in evidence_text)
+    required = max(1, min(3, len(set(words))))
+    return hits >= required
+
+
+def validate_agent_context_v95(packet):
+    """Deterministically validate V9.4 context for future agent consumption."""
+    value = packet if isinstance(packet, dict) else {}
+    evidence = [item for item in (value.get("evidence") or []) if isinstance(item, dict)]
+    memories = [item for item in (value.get("memories") or []) if isinstance(item, dict)]
+    guardrails = value.get("guardrails") or {}
+    unresolved = value.get("unresolved") or {}
+    decision_readiness = value.get("decision_readiness") or {}
+    plan_state = value.get("plan_state") or {}
+
+    fields = {"current_plan": value.get("current_plan"), "current_stage": value.get("current_stage")}
+    field_checks = {}
+    for name, field_value in fields.items():
+        text = _v95_clean_text(field_value)
+        field_checks[name] = {
+            "present": bool(text),
+            "evidence_supported": _v95_supported(text, evidence),
+        }
+
+    evidence_ids = []
+    for item in evidence:
+        source_id = item.get("source_id")
+        if source_id is not None and source_id not in evidence_ids:
+            evidence_ids.append(source_id)
+
+    hard_guardrails = {
+        "read_only": bool(guardrails.get("read_only", True)),
+        "prescriptive": bool(guardrails.get("prescriptive", False)),
+        "automatic_mutation": bool(guardrails.get("automatic_mutation", False)),
+        "outcome_inferred": bool(guardrails.get("outcome_inferred", False)),
+        "decision_modified": bool(guardrails.get("decision_modified", False)),
+        "memory_modified": bool(guardrails.get("memory_modified", False)),
+    }
+    guardrails_safe = (
+        hard_guardrails["read_only"]
+        and not hard_guardrails["prescriptive"]
+        and not hard_guardrails["automatic_mutation"]
+        and not hard_guardrails["outcome_inferred"]
+        and not hard_guardrails["decision_modified"]
+        and not hard_guardrails["memory_modified"]
+    )
+
+    supported_fields = sum(1 for item in field_checks.values() if item["present"] and item["evidence_supported"])
+    present_fields = sum(1 for item in field_checks.values() if item["present"])
+
+    blockers = []
+    if not evidence:
+        blockers.append("no_evidence_sources")
+    if present_fields and supported_fields < present_fields:
+        blockers.append("context_field_not_directly_supported")
+    if not guardrails_safe:
+        blockers.append("agent_guardrail_violation")
+    if not memories:
+        blockers.append("no_memory_context")
+
+    status = "ready" if not blockers else "restricted"
+    return {
+        "built": True,
+        "version": "9.5",
+        "status": status,
+        "safe_to_consume": status == "ready",
+        "memory_count": len(memories),
+        "evidence_count": len(evidence),
+        "unique_evidence_ids": len(evidence_ids),
+        "context_fields": field_checks,
+        "supported_field_count": supported_fields,
+        "present_field_count": present_fields,
+        "plan_state_available": bool(plan_state.get("state_count") or plan_state.get("current_state")),
+        "unresolved_count": len(_v95_list(unresolved.get("items"), 20)),
+        "decision_readiness_status": _v95_clean_text(decision_readiness.get("status"), 120),
+        "guardrails": hard_guardrails,
+        "guardrails_safe": guardrails_safe,
+        "blockers": blockers,
+        "tool_execution": False,
+        "automatic_action": False,
+    }
+
+
+def build_agent_context_quality_trace_v95(validation):
+    """Compact public verification trace for the V9.5 safety/grounding gate."""
+    value = validation if isinstance(validation, dict) else {}
+    return {
+        "built": bool(value.get("built")),
+        "version": "9.5",
+        "status": _v95_clean_text(value.get("status"), 50),
+        "safe_to_consume": bool(value.get("safe_to_consume", False)),
+        "memory_count": int(value.get("memory_count") or 0),
+        "evidence_count": int(value.get("evidence_count") or 0),
+        "unique_evidence_ids": int(value.get("unique_evidence_ids") or 0),
+        "supported_field_count": int(value.get("supported_field_count") or 0),
+        "present_field_count": int(value.get("present_field_count") or 0),
+        "plan_state_available": bool(value.get("plan_state_available", False)),
+        "unresolved_count": int(value.get("unresolved_count") or 0),
+        "decision_readiness_status": _v95_clean_text(value.get("decision_readiness_status"), 80),
+        "guardrails_safe": bool(value.get("guardrails_safe", False)),
+        "blockers": _v95_list(value.get("blockers"), 10),
+        "tool_execution": False,
+        "automatic_action": False,
+    }
+
 # PHASE 9.2 — PLAN EVIDENCE & GROUNDING
 # ============================================================
 #
@@ -24041,6 +24190,18 @@ class handler(
             )
 
             # ------------------------------------------------
+            # V9.5 — AGENT CONTEXT GROUNDING & SAFETY GATE
+            # ------------------------------------------------
+            agent_context_quality_v95 = validate_agent_context_v95(
+                agent_context_v94
+            )
+            agent_context_quality_trace_v95 = (
+                build_agent_context_quality_trace_v95(
+                    agent_context_quality_v95
+                )
+            )
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -24200,6 +24361,12 @@ class handler(
 
                     "agent_context_v94":
                         agent_context_v94,
+
+                    "agent_context_quality_trace_v95":
+                        agent_context_quality_trace_v95,
+
+                    "agent_context_quality_v95":
+                        agent_context_quality_v95,
 
                     "decision_context_interpretation_trace":
                         decision_context_interpretation_trace,
