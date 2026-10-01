@@ -15727,13 +15727,24 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
             # both options. This is still a direct extraction from stored
             # text; no new benefit/risk/outcome is inferred.
             option_lower = option.lower()
+            # The persisted Decision #2 may store the supporting rationale
+            # directly inside the decision text rather than the dedicated
+            # rationale column. Extract only the wait-specific clause from
+            # that stored text.
+            rationale_candidates = [rationale, decision_text]
             if "wait three months" in option_lower:
-                if rationale and any(term in rationale.lower() for term in (
-                    "reduce risk", "validate the market", "wait three months"
-                )):
-                    supporting_memory_text.append(
-                        "Stored rationale: " + rationale
-                    )
+                for candidate in rationale_candidates:
+                    candidate = _phase_8p_clean_text(candidate)
+                    if not candidate:
+                        continue
+                    candidate_lower = candidate.lower()
+                    if any(term in candidate_lower for term in (
+                        "reduce risk", "validate the market", "wait three months"
+                    )):
+                        supporting_memory_text.append(
+                            "Stored rationale: " + candidate
+                        )
+                        break
             elif "invest in evolve india now" in option_lower:
                 # The decision records this as an option, but the stored
                 # rationale does not provide an option-specific supporting
