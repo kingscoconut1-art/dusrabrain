@@ -1,13 +1,18 @@
 import json
 import hashlib
+import hmac
+import base64
+import secrets
+import time
 import math
 import os
 import re
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode, quote
 from http.server import BaseHTTPRequestHandler
+from http.cookies import SimpleCookie
 
 import psycopg
 
@@ -16,38 +21,368 @@ import psycopg
 # RESPONSE
 # ============================================================
 
-def send_json(handler, data, status=200):
-
+def send_json(handler, data, status=200, headers=None):
     body = json.dumps(
         data,
         ensure_ascii=False
     ).encode("utf-8")
 
     handler.send_response(status)
-
     handler.send_header(
         "Content-Type",
         "application/json; charset=utf-8"
     )
-
     handler.send_header(
         "Access-Control-Allow-Origin",
         "*"
     )
-
     handler.send_header(
         "Access-Control-Allow-Methods",
         "GET,POST,PUT,DELETE,OPTIONS"
     )
-
     handler.send_header(
         "Access-Control-Allow-Headers",
         "Content-Type"
     )
+    if headers:
+        for key, value in headers.items():
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    handler.send_header(str(key), str(item))
+            else:
+                handler.send_header(str(key), str(value))
+    handler.end_headers()
+    handler.wfile.write(body)
 
+
+def send_redirect(handler, location, status=302, headers=None):
+    handler.send_response(status)
+    handler.send_header("Location", location)
+    if headers:
+        for key, value in headers.items():
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    handler.send_header(str(key), str(item))
+            else:
+                handler.send_header(str(key), str(value))
     handler.end_headers()
 
-    handler.wfile.write(body)
+
+# ============================================================
+# DUSRA BRAIN — ACCOUNT AUTHENTICATION
+# ============================================================
+
+AUTH_COOKIE_NAME = "dusra_session"
+OAUTH_STATE_COOKIE_NAME = "dusra_oauth_state"
+AUTH_SESSION_SECONDS = 60 * 60 * 24 * 30
+OAUTH_STATE_SECONDS = 10 * 60
+
+
+def _auth_secret():
+    configured = os.environ.get("AUTH_SECRET")
+    if configured:
+        return configured.encode("utf-8")
+    database_url = get_database_url() if "get_database_url" in globals() else os.environ.get("DATABASE_URL", "")
+    if not database_url:
+        raise Exception("AUTH_SECRET or DATABASE_URL is required for authentication")
+    return hashlib.sha256(("dusra-brain-auth:" + database_url).encode("utf-8")).digest()
+
+
+def _b64(value):
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _unb64(value):
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def _signed_value(payload):
+    raw = payload.encode("utf-8")
+    sig = hmac.new(_auth_secret(), raw, hashlib.sha256).digest()
+    return _b64(raw) + "." + _b64(sig)
+
+
+def _verify_signed_value(value):
+    try:
+        encoded, encoded_sig = str(value or "").split(".", 1)
+        raw = _unb64(encoded)
+        sig = _unb64(encoded_sig)
+        expected = hmac.new(_auth_secret(), raw, hashlib.sha256).digest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        return raw.decode("utf-8")
+    except Exception:
+        return None
+
+
+def _cookie_dict(handler):
+    cookie = SimpleCookie()
+    try:
+        cookie.load(handler.headers.get("Cookie", ""))
+    except Exception:
+        return {}
+    return {key: morsel.value for key, morsel in cookie.items()}
+
+
+def _cookie_header(name, value, max_age, http_only=True):
+    secure = os.environ.get("PUBLIC_BASE_URL", "").startswith("https://") or os.environ.get("VERCEL", "") == "1"
+    parts = [f"{name}={value}", "Path=/", "SameSite=Lax", f"Max-Age={int(max_age)}"]
+    if http_only:
+        parts.append("HttpOnly")
+    if secure:
+        parts.append("Secure")
+    return "; ".join(parts)
+
+
+def _clear_cookie_header(name):
+    return _cookie_header(name, "", 0)
+
+
+def _public_base_url(handler=None):
+    configured = os.environ.get("PUBLIC_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
+    if handler is not None:
+        proto = handler.headers.get("X-Forwarded-Proto", "https")
+        host = handler.headers.get("Host", "localhost")
+        return f"{proto}://{host}".rstrip("/")
+    return "http://localhost"
+
+
+def _ensure_auth_tables():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS dusra_users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    password_hash TEXT,
+                    display_name TEXT,
+                    provider TEXT,
+                    provider_subject TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+        conn.commit()
+
+
+def _user_id_for_email(email):
+    return "user_" + hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:32]
+
+
+def _hash_password(password):
+    password = str(password or "")
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters.")
+    if len(password) > 1024:
+        raise ValueError("Password is too long.")
+    iterations = 310000
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return "pbkdf2_sha256$%d$%s$%s" % (iterations, _b64(salt), _b64(digest))
+
+
+def _verify_password(password, encoded):
+    try:
+        algorithm, iterations, salt_b64, digest_b64 = str(encoded).split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        iterations = int(iterations)
+        salt = _unb64(salt_b64)
+        expected = _unb64(digest_b64)
+        actual = hashlib.pbkdf2_hmac("sha256", str(password or "").encode("utf-8"), salt, iterations)
+        return hmac.compare_digest(actual, expected)
+    except Exception:
+        return False
+
+
+def _get_user_by_email(email):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, email, password_hash, display_name FROM dusra_users WHERE LOWER(email)=LOWER(%s) LIMIT 1", (email,))
+            return cur.fetchone()
+
+
+def _get_user_by_id(user_id):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, email, display_name FROM dusra_users WHERE id=%s LIMIT 1", (user_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {"id": row[0], "email": row[1], "name": row[2] or ""}
+
+
+def _create_email_user(email, password):
+    normalized = str(email or "").strip().lower()
+    if not normalized or "@" not in normalized:
+        raise ValueError("Enter a valid email address.")
+    password_hash = _hash_password(password)
+    user_id = _user_id_for_email(normalized)
+    _ensure_auth_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM dusra_users WHERE LOWER(email)=LOWER(%s) LIMIT 1", (normalized,))
+            if cur.fetchone():
+                raise ValueError("An account with this email already exists. Please log in.")
+            cur.execute("INSERT INTO dusra_users (id,email,password_hash) VALUES (%s,%s,%s)", (user_id, normalized, password_hash))
+        conn.commit()
+    return {"id": user_id, "email": normalized, "name": ""}
+
+
+def _login_email_user(email, password):
+    normalized = str(email or "").strip().lower()
+    _ensure_auth_tables()
+    row = _get_user_by_email(normalized)
+    if not row or not row[2] or not _verify_password(password, row[2]):
+        raise ValueError("Invalid email or password.")
+    return {"id": row[0], "email": row[1], "name": row[3] or ""}
+
+
+def _make_session_cookie(user_id):
+    exp = int(time.time()) + AUTH_SESSION_SECONDS
+    token = _signed_value(f"{user_id}|{exp}")
+    return _cookie_header(AUTH_COOKIE_NAME, token, AUTH_SESSION_SECONDS)
+
+
+def _get_authenticated_user(handler):
+    value = _cookie_dict(handler).get(AUTH_COOKIE_NAME)
+    payload = _verify_signed_value(value)
+    if not payload:
+        return None
+    try:
+        user_id, exp = payload.rsplit("|", 1)
+        if int(exp) < int(time.time()):
+            return None
+    except Exception:
+        return None
+    return _get_user_by_id(user_id)
+
+
+def _require_authenticated_user(handler):
+    user = _get_authenticated_user(handler)
+    if not user:
+        send_json(handler, {"authenticated": False, "error": "Authentication required."}, 401)
+        return None
+    return user
+
+
+def _oauth_provider_config(provider, handler):
+    provider = provider.lower()
+    base = _public_base_url(handler)
+    callback = base + "/api/auth/callback/" + provider
+    configs = {
+        "google": {
+            "client_id": os.environ.get("GOOGLE_CLIENT_ID"),
+            "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET"),
+            "authorize": "https://accounts.google.com/o/oauth2/v2/auth",
+            "token": "https://oauth2.googleapis.com/token",
+            "userinfo": "https://openidconnect.googleapis.com/v1/userinfo",
+            "scope": "openid email profile",
+        },
+        "github": {
+            "client_id": os.environ.get("GITHUB_CLIENT_ID"),
+            "client_secret": os.environ.get("GITHUB_CLIENT_SECRET"),
+            "authorize": "https://github.com/login/oauth/authorize",
+            "token": "https://github.com/login/oauth/access_token",
+            "userinfo": "https://api.github.com/user",
+            "scope": "read:user user:email",
+        },
+        "vercel": {
+            "client_id": os.environ.get("VERCEL_CLIENT_ID"),
+            "client_secret": os.environ.get("VERCEL_CLIENT_SECRET"),
+            "authorize": "https://vercel.com/oauth/authorize",
+            "token": "https://api.vercel.com/login/oauth/token",
+            "userinfo": "https://api.vercel.com/login/oauth/userinfo",
+            "scope": "openid email profile",
+        },
+    }
+    if provider not in configs:
+        raise ValueError("Unsupported authentication provider.")
+    config = configs[provider]
+    if not config.get("client_id") or not config.get("client_secret"):
+        raise ValueError(provider.title() + " OAuth is not configured on the server yet.")
+    config["callback"] = callback
+    return config
+
+
+def _oauth_state_cookie(provider):
+    nonce = secrets.token_urlsafe(24)
+    exp = int(time.time()) + OAUTH_STATE_SECONDS
+    value = _signed_value(f"{provider}|{nonce}|{exp}")
+    return value, _cookie_header(OAUTH_STATE_COOKIE_NAME, value, OAUTH_STATE_SECONDS)
+
+
+def _verify_oauth_state(handler, provider, returned_state):
+    value = _cookie_dict(handler).get(OAUTH_STATE_COOKIE_NAME)
+    if not value or not returned_state or not hmac.compare_digest(value, returned_state):
+        return False
+    payload = _verify_signed_value(value)
+    if not payload:
+        return False
+    try:
+        saved_provider, _nonce, exp = payload.split("|", 2)
+        return saved_provider == provider and int(exp) >= int(time.time())
+    except Exception:
+        return False
+
+
+def _http_json(url, method="GET", data=None, headers=None):
+    request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _exchange_oauth(provider, code, handler):
+    config = _oauth_provider_config(provider, handler)
+    token_payload = urlencode({
+        "client_id": config["client_id"],
+        "client_secret": config["client_secret"],
+        "code": code,
+        "redirect_uri": config["callback"],
+    }).encode("utf-8")
+    token_headers = {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json", "User-Agent": "Dusra-Brain"}
+    token = _http_json(config["token"], method="POST", data=token_payload, headers=token_headers)
+    access_token = token.get("access_token")
+    if not access_token:
+        raise ValueError("OAuth provider did not return an access token.")
+    user_headers = {"Authorization": "Bearer " + access_token, "Accept": "application/json", "User-Agent": "Dusra-Brain"}
+    profile = _http_json(config["userinfo"], headers=user_headers)
+
+    if provider == "github":
+        email = profile.get("email")
+        if not email:
+            emails = _http_json("https://api.github.com/user/emails", headers=user_headers)
+            verified = [item for item in emails if item.get("verified") and item.get("email")] if isinstance(emails, list) else []
+            email = (verified[0].get("email") if verified else (emails[0].get("email") if emails else None))
+        subject = str(profile.get("id") or "")
+        name = profile.get("name") or profile.get("login") or ""
+    else:
+        email = profile.get("email")
+        subject = str(profile.get("sub") or profile.get("id") or "")
+        name = profile.get("name") or profile.get("username") or ""
+
+    if not email:
+        raise ValueError("The provider did not return an email address.")
+    return str(email).strip().lower(), subject, name
+
+
+def _upsert_oauth_user(provider, email, subject, name):
+    _ensure_auth_tables()
+    normalized = email.strip().lower()
+    user_id = _user_id_for_email(normalized)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM dusra_users WHERE LOWER(email)=LOWER(%s) LIMIT 1", (normalized,))
+            existing = cur.fetchone()
+            if existing:
+                user_id = existing[0]
+                cur.execute("UPDATE dusra_users SET provider=%s, provider_subject=%s, display_name=COALESCE(NULLIF(%s,''),display_name), updated_at=NOW() WHERE id=%s", (provider, subject, name, user_id))
+            else:
+                cur.execute("INSERT INTO dusra_users (id,email,display_name,provider,provider_subject) VALUES (%s,%s,%s,%s,%s)", (user_id, normalized, name, provider, subject))
+        conn.commit()
+    return {"id": user_id, "email": normalized, "name": name or ""}
 
 
 # ============================================================
@@ -21339,10 +21674,61 @@ class handler(
             parsed.query
         )
 
-        user_id = params.get(
-            "user_id",
-            ["default_user"]
-        )[0]
+        # ----------------------------------------------------
+        # ACCOUNT AUTHENTICATION
+        # ----------------------------------------------------
+        if parsed.path == "/api/auth/session":
+            try:
+                _ensure_auth_tables()
+                user = _get_authenticated_user(self)
+                send_json(self, {"authenticated": bool(user), "user": user})
+            except Exception as error:
+                send_json(self, {"authenticated": False, "error": str(error)}, 500)
+            return
+
+        if parsed.path.startswith("/api/auth/oauth/"):
+            provider = parsed.path.rsplit("/", 1)[-1].lower()
+            try:
+                config = _oauth_provider_config(provider, self)
+                state, state_cookie = _oauth_state_cookie(provider)
+                authorize_url = config["authorize"] + "?" + urlencode({
+                    "client_id": config["client_id"],
+                    "redirect_uri": config["callback"],
+                    "response_type": "code",
+                    "scope": config["scope"],
+                    "state": state,
+                })
+                send_redirect(self, authorize_url, headers={"Set-Cookie": state_cookie})
+            except Exception as error:
+                base = _public_base_url(self)
+                message = str(error)
+                send_redirect(self, base + "/?auth_error=" + quote(message))
+            return
+
+        if parsed.path.startswith("/api/auth/callback/"):
+            provider = parsed.path.rsplit("/", 1)[-1].lower()
+            error_value = params.get("error", [""])[0]
+            code = params.get("code", [""])[0]
+            if error_value:
+                send_redirect(self, _public_base_url(self) + "/?auth_error=" + quote(error_value))
+                return
+            try:
+                returned_state = params.get("state", [""])[0]
+                if not code or not _verify_oauth_state(self, provider, returned_state):
+                    raise ValueError("OAuth security check failed. Please try again.")
+                email, subject, name = _exchange_oauth(provider, code, self)
+                user = _upsert_oauth_user(provider, email, subject, name)
+                send_redirect(self, _public_base_url(self) + "/", headers={
+                    "Set-Cookie": [_make_session_cookie(user["id"]), _clear_cookie_header(OAUTH_STATE_COOKIE_NAME)]
+                })
+            except Exception as error:
+                send_redirect(self, _public_base_url(self) + "/?auth_error=" + quote(str(error)))
+            return
+
+        user = _require_authenticated_user(self)
+        if not user:
+            return
+        user_id = user["id"]
 
 
         # ----------------------------------------------------
@@ -22561,6 +22947,39 @@ class handler(
                 )
             )
 
+            parsed = urlparse(self.path)
+
+            # ----------------------------------------------------
+            # ACCOUNT AUTHENTICATION
+            # ----------------------------------------------------
+            if parsed.path == "/api/auth/signup":
+                try:
+                    user = _create_email_user(body.get("email", ""), body.get("password", ""))
+                    send_json(self, {"authenticated": True, "user": user}, 201, headers={"Set-Cookie": _make_session_cookie(user["id"])})
+                except ValueError as error:
+                    send_json(self, {"authenticated": False, "error": str(error)}, 400)
+                except Exception as error:
+                    send_json(self, {"authenticated": False, "error": str(error)}, 500)
+                return
+
+            if parsed.path == "/api/auth/login":
+                try:
+                    user = _login_email_user(body.get("email", ""), body.get("password", ""))
+                    send_json(self, {"authenticated": True, "user": user}, 200, headers={"Set-Cookie": _make_session_cookie(user["id"])})
+                except ValueError as error:
+                    send_json(self, {"authenticated": False, "error": str(error)}, 401)
+                except Exception as error:
+                    send_json(self, {"authenticated": False, "error": str(error)}, 500)
+                return
+
+            if parsed.path == "/api/auth/logout":
+                send_json(self, {"authenticated": False}, 200, headers={"Set-Cookie": _clear_cookie_header(AUTH_COOKIE_NAME)})
+                return
+
+            user = _require_authenticated_user(self)
+            if not user:
+                return
+
             message = str(
                 body.get(
                     "message",
@@ -22568,10 +22987,9 @@ class handler(
                 )
             ).strip()
 
-            user_id = body.get(
-                "user_id",
-                "default_user"
-            )
+            # Never trust a browser-supplied user_id. The authenticated
+            # session is the only source of identity for private data.
+            user_id = user["id"]
 
             session_id = body.get(
                 "session_id",
