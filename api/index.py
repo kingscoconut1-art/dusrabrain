@@ -15497,6 +15497,558 @@ def build_memory_evolution_chat_context(
 
 
 # ============================================================================
+# PHASE 8O — DECISION SUPPORT SYNTHESIS & OPEN-ITEM STATUS
+# ============================================================================
+#
+# Purpose:
+#   Combine the existing planning, consistency, unresolved-gap, readiness,
+#   evidence-sufficiency, and confidence layers into one read-only status
+#   for users who want to understand where a decision currently stands.
+#
+# Design principles:
+#   - Synthesize existing stored signals; do not create new evidence.
+#   - Never choose an option or tell the user what to do.
+#   - Keep "support in stored context" separate from objective truth.
+#   - Distinguish supporting signals from unresolved blockers.
+#   - Reuse the existing memory IDs so downstream evidence trace remains
+#     grounded in the same stored records.
+#   - No memory mutation, deletion, consolidation, or winner selection.
+# ============================================================================
+
+
+def is_decision_support_synthesis_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    direct_terms = (
+        "decision support summary",
+        "decision support status",
+        "decision status",
+        "where do i stand on this decision",
+        "where do i stand with this decision",
+        "what supports my decision",
+        "what supports this decision",
+        "what is supporting my decision",
+        "what is blocking my decision",
+        "what is blocking this decision",
+        "what remains before i decide",
+        "what remains before making this decision",
+        "what remains before i make this decision",
+        "what do i know and what remains",
+        "what do i know and what is unresolved",
+        "what supports the decision and what remains unresolved",
+        "summarize my decision situation",
+        "summarize my decision status",
+        "summarise my decision situation",
+        "summarise my decision status",
+        "decision support analysis",
+        "decision support synthesis",
+    )
+
+    if any(term in text for term in direct_terms):
+        return True
+
+    has_decision = (
+        "decision" in text
+        or "decide" in text
+    )
+    has_synthesis = any(
+        phrase in text
+        for phrase in (
+            "where do i stand",
+            "what supports",
+            "what remains",
+            "what is unresolved",
+            "what is blocking",
+            "what do i know",
+            "overall status",
+            "overall picture",
+            "summarize",
+            "summarise",
+        )
+    )
+
+    return bool(
+        has_decision
+        and has_synthesis
+    )
+
+
+def _phase_8o_memory_ids(value):
+    ids = []
+
+    if isinstance(value, dict):
+        for key in (
+            "memory_id",
+            "id",
+        ):
+            candidate = value.get(key)
+            if candidate is not None:
+                try:
+                    ids.append(int(candidate))
+                except Exception:
+                    pass
+
+        for key in (
+            "supporting_memories",
+            "qualified_memories",
+            "background_memories",
+            "stored_evidence",
+            "memories",
+            "evidence",
+        ):
+            ids.extend(
+                _phase_8o_memory_ids(
+                    value.get(key)
+                )
+            )
+
+    elif isinstance(value, list):
+        for item in value:
+            ids.extend(
+                _phase_8o_memory_ids(item)
+            )
+
+    return ids
+
+
+def _phase_8o_unique_ints(values, limit=30):
+    output = []
+    seen = set()
+
+    for value in values or []:
+        try:
+            item = int(value)
+        except Exception:
+            continue
+
+        if item <= 0 or item in seen:
+            continue
+
+        seen.add(item)
+        output.append(item)
+
+        if len(output) >= int(limit or 30):
+            break
+
+    return output
+
+
+def _phase_8o_text_items(values, limit=8):
+    output = []
+
+    for value in values or []:
+        if isinstance(value, dict):
+            text = (
+                value.get("item")
+                or value.get("gap")
+                or value.get("question")
+                or value.get("issue")
+                or value.get("description")
+                or value.get("text")
+            )
+        else:
+            text = value
+
+        text = " ".join(
+            str(text or "").split()
+        )
+
+        if text:
+            output.append(text)
+
+        if len(output) >= int(limit or 8):
+            break
+
+    return output
+
+
+def analyze_decision_support_synthesis(
+    user_id,
+    message,
+    memories=None,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+    readiness_context=None,
+    evidence_sufficiency_context=None,
+    confidence_context=None,
+    evidence_context=None,
+):
+    """Build a read-only synthesis from already computed decision signals."""
+    if not is_decision_support_synthesis_question(message):
+        return {
+            "detected": False,
+            "decision_support_synthesis": False,
+        }
+
+    plan = plan_context if isinstance(plan_context, dict) else {}
+    plan_analysis = plan.get("analysis")
+    if not isinstance(plan_analysis, dict):
+        plan_analysis = {}
+
+    state = plan_state_context if isinstance(plan_state_context, dict) else {}
+    state_analysis = state.get("analysis")
+    if not isinstance(state_analysis, dict):
+        state_analysis = {}
+
+    consistency = consistency_context if isinstance(consistency_context, dict) else {}
+    consistency_analysis = consistency.get("analysis")
+    if not isinstance(consistency_analysis, dict):
+        consistency_analysis = {}
+
+    unresolved = unresolved_gap_context if isinstance(unresolved_gap_context, dict) else {}
+    unresolved_analysis = unresolved.get("analysis")
+    if not isinstance(unresolved_analysis, dict):
+        unresolved_analysis = {}
+
+    readiness = readiness_context if isinstance(readiness_context, dict) else {}
+    readiness_analysis = readiness.get("analysis")
+    if not isinstance(readiness_analysis, dict):
+        readiness_analysis = {}
+
+    sufficiency = evidence_sufficiency_context if isinstance(evidence_sufficiency_context, dict) else {}
+    sufficiency_analysis = sufficiency.get("analysis")
+    if not isinstance(sufficiency_analysis, dict):
+        sufficiency_analysis = {}
+
+    confidence = confidence_context if isinstance(confidence_context, dict) else {}
+    confidence_analysis = confidence.get("analysis")
+    if not isinstance(confidence_analysis, dict):
+        confidence_analysis = {}
+
+    evidence = evidence_context if isinstance(evidence_context, dict) else {}
+    evidence_analysis = evidence.get("analysis")
+    if not isinstance(evidence_analysis, dict):
+        evidence_analysis = {}
+
+    current_plan = (
+        state_analysis.get("current_plan")
+        or plan_analysis.get("current_plan")
+        or readiness_analysis.get("current_plan")
+        or ""
+    )
+    current_plan = " ".join(
+        str(current_plan or "").split()
+    )
+
+    unresolved_items = _phase_8o_text_items(
+        unresolved_analysis.get("unresolved_items")
+        or unresolved_analysis.get("open_items")
+        or unresolved_analysis.get("decision_gaps")
+        or [],
+        limit=10,
+    )
+
+    critical_gaps = _phase_8o_text_items(
+        sufficiency_analysis.get("decision_critical_gaps")
+        or [],
+        limit=10,
+    )
+
+    missing_evidence = _phase_8o_text_items(
+        sufficiency_analysis.get("missing_evidence")
+        or [],
+        limit=10,
+    )
+
+    conflicts = _phase_8o_text_items(
+        consistency_analysis.get("conflicts")
+        or consistency_analysis.get("potential_conflicts")
+        or [],
+        limit=8,
+    )
+
+    tensions = _phase_8o_text_items(
+        consistency_analysis.get("tensions")
+        or consistency_analysis.get("potential_tensions")
+        or [],
+        limit=8,
+    )
+
+    support_score = (
+        readiness_analysis.get("readiness_score")
+        if readiness_analysis.get("readiness_score") is not None
+        else readiness_analysis.get("overall_readiness_score")
+    )
+    if support_score is None:
+        support_score = confidence_analysis.get("overall_confidence_score")
+    if support_score is None:
+        support_score = evidence_analysis.get("support_score")
+
+    try:
+        support_score = max(
+            0.0,
+            min(1.0, float(support_score or 0.0))
+        )
+    except Exception:
+        support_score = 0.0
+
+    readiness_status = str(
+        readiness_analysis.get("readiness_status")
+        or readiness_analysis.get("status")
+        or "unknown"
+    ).strip()
+
+    sufficiency_status = str(
+        sufficiency_analysis.get("sufficiency")
+        or "unknown"
+    ).strip()
+
+    consistency_status = str(
+        consistency_analysis.get("classification")
+        or consistency_analysis.get("status")
+        or "unknown"
+    ).strip()
+
+    blockers = []
+    blockers.extend(critical_gaps)
+    blockers.extend(unresolved_items)
+
+    if conflicts:
+        blockers.extend(
+            "Potential/explicit consistency issue: " + item
+            for item in conflicts
+        )
+    elif tensions:
+        blockers.extend(
+            "Potential plan tension: " + item
+            for item in tensions
+        )
+
+    if not blockers and missing_evidence:
+        blockers.extend(missing_evidence)
+
+    blockers = _phase_8o_text_items(
+        blockers,
+        limit=10,
+    )
+
+    supporting_signals = []
+
+    if current_plan:
+        supporting_signals.append(
+            "Current plan is explicitly represented in stored context."
+        )
+
+    if readiness_analysis:
+        supporting_signals.append(
+            "Decision-readiness analysis is available from stored context."
+        )
+
+    if sufficiency_analysis.get("stored_evidence_count"):
+        supporting_signals.append(
+            str(
+                sufficiency_analysis.get(
+                    "stored_evidence_count"
+                )
+            )
+            + " stored evidence item(s) are explicitly represented."
+        )
+
+    if evidence_analysis.get("supporting_memory_count"):
+        supporting_signals.append(
+            str(
+                evidence_analysis.get(
+                    "supporting_memory_count"
+                )
+            )
+            + " supporting memory item(s) were identified."
+        )
+
+    if consistency_status in (
+        "consistent",
+        "evolved_consistently",
+    ):
+        supporting_signals.append(
+            "The stored plan-consistency analysis found no explicit contradiction."
+        )
+
+    supporting_signals = _phase_8o_text_items(
+        supporting_signals,
+        limit=10,
+    )
+
+    if blockers:
+        status = "supported_but_open"
+    elif (
+        readiness_status in (
+            "ready",
+            "decision_ready",
+        )
+        and sufficiency_status in (
+            "stored_evidence_present",
+            "sufficient",
+        )
+    ):
+        status = "supported_without_recorded_blocker"
+    elif (
+        sufficiency_status in (
+            "partial_stored_evidence",
+            "insufficient_stored_evidence",
+            "insufficient",
+        )
+    ):
+        status = "partially_supported"
+    else:
+        status = "insufficiently_characterized"
+
+    memory_ids = []
+    for source in (
+        readiness_analysis,
+        sufficiency_analysis,
+        evidence_analysis,
+        confidence_analysis,
+        consistency_analysis,
+        unresolved_analysis,
+        plan_analysis,
+        state_analysis,
+    ):
+        memory_ids.extend(
+            _phase_8o_memory_ids(source)
+        )
+
+    if not memory_ids:
+        memory_ids.extend(
+            int(item.get("id"))
+            for item in (memories or [])
+            if isinstance(item, dict)
+            and str(item.get("id") or "").isdigit()
+        )
+
+    return {
+        "detected": True,
+        "decision_support_synthesis": True,
+        "read_only": True,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+        "user_id": user_id,
+        "question": str(message or ""),
+        "current_plan": current_plan,
+        "status": status,
+        "support_score": round(support_score, 4),
+        "readiness_status": readiness_status,
+        "evidence_sufficiency_status": sufficiency_status,
+        "plan_consistency_status": consistency_status,
+        "supporting_signals": supporting_signals,
+        "open_blockers": blockers,
+        "unresolved_items": unresolved_items,
+        "decision_critical_gaps": critical_gaps,
+        "missing_evidence": missing_evidence,
+        "memory_ids": _phase_8o_unique_ints(
+            memory_ids,
+            limit=30,
+        ),
+        "note": (
+            "This is a synthesis of stored decision-support signals. "
+            "It does not determine what the user should decide."
+        ),
+    }
+
+
+def build_decision_support_synthesis_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+    readiness_context=None,
+    evidence_sufficiency_context=None,
+    confidence_context=None,
+    evidence_context=None,
+):
+    if not is_decision_support_synthesis_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_decision_support_synthesis(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            plan_state_context=plan_state_context,
+            consistency_context=consistency_context,
+            unresolved_gap_context=unresolved_gap_context,
+            readiness_context=readiness_context,
+            evidence_sufficiency_context=evidence_sufficiency_context,
+            confidence_context=confidence_context,
+            evidence_context=evidence_context,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
+
+def build_decision_support_synthesis_prompt_context(
+    decision_support_context,
+):
+    value = (
+        decision_support_context
+        if isinstance(decision_support_context, dict)
+        else {}
+    )
+
+    if not value.get("detected"):
+        return "detected=false"
+
+    analysis = value.get("analysis")
+    if not isinstance(analysis, dict):
+        return "detected=true\nanalysis=unavailable"
+
+    return (
+        "detected=true\n"
+        + "status="
+        + str(analysis.get("status") or "unknown")
+        + "\n"
+        + "current_plan="
+        + str(analysis.get("current_plan") or "")
+        + "\n"
+        + "support_score="
+        + str(analysis.get("support_score") or 0)
+        + "\n"
+        + "readiness_status="
+        + str(analysis.get("readiness_status") or "unknown")
+        + "\n"
+        + "evidence_sufficiency_status="
+        + str(analysis.get("evidence_sufficiency_status") or "unknown")
+        + "\n"
+        + "plan_consistency_status="
+        + str(analysis.get("plan_consistency_status") or "unknown")
+        + "\n"
+        + "supporting_signals="
+        + str(analysis.get("supporting_signals") or [])
+        + "\n"
+        + "open_blockers="
+        + str(analysis.get("open_blockers") or [])
+        + "\n"
+        + "decision_critical_gaps="
+        + str(analysis.get("decision_critical_gaps") or [])
+        + "\n"
+        + "missing_evidence="
+        + str(analysis.get("missing_evidence") or [])
+        + "\n"
+        + "memory_ids="
+        + str(analysis.get("memory_ids") or [])
+        + "\n"
+        + "truth_not_established=true\n"
+        + "note="
+        + str(analysis.get("note") or "")
+    )
+
+
+# ============================================================================
 # PHASE 8N — EVIDENCE SUFFICIENCY & MISSING EVIDENCE
 # ============================================================================
 
@@ -15906,6 +16458,7 @@ def generate_grounded_answer(
     unresolved_gap_context=None,
     decision_readiness_context=None,
     evidence_sufficiency_context=None,
+    decision_support_synthesis_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -16055,6 +16608,19 @@ Never tell the user which option to choose. Never invent missing
 requirements, deadlines, facts, or evidence. If unresolved items remain,
 say they remain unresolved rather than deciding them.
 
+
+DECISION SUPPORT SYNTHESIS CONTEXT:
+{build_decision_support_synthesis_prompt_context(decision_support_synthesis_context)}
+
+DECISION SUPPORT SYNTHESIS HANDLING:
+
+If DECISION SUPPORT SYNTHESIS CONTEXT is marked detected=true, summarize
+the supplied stored decision-support state: current plan, supporting signals,
+open blockers, readiness status, evidence sufficiency, and plan consistency.
+Do not choose an option, recommend an action, or treat the support score as
+proof of truth. Distinguish stored-context support from objective truth.
+Use only the supplied signals and do not invent missing requirements or
+external facts.
 
 EVIDENCE SUFFICIENCY / MISSING EVIDENCE CONTEXT:
 {build_evidence_sufficiency_prompt_context(evidence_sufficiency_context)}
@@ -18543,6 +19109,41 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8O — DECISION SUPPORT SYNTHESIS
+            # ------------------------------------------------
+
+            if action == "analyze_decision_support_synthesis":
+
+                result = analyze_decision_support_synthesis(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            ""
+                        )
+                    ),
+                    memories=body.get("memories"),
+                    plan_context=body.get("plan_context"),
+                    plan_state_context=body.get("plan_state_context"),
+                    consistency_context=body.get("consistency_context"),
+                    unresolved_gap_context=body.get("unresolved_gap_context"),
+                    readiness_context=body.get("readiness_context"),
+                    evidence_sufficiency_context=body.get("evidence_sufficiency_context"),
+                    confidence_context=body.get("confidence_context"),
+                    evidence_context=body.get("evidence_context"),
+                )
+
+                send_json(
+                    self,
+                    result,
+                    200,
+                )
+
+                return
+
+
+            # ------------------------------------------------
             # PHASE 8G — MEMORY EVIDENCE STRENGTH
             # ------------------------------------------------
 
@@ -19339,6 +19940,28 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8O
+            # DECISION SUPPORT SYNTHESIS / OPEN-ITEM STATUS
+            # ------------------------------------------------
+
+            memory_decision_support_synthesis_context = (
+                build_decision_support_synthesis_chat_context(
+                    user_id=user_id,
+                    message=message,
+                    memories=memories,
+                    plan_context=memory_plan_context,
+                    plan_state_context=memory_plan_state_context,
+                    consistency_context=memory_plan_consistency_context,
+                    unresolved_gap_context=memory_unresolved_gap_context,
+                    readiness_context=memory_decision_readiness_context,
+                    evidence_sufficiency_context=memory_evidence_sufficiency_context,
+                    confidence_context=memory_confidence_context,
+                    evidence_context=memory_evidence_context,
+                )
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -19362,6 +19985,7 @@ class handler(
                 unresolved_gap_context=memory_unresolved_gap_context,
                 decision_readiness_context=memory_decision_readiness_context,
                 evidence_sufficiency_context=memory_evidence_sufficiency_context,
+                decision_support_synthesis_context=memory_decision_support_synthesis_context,
             )
 
             response = grounded_result.get(
@@ -20191,6 +20815,164 @@ class handler(
 
                     response = " ".join(answer_parts).strip()
 
+
+            # ------------------------------------------------
+            # PHASE 8O — AUTHORITATIVE DECISION SUPPORT SYNTHESIS ANSWER
+            # ------------------------------------------------
+
+            if is_decision_support_synthesis_question(message):
+
+                synthesis_analysis = (
+                    memory_decision_support_synthesis_context.get(
+                        "analysis"
+                    )
+                    if isinstance(
+                        memory_decision_support_synthesis_context,
+                        dict,
+                    )
+                    else None
+                )
+
+                if isinstance(
+                    synthesis_analysis,
+                    dict,
+                ):
+                    status = str(
+                        synthesis_analysis.get(
+                            "status",
+                            "insufficiently_characterized",
+                        )
+                        or "insufficiently_characterized"
+                    )
+
+                    current_plan = str(
+                        synthesis_analysis.get(
+                            "current_plan",
+                            "",
+                        )
+                        or ""
+                    ).strip()
+
+                    support_score = synthesis_analysis.get(
+                        "support_score",
+                        0,
+                    )
+
+                    supporting = list(
+                        synthesis_analysis.get(
+                            "supporting_signals",
+                            [],
+                        )
+                        or []
+                    )
+
+                    blockers = list(
+                        synthesis_analysis.get(
+                            "open_blockers",
+                            [],
+                        )
+                        or []
+                    )
+
+                    readiness_status = str(
+                        synthesis_analysis.get(
+                            "readiness_status",
+                            "unknown",
+                        )
+                        or "unknown"
+                    )
+
+                    sufficiency_status = str(
+                        synthesis_analysis.get(
+                            "evidence_sufficiency_status",
+                            "unknown",
+                        )
+                        or "unknown"
+                    )
+
+                    consistency_status = str(
+                        synthesis_analysis.get(
+                            "plan_consistency_status",
+                            "unknown",
+                        )
+                        or "unknown"
+                    )
+
+                    if status == "supported_but_open":
+                        status_text = (
+                            "Your stored decision context is supported but still has open items."
+                        )
+                    elif status == "supported_without_recorded_blocker":
+                        status_text = (
+                            "Your stored decision context is supported and no blocker is recorded in the supplied context."
+                        )
+                    elif status == "partially_supported":
+                        status_text = (
+                            "Your stored decision context is only partially supported by the available stored evidence."
+                        )
+                    else:
+                        status_text = (
+                            "The stored decision context is not sufficiently characterized to establish a complete status."
+                        )
+
+                    answer_parts = [
+                        status_text,
+                    ]
+
+                    if current_plan:
+                        answer_parts.append(
+                            "Current plan: "
+                            + current_plan
+                            + "."
+                        )
+
+                    answer_parts.append(
+                        "Stored-context support score: "
+                        + str(support_score)
+                        + "."
+                    )
+
+                    answer_parts.append(
+                        "Readiness: "
+                        + readiness_status
+                        + "; evidence sufficiency: "
+                        + sufficiency_status
+                        + "; plan consistency: "
+                        + consistency_status
+                        + "."
+                    )
+
+                    if supporting:
+                        answer_parts.append(
+                            "Supporting signals: "
+                            + "; ".join(
+                                str(item)
+                                for item in supporting[:5]
+                            )
+                            + "."
+                        )
+
+                    if blockers:
+                        answer_parts.append(
+                            "Open items/blockers in stored context: "
+                            + "; ".join(
+                                str(item)
+                                for item in blockers[:5]
+                            )
+                            + "."
+                        )
+                    else:
+                        answer_parts.append(
+                            "No explicit open blocker was identified in the supplied stored context."
+                        )
+
+                    answer_parts.append(
+                        "This is a synthesis of your stored information; it does not decide what you should do."
+                    )
+
+                    response = " ".join(
+                        answer_parts
+                    ).strip()
 
             # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
