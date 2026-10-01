@@ -21754,6 +21754,13 @@ class handler(
                                     "label": "Memory #" + str(mid),
                                 })
 
+                    # V9 FIX: the comparison evidence is appended after the
+                    # earlier grounded flag is calculated. Recompute the flag
+                    # here so the public Evidence Trace badge reflects the
+                    # authoritative stored decision-history evidence.
+                    if comparison_answer.get("answered") and evidence_trace:
+                        grounded = True
+
             # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
