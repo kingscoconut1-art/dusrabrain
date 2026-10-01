@@ -21032,26 +21032,30 @@ class handler(
                         or "unknown"
                     )
 
+                    # PHASE 8O.2 — USER-FACING STATUS LANGUAGE
+                    # Keep internal enum names and numeric scores out of the
+                    # main answer. They remain available in the technical
+                    # trace, while the user sees a concise decision status.
                     if status == "supported_but_open":
                         status_text = (
-                            "Your stored decision context is supported but still has open items."
+                            "Your current decision is supported by stored information, "
+                            "but one or more important items are still open."
                         )
                     elif status == "supported_without_recorded_blocker":
                         status_text = (
-                            "Your stored decision context is supported and no blocker is recorded in the supplied context."
+                            "Your current decision context is supported by stored information, "
+                            "and no explicit blocker is recorded."
                         )
                     elif status == "partially_supported":
                         status_text = (
-                            "Your stored decision context is only partially supported by the available stored evidence."
+                            "Your current decision is partially supported by the stored information."
                         )
                     else:
                         status_text = (
-                            "The stored decision context is not sufficiently characterized to establish a complete status."
+                            "There is not enough structured stored information to establish a complete decision status."
                         )
 
-                    answer_parts = [
-                        status_text,
-                    ]
+                    answer_parts = [status_text]
 
                     if current_plan:
                         answer_parts.append(
@@ -21060,53 +21064,83 @@ class handler(
                             + "."
                         )
 
+                    # Human-readable status labels. The underlying enum values
+                    # remain in the internal synthesis object and trace.
+                    readiness_label = {
+                        "ready": "Ready",
+                        "decision_ready": "Ready",
+                        "partially_supported": "Partially supported",
+                        "unknown": "Not established",
+                    }.get(readiness_status, "Not established")
+
+                    sufficiency_label = {
+                        "stored_evidence_present": "Stored evidence present",
+                        "sufficient": "Sufficient stored evidence",
+                        "partial_stored_evidence": "Partial stored evidence",
+                        "insufficient_stored_evidence": "Insufficient stored evidence",
+                        "insufficient": "Insufficient stored evidence",
+                        "unknown": "Not established",
+                    }.get(sufficiency_status, "Not established")
+
+                    consistency_label = {
+                        "consistent": "No contradiction recorded",
+                        "evolved_consistently": "Plan evolution is consistent",
+                        "stored_plan_and_decision_present": "Current plan and decision are both recorded",
+                        "unknown": "Not established",
+                    }.get(consistency_status, "Not established")
+
                     answer_parts.append(
-                        "Stored-context support score: "
-                        + str(support_score)
+                        "Current status: "
+                        + readiness_label
+                        + ". Evidence: "
+                        + sufficiency_label
+                        + ". Plan consistency: "
+                        + consistency_label
                         + "."
                     )
 
-                    answer_parts.append(
-                        "Readiness: "
-                        + readiness_status
-                        + "; evidence sufficiency: "
-                        + sufficiency_status
-                        + "; plan consistency: "
-                        + consistency_status
-                        + "."
-                    )
+                    # Prefer explicit unresolved items over generic internal
+                    # supporting-signal text so the user sees what is actually
+                    # still open.
+                    user_open_items = []
+                    for item in blockers[:5]:
+                        clean = " ".join(str(item or "").split())
+                        if clean and clean not in user_open_items:
+                            user_open_items.append(clean)
 
-                    if supporting:
+                    if not user_open_items:
+                        for item in synthesis_analysis.get(
+                            "unresolved_items", []
+                        )[:5]:
+                            clean = " ".join(str(item or "").split())
+                            if clean and clean not in user_open_items:
+                                user_open_items.append(clean)
+
+                    if user_open_items:
                         answer_parts.append(
-                            "Supporting signals: "
-                            + "; ".join(
-                                str(item)
-                                for item in supporting[:5]
-                            )
+                            "What remains open: "
+                            + "; ".join(user_open_items)
                             + "."
                         )
-
-                    if blockers:
+                    elif supporting:
                         answer_parts.append(
-                            "Open items/blockers in stored context: "
+                            "What is established: "
                             + "; ".join(
                                 str(item)
-                                for item in blockers[:5]
+                                for item in supporting[:3]
                             )
                             + "."
                         )
                     else:
                         answer_parts.append(
-                            "No explicit open blocker was identified in the supplied stored context."
+                            "No explicit unresolved item is recorded in the supplied context."
                         )
 
                     answer_parts.append(
-                        "This is a synthesis of your stored information; it does not decide what you should do."
+                        "This summarizes your stored information; it does not decide what you should do."
                     )
 
-                    response = " ".join(
-                        answer_parts
-                    ).strip()
+                    response = " ".join(answer_parts).strip()
 
             # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
