@@ -87,10 +87,13 @@
         .message {
             margin-bottom: 16px;
             display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
         }
 
         .message.user {
-            justify-content: flex-end;
+            align-items: flex-end;
         }
 
         .bubble {
@@ -99,6 +102,11 @@
             border-radius: 12px;
             line-height: 1.5;
             white-space: pre-wrap;
+        }
+
+        .message.assistant .bubble {
+            width: 100%;
+            max-width: 100%;
         }
 
         .user .bubble {
@@ -112,7 +120,8 @@
         }
 
         .evidence-trace {
-            max-width: 80%;
+            width: 100%;
+            max-width: 100%;
             margin-top: 8px;
             margin-left: 0;
             border: 1px solid #dbe3ec;
@@ -208,7 +217,8 @@
         ===================================================== */
 
         .plan-evolution-trace {
-            max-width: 80%;
+            width: 100%;
+            max-width: 100%;
             margin-top: 8px;
             border: 1px solid #dbe3ec;
             border-radius: 12px;
