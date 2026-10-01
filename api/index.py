@@ -16001,6 +16001,173 @@ def _phase_8q_attach_outcomes(user_id, analysis):
     return analysis
 
 
+def is_decision_outcome_history_question(message):
+    """Detect a direct question asking what happened after a saved decision."""
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    direct_patterns = (
+        "what happened after my",
+        "what happened after decision",
+        "what was the outcome of my",
+        "what was the outcome for decision",
+        "what happened following my",
+        "what happened following decision",
+        "what happened as a result of my decision",
+        "what was the result of my decision",
+    )
+    if any(pattern in text for pattern in direct_patterns):
+        return True
+    return bool("outcome" in text and "decision" in text and ("my" in text or "after" in text or "result" in text))
+
+
+def _phase_8q_tokens(text):
+    return {
+        token for token in re.findall(r"[a-z0-9]+", str(text or "").lower())
+        if len(token) >= 3
+    }
+
+
+def build_decision_outcome_history_chat_context(user_id, message):
+    """Retrieve explicitly recorded outcomes for a direct outcome-history question."""
+    if not is_decision_outcome_history_question(message):
+        return {"detected": False, "answered": False, "outcomes": []}
+
+    try:
+        outcomes = get_decision_outcomes(user_id=user_id, decision_id=None, limit=200)
+    except Exception:
+        outcomes = []
+
+    try:
+        decisions = get_decision_history(user_id=user_id, limit=200)
+    except Exception:
+        decisions = []
+
+    decision_map = {}
+    for row in decisions or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            did = int(row.get("id"))
+        except Exception:
+            continue
+        if did > 0:
+            decision_map[did] = row
+
+    query_tokens = _phase_8q_tokens(message)
+    ranked = []
+    for outcome in outcomes or []:
+        if not isinstance(outcome, dict) or not outcome.get("confirmed"):
+            continue
+        try:
+            did = int(outcome.get("decision_id"))
+        except Exception:
+            continue
+        decision = decision_map.get(did, {})
+        combined = " ".join([
+            str(decision.get("title") or ""),
+            str(decision.get("decision") or ""),
+            str(decision.get("selected_option") or ""),
+            str(decision.get("rationale") or ""),
+            str(outcome.get("outcome") or ""),
+            str(outcome.get("expected_outcome") or ""),
+            str(outcome.get("learning") or ""),
+        ])
+        overlap = len(query_tokens & _phase_8q_tokens(combined))
+        ranked.append((overlap, str(outcome.get("created_at") or ""), outcome, decision))
+
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    selected = [item for item in ranked if item[0] > 0][:10]
+    if not selected and len(ranked) == 1:
+        selected = ranked[:1]
+
+    result = []
+    for _, _, outcome, decision in selected:
+        result.append({
+            "outcome": outcome,
+            "decision": decision,
+        })
+
+    return {
+        "detected": True,
+        "answered": bool(result),
+        "outcomes": result,
+        "explicit_only": True,
+        "inferred": False,
+        "recommendation_generated": False,
+        "decision_modified": False,
+        "read_only": True,
+        "version": "8Q-V4",
+    }
+
+
+def build_decision_outcome_history_chat_answer(context):
+    data = context if isinstance(context, dict) else {}
+    items = data.get("outcomes", []) if isinstance(data.get("outcomes"), list) else []
+    if not items:
+        return {"answered": False, "answer": "", "evidence": []}
+
+    answers = []
+    evidence = []
+    for item in items[:5]:
+        if not isinstance(item, dict):
+            continue
+        outcome = item.get("outcome") if isinstance(item.get("outcome"), dict) else {}
+        decision = item.get("decision") if isinstance(item.get("decision"), dict) else {}
+        did = outcome.get("decision_id")
+        status = _phase_8q_clean_text(outcome.get("outcome_status"))
+        outcome_text = _phase_8q_clean_text(outcome.get("outcome"))
+        decision_text = _phase_8q_clean_text(decision.get("decision"))
+        title = _phase_8q_clean_text(decision.get("title"))
+
+        prefix = ""
+        if did is not None:
+            prefix = "After Decision #" + str(did) + ", "
+        if title:
+            prefix += "the recorded outcome for " + title + " was "
+        else:
+            prefix += "the recorded outcome was "
+        if status:
+            prefix += status + ": "
+        answers.append(prefix + outcome_text + ".")
+
+        if did is not None:
+            evidence.append({
+                "source_type": "decision_history",
+                "source_id": did,
+                "label": "Decision #" + str(did),
+                "text": decision_text or title,
+            })
+        try:
+            oid = int(outcome.get("id"))
+        except Exception:
+            oid = None
+        if oid:
+            evidence_text = "; ".join(filter(None, [
+                "Status: " + status if status else "",
+                "Outcome: " + outcome_text if outcome_text else "",
+                "Expected: " + _phase_8q_clean_text(outcome.get("expected_outcome")) if _phase_8q_clean_text(outcome.get("expected_outcome")) else "",
+                "Learning: " + _phase_8q_clean_text(outcome.get("learning")) if _phase_8q_clean_text(outcome.get("learning")) else "",
+            ]))
+            evidence.append({
+                "source_type": "decision_outcome",
+                "source_id": oid,
+                "label": "Recorded outcome #" + str(oid),
+                "text": evidence_text,
+                "decision_id": did,
+                "outcome_status": outcome.get("outcome_status"),
+                "outcome": outcome_text,
+                "confirmed": True,
+            })
+
+    return {
+        "answered": bool(answers),
+        "answer": " ".join(answers).strip(),
+        "evidence": evidence,
+        "grounded": bool(evidence),
+    }
+
+
 def build_decision_support_comparison_chat_context(user_id, message, memories=None, decision_history=None):
     if not is_decision_support_comparison_question(message):
         return {"detected": False, "analysis": None}
@@ -20825,6 +20992,21 @@ class handler(
                 )
             )
 
+            # ------------------------------------------------
+            # PHASE 8Q V4 — DIRECT OUTCOME HISTORY RECALL
+            # ------------------------------------------------
+            # A question such as "What happened after my Evolve India
+            # decision?" is not an option-comparison question. V3 correctly
+            # persisted the outcome, but only attached outcome evidence to
+            # the comparison pipeline. V4 gives direct outcome-history
+            # questions their own deterministic, read-only retrieval path.
+            memory_decision_outcome_history_context = (
+                build_decision_outcome_history_chat_context(
+                    user_id=user_id,
+                    message=message,
+                )
+            )
+
 
             # ------------------------------------------------
             # PHASE 7 — STEP 1A
@@ -22050,6 +22232,30 @@ class handler(
                         grounded = True
 
             # ------------------------------------------------
+            # PHASE 8Q V4 — AUTHORITATIVE OUTCOME HISTORY ANSWER
+            # ------------------------------------------------
+            if is_decision_outcome_history_question(message):
+                outcome_history_answer = build_decision_outcome_history_chat_answer(
+                    memory_decision_outcome_history_context
+                )
+                if outcome_history_answer.get("answered"):
+                    response = str(
+                        outcome_history_answer.get("answer") or response
+                    ).strip()
+                    for source in outcome_history_answer.get("evidence", [])[:20]:
+                        if not isinstance(source, dict):
+                            continue
+                        if not any(
+                            str(existing.get("source_type")) == str(source.get("source_type"))
+                            and existing.get("source_id") == source.get("source_id")
+                            for existing in evidence_trace
+                            if isinstance(existing, dict)
+                        ):
+                            evidence_trace.append(source)
+                    if evidence_trace:
+                        grounded = True
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -22224,6 +22430,13 @@ class handler(
                             memory_decision_support_comparison_context
                             if isinstance(memory_decision_support_comparison_context, dict)
                             else {"detected": False}
+                        ),
+
+                    "decision_outcome_history_trace":
+                        (
+                            memory_decision_outcome_history_context
+                            if isinstance(memory_decision_outcome_history_context, dict)
+                            else {"detected": False, "answered": False, "outcomes": []}
                         ),
 
                     "decision_outcome_evidence_trace":
