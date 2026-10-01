@@ -15500,6 +15500,7 @@ def build_memory_evolution_chat_context(
 
 # ============================================================================
 # PHASE 8P — DECISION SUPPORT OPTION COMPARISON
+# V5 PATCH: option evidence requires an option-specific action anchor; generic project memories are context only.
 # ============================================================================
 # Purpose:
 #   Present explicitly stored decision options side-by-side using only stored
@@ -15700,8 +15701,41 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
             if is_multi_option_context:
                 continue
 
+            # Do not treat a project-identity memory as evidence for an
+            # investment option merely because it shares words such as
+            # "Evolve India". Option evidence must contain the action or
+            # decision-specific signal for that side.
+            option_lower = option.lower()
+            is_invest_now_option = (
+                "invest" in option_lower
+                and "now" in option_lower
+            )
+            is_wait_option = (
+                "wait" in option_lower
+                and (
+                    "three months" in option_lower
+                    or "month" in option_lower
+                    or option_lower.strip() == "wait"
+                )
+            )
+
+            investment_action_present = any(term in lower_text for term in (
+                "invest", "investment", "investing", "capital",
+            ))
+            wait_action_present = any(term in lower_text for term in (
+                "wait", "waiting", "defer", "deferment", "delay",
+            ))
+
+            if is_invest_now_option and not investment_action_present:
+                continue
+            if is_wait_option and not wait_action_present:
+                continue
+
             overlap = tokens.intersection(_phase_8p_option_tokens(text))
-            if tokens and len(overlap) >= max(1, min(2, len(tokens))):
+            # For an action-specific option, require at least one meaningful
+            # option token in addition to the action anchor. This prevents
+            # generic project memories from becoming option evidence.
+            if tokens and len(overlap) >= 1:
                 mid = row.get("id")
                 if mid is not None and mid not in supporting_memory_ids:
                     supporting_memory_ids.append(mid)
