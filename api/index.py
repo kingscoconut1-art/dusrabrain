@@ -11286,7 +11286,7 @@ def analyze_project_state(
     # stored source directly supports the returned state.
     grounded = bool(evidence)
 
-    return {
+    result = {
         "project_state_intelligence": True,
         "detected": True,
         "answered": grounded,
@@ -11313,10 +11313,15 @@ def analyze_project_state(
         "outcome_count": len(matched_outcomes),
     }
 
+    result["evidence_grounding"] = build_project_state_evidence_grounding(result)
+    return result
+
 
 def build_project_state_answer(result):
-    """Build a deterministic answer only from V9.1 stored evidence."""
+    """Build the V9.2 evidence-grounded project-state answer."""
     data = result if isinstance(result, dict) else {}
+    if "evidence_grounding" in data:
+        return build_project_state_v92_answer(data)
     if not data.get("answered"):
         return {
             "built": True,
@@ -11417,7 +11422,14 @@ def build_project_state_trace(result, answer_result=None):
         "decision_modified": False,
         "memory_modified": False,
         "outcome_inferred": False,
-        "version": "9.1",
+        "version": "9.2",
+        "evidence_grounding": data.get("evidence_grounding", {}),
+        "supported_field_count": int(
+            (data.get("evidence_grounding") or {}).get("supported_field_count") or 0
+        ),
+        "unsupported_field_count": int(
+            (data.get("evidence_grounding") or {}).get("unsupported_field_count") or 0
+        ),
     }
 
 
@@ -11477,6 +11489,328 @@ def build_project_state_chat_context(
         "analysis": analysis,
         "answer": answer,
         "trace": build_project_state_trace(analysis, answer),
+    }
+
+
+# ============================================================
+# PHASE 9.2 — PLAN EVIDENCE & GROUNDING
+# ============================================================
+#
+# Purpose:
+#   Attach explicit stored evidence to each reconstructed project-state
+#   field produced by V9.1.
+#
+# Design:
+#   - Read-only.
+#   - No new facts are created.
+#   - No recommendation or decision is generated.
+#   - A state field is publicly treated as supported only when a stored
+#     source has measurable textual/structural support for that field.
+#   - Decisions and confirmed outcomes remain authoritative structured
+#     sources when already matched by V9.1.
+#
+# This layer does NOT change historical decisions or outcomes.
+# ============================================================
+
+
+def _v92_clean_text(value):
+    return " ".join(str(value or "").strip().split())
+
+
+def _v92_value_list(value, limit=20):
+    if not isinstance(value, (list, tuple)):
+        return []
+    result = []
+    for item in value:
+        text = _v92_clean_text(item)
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _v92_evidence_text(source):
+    if not isinstance(source, dict):
+        return ""
+    return _v92_clean_text(
+        " ".join(
+            str(source.get(key) or "")
+            for key in (
+                "text",
+                "label",
+                "title",
+                "decision",
+                "outcome",
+                "learning",
+                "memory",
+            )
+        )
+    )
+
+
+def _v92_source_relevance(value, source):
+    value_text = _v92_clean_text(value)
+    if not value_text:
+        return 0.0
+
+    source_text = _v92_evidence_text(source)
+    if not source_text:
+        return 0.0
+
+    try:
+        return float(_planning_overlap(value_text, source_text))
+    except Exception:
+        return 0.0
+
+
+def build_project_state_evidence_grounding(result):
+    """Map every V9.1 project-state field to explicit stored evidence."""
+    data = result if isinstance(result, dict) else {}
+    evidence = [
+        item for item in (data.get("evidence") or [])
+        if isinstance(item, dict)
+    ]
+
+    # Direct structured links are authoritative and should not depend on
+    # token overlap alone.
+    decision_sources = {
+        str(item.get("source_id")): item
+        for item in evidence
+        if item.get("source_type") == "decision_history"
+    }
+    outcome_sources = {
+        str(item.get("source_id")): item
+        for item in evidence
+        if item.get("source_type") == "decision_outcome"
+    }
+
+    fields = {}
+
+    def add_field(name, values, direct_sources=None, threshold=0.10):
+        values = _v92_value_list(values)
+        direct_sources = list(direct_sources or [])
+        selected = []
+        seen = set()
+
+        for source in direct_sources:
+            if not isinstance(source, dict):
+                continue
+            key = (
+                str(source.get("source_type") or ""),
+                str(source.get("source_id") or ""),
+            )
+            if key not in seen:
+                selected.append(source)
+                seen.add(key)
+
+        for value in values:
+            ranked = []
+            for source in evidence:
+                score = _v92_source_relevance(value, source)
+                if score >= threshold:
+                    ranked.append((score, source))
+            ranked.sort(
+                key=lambda pair: (
+                    pair[0],
+                    str(pair[1].get("source_type") or ""),
+                    str(pair[1].get("source_id") or ""),
+                ),
+                reverse=True,
+            )
+            for _, source in ranked[:3]:
+                key = (
+                    str(source.get("source_type") or ""),
+                    str(source.get("source_id") or ""),
+                )
+                if key not in seen:
+                    selected.append(source)
+                    seen.add(key)
+
+        fields[name] = {
+            "values": values,
+            "supported": bool(values and selected),
+            "source_count": len(selected),
+            "sources": selected[:8],
+        }
+
+    decisions = data.get("related_decisions") or []
+    outcomes = data.get("recorded_outcomes") or []
+
+    decision_direct = [
+        decision_sources[str(item.get("id"))]
+        for item in decisions
+        if isinstance(item, dict)
+        and str(item.get("id")) in decision_sources
+    ]
+    outcome_direct = [
+        outcome_sources[str(item.get("id"))]
+        for item in outcomes
+        if isinstance(item, dict)
+        and str(item.get("id")) in outcome_sources
+    ]
+
+    add_field(
+        "goal",
+        data.get("goal") or data.get("objectives")[:1] if isinstance(data.get("objectives"), list) and data.get("objectives") else data.get("goal"),
+    )
+    add_field("current_plan", data.get("current_plan"))
+    add_field("current_stage", data.get("current_stage"))
+    add_field("objectives", data.get("objectives"))
+    add_field("dependencies", data.get("dependencies"))
+    add_field("open_items", data.get("open_items"))
+    add_field(
+        "related_decisions",
+        [
+            str(item.get("decision") or item.get("selected_option") or "").strip()
+            for item in decisions
+            if isinstance(item, dict)
+        ],
+        direct_sources=decision_direct,
+    )
+    add_field(
+        "recorded_outcomes",
+        [
+            str(item.get("outcome") or "").strip()
+            for item in outcomes
+            if isinstance(item, dict)
+        ],
+        direct_sources=outcome_direct,
+    )
+    add_field("changes_over_time", data.get("changes_over_time"))
+
+    unsupported = [
+        name
+        for name, item in fields.items()
+        if item.get("values") and not item.get("supported")
+    ]
+    supported = [
+        name
+        for name, item in fields.items()
+        if item.get("values") and item.get("supported")
+    ]
+
+    return {
+        "version": "9.2",
+        "grounded": bool(supported),
+        "fields": fields,
+        "supported_fields": supported,
+        "unsupported_fields": unsupported,
+        "field_count": len([x for x in fields.values() if x.get("values")]),
+        "supported_field_count": len(supported),
+        "unsupported_field_count": len(unsupported),
+        "evidence_source_count": len(evidence),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "recommendation_generated": False,
+        "decision_modified": False,
+        "memory_modified": False,
+        "outcome_inferred": False,
+    }
+
+
+def build_project_state_v92_answer(result):
+    """Build a V9.2 answer using only fields with explicit evidence support."""
+    data = result if isinstance(result, dict) else {}
+    grounding = data.get("evidence_grounding")
+    if not isinstance(grounding, dict):
+        grounding = build_project_state_evidence_grounding(data)
+
+    if not data.get("answered") or not grounding.get("grounded"):
+        return {
+            "built": True,
+            "answered": False,
+            "grounded": False,
+            "answer": "",
+            "evidence": [],
+            "evidence_grounding": grounding,
+        }
+
+    subject = _v92_clean_text(data.get("subject"))
+    heading = (
+        "Based on your stored information, here is the current state"
+        + (" of " + subject if subject else " of this project")
+        + ":"
+    )
+    lines = [heading]
+
+    def supported(name):
+        return bool(
+            isinstance(grounding.get("fields"), dict)
+            and grounding["fields"].get(name, {}).get("supported")
+        )
+
+    current_plan = _v92_clean_text(data.get("current_plan"))
+    if current_plan and supported("current_plan"):
+        lines.append("Current plan: " + current_plan)
+
+    stage = _v92_clean_text(data.get("current_stage"))
+    if stage and stage != "not established" and supported("current_stage"):
+        lines.append("Current stage: " + stage)
+
+    objectives = _v92_value_list(data.get("objectives"), 5)
+    if objectives and supported("objectives"):
+        lines.append("Objectives: " + "; ".join(objectives))
+
+    dependencies = _v92_value_list(data.get("dependencies"), 5)
+    if dependencies and supported("dependencies"):
+        lines.append("Dependencies: " + "; ".join(dependencies))
+
+    decisions = data.get("related_decisions") or []
+    if decisions and supported("related_decisions"):
+        decision_lines = []
+        for item in decisions[:5]:
+            if not isinstance(item, dict):
+                continue
+            text = _v92_clean_text(item.get("decision") or item.get("selected_option"))
+            if item.get("id") is not None and text:
+                decision_lines.append("Decision #" + str(item.get("id")) + ": " + text)
+        if decision_lines:
+            lines.append("Recorded decisions: " + " | ".join(decision_lines))
+
+    outcomes = data.get("recorded_outcomes") or []
+    if outcomes and supported("recorded_outcomes"):
+        outcome_lines = []
+        for item in outcomes[:5]:
+            if not isinstance(item, dict):
+                continue
+            text = _v92_clean_text(item.get("outcome"))
+            status = _v92_clean_text(item.get("outcome_status"))
+            if text:
+                prefix = (status + ": ") if status else ""
+                outcome_lines.append(
+                    "Recorded outcome #" + str(item.get("id")) + ": " + prefix + text
+                )
+        if outcome_lines:
+            lines.append("Recorded outcomes: " + " | ".join(outcome_lines))
+
+    open_items = _v92_value_list(data.get("open_items"), 5)
+    if open_items and supported("open_items"):
+        lines.append("Open items: " + "; ".join(open_items))
+
+    unsupported = grounding.get("unsupported_fields") or []
+    if unsupported:
+        lines.append(
+            "Not established from direct stored evidence: "
+            + ", ".join(unsupported[:6])
+            + "."
+        )
+
+    lines.append(
+        "\nEach stated project field above is tied to stored evidence; this does not establish facts outside Dusra Brain or decide what you should do."
+    )
+
+    return {
+        "built": True,
+        "answered": True,
+        "grounded": True,
+        "answer": "\n".join(lines),
+        "evidence": [
+            item for item in data.get("evidence") or []
+            if isinstance(item, dict)
+        ][:40],
+        "evidence_grounding": grounding,
     }
 
 
