@@ -15900,11 +15900,11 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
         "decision_ids": [x.get("id") for x in relevant if isinstance(x, dict) and x.get("id") is not None][:20],
         "note": "Only explicitly stored options and stored supporting records are compared; missing evidence is not inferred.",
         "phase_8p_comparison_version": "8P-V7",
-        "phase_8q_outcome_evidence_version": "8Q-V2",
+        "phase_8q_outcome_evidence_version": "8Q-V3",
     }
 
 
-# PHASE 8Q — EXPLICIT DECISION OUTCOME EVIDENCE V2
+# PHASE 8Q — EXPLICIT DECISION OUTCOME EVIDENCE V3
 # ============================================================================
 # Purpose:
 #   Add explicitly recorded decision outcomes to option comparisons without
@@ -19531,6 +19531,86 @@ class handler(
 
 
     # ========================================================
+    # PHASE 8Q V3 — NATURAL LANGUAGE EXPLICIT OUTCOME CAPTURE
+    # ========================================================
+    #
+    # Chat capture is intentionally strict. It only accepts an outcome
+    # when the user explicitly identifies a saved Decision ID, supplies
+    # the observed outcome, and explicitly states the outcome status.
+    # No outcome is inferred from ordinary conversation.
+    #
+    # Supported form:
+    #   Record the outcome for Decision #1: <what happened>.
+    #   Confirmed outcome: positive.
+    #
+    # Optional:
+    #   Expected outcome: <text>.
+    #   Learning: <text>.
+    #
+    # This parser is deliberately narrow so normal chat cannot accidentally
+    # mutate decision history.
+    # ========================================================
+
+    def _parse_explicit_decision_outcome_message(self, message):
+        text = str(message or "").strip()
+        if not text:
+            return None
+
+        pattern = re.compile(
+            r"^record\s+the\s+outcome\s+for\s+decision\s*#?\s*(\d+)\s*:"
+            r"\s*(.*?)"
+            r"\s*confirmed\s+outcome\s*:\s*"
+            r"(positive|negative|mixed|neutral|unknown)\s*\.?\s*$",
+            re.IGNORECASE | re.DOTALL,
+        )
+        match = pattern.match(text)
+        if not match:
+            return None
+
+        decision_id = int(match.group(1))
+        body = str(match.group(2) or "").strip()
+
+        expected = ""
+        learning = ""
+
+        # Optional structured suffixes are parsed only when explicitly
+        # introduced by their labels.
+        expected_match = re.search(
+            r"\bExpected\s+outcome\s*:\s*(.*?)(?=\s+Learning\s*:|$)",
+            body,
+            re.IGNORECASE | re.DOTALL,
+        )
+        learning_match = re.search(
+            r"\bLearning\s*:\s*(.*?)\s*$",
+            body,
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        if expected_match:
+            expected = expected_match.group(1).strip()
+            body = body[:expected_match.start()].strip()
+
+        if learning_match:
+            learning = learning_match.group(1).strip()
+            body = body[:learning_match.start()].strip()
+
+        if not body:
+            return None
+
+        status = str(match.group(3) or "").strip().lower()
+
+        return {
+            "decision_id": decision_id,
+            "outcome_status": status,
+            "outcome": body,
+            "expected_outcome": expected,
+            "learning": learning,
+            "confirmed": True,
+            "explicit_chat_capture": True,
+        }
+
+
+    # ========================================================
     # POST
     # ========================================================
 
@@ -19583,6 +19663,63 @@ class handler(
                     ""
                 )
             ).strip().lower()
+
+            # ------------------------------------------------
+            # PHASE 8Q V3 — EXPLICIT OUTCOME CAPTURE FROM CHAT
+            # ------------------------------------------------
+            # This is the chat equivalent of the structured
+            # record_decision_outcome API action. It is intentionally strict
+            # and requires the user's explicit "Confirmed outcome:" marker.
+            explicit_outcome = (
+                self._parse_explicit_decision_outcome_message(message)
+                if not action
+                else None
+            )
+
+            if explicit_outcome:
+                outcome_payload = {
+                    **explicit_outcome,
+                    "user_id": user_id,
+                }
+
+                outcome_result = persist_decision_outcome(
+                    user_id=user_id,
+                    payload=outcome_payload,
+                )
+
+                send_json(
+                    self,
+                    {
+                        "response": (
+                            "Outcome saved for Decision #"
+                            + str(explicit_outcome["decision_id"])
+                            + ". The original decision was not changed."
+                            if outcome_result.get("persisted")
+                            else
+                            "The outcome was not saved: "
+                            + str(
+                                outcome_result.get("reason")
+                                or "outcome_not_persisted"
+                            )
+                        ),
+                        "evidence_trace": [],
+                        "evidence_count": 0,
+                        "grounded": bool(outcome_result.get("persisted")),
+                        "decision_outcome_trace":
+                            build_decision_outcome_trace(
+                                outcome_result
+                            ),
+                        "outcome":
+                            outcome_result,
+                        "session_id": session_id,
+                        "title": title,
+                    },
+                    200
+                    if outcome_result.get("persisted")
+                    else 400,
+                )
+
+                return
 
             # ------------------------------------------------
             # PHASE 8K — PLAN CONSISTENCY & TENSION INTELLIGENCE
@@ -20043,6 +20180,11 @@ class handler(
 
             if action == "record_decision_outcome":
 
+                # PHASE 8Q V3 FIX:
+                # This endpoint must be self-contained. The previous V2
+                # branch referenced memory_evidence_sufficiency_context before
+                # that chat-pipeline variable existed, which could raise a
+                # NameError and return a non-JSON 500 response.
                 outcome_result = persist_decision_outcome(
                     user_id=user_id,
                     payload=body,
@@ -20051,36 +20193,7 @@ class handler(
                 send_json(
                     self,
                     {
-                        "evidence_sufficiency_trace":
-                        {
-                            "built": isinstance(
-                                memory_evidence_sufficiency_context,
-                                dict,
-                            ),
-                            "detected": bool(
-                                memory_evidence_sufficiency_context.get(
-                                    "detected",
-                                    False,
-                                )
-                            )
-                            if isinstance(
-                                memory_evidence_sufficiency_context,
-                                dict,
-                            )
-                            else False,
-                            "analysis": (
-                                memory_evidence_sufficiency_context.get(
-                                    "analysis"
-                                )
-                                if isinstance(
-                                    memory_evidence_sufficiency_context,
-                                    dict,
-                                )
-                                else None
-                            ),
-                        },
-
-                    "decision_outcome_trace":
+                        "decision_outcome_trace":
                             build_decision_outcome_trace(outcome_result),
                         "outcome":
                             outcome_result,
@@ -22130,7 +22243,7 @@ class handler(
                                 "winner_selected": False,
                                 "decision_modified": False,
                                 "read_only": True,
-                                "version": "8Q-V2",
+                                "version": "8Q-V3",
                             }
                         ),
 
@@ -25315,7 +25428,7 @@ def build_decision_outcome_evidence_trace(analysis):
         "winner_selected": False,
         "decision_modified": False,
         "read_only": True,
-        "version": "8Q-V2",
+        "version": "8Q-V3",
     }
 
 
