@@ -11493,6 +11493,334 @@ def build_project_state_chat_context(
 
 
 # ============================================================
+# V9.3 — PLAN EVOLUTION & STATE TRACKING
+# ============================================================
+#
+# Purpose:
+#   Reconstruct how a user's plan changed over time using the existing
+#   memory-version store. This is a read-only evidence layer built on top
+#   of the verified Phase 8C backend.
+#
+# Integrity rules:
+#   - uses persisted memory/version evidence only
+#   - never edits memory
+#   - never creates a task or action
+#   - never infers an outcome
+#   - never recommends which state is better
+#   - only calls something a transition when two distinct stored states exist
+# ============================================================
+
+
+def is_plan_evolution_tracking_question_v93(message):
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+
+    terms = (
+        "how has my plan changed",
+        "how has the plan changed",
+        "what changed in my plan",
+        "what has changed in my plan",
+        "what changed over time",
+        "how did my plan change",
+        "earlier plan",
+        "previous plan",
+        "earlier position",
+        "previous position",
+        "then vs now",
+        "from earlier to now",
+        "how did i get to",
+        "how did i move from",
+        "what is the evolution of my plan",
+        "show me the evolution",
+        "plan history",
+        "plan timeline",
+        "state of my plan",
+        "current state compared with",
+    )
+    return any(term in text for term in terms)
+
+
+def _v93_plan_state_subject(user_id, message):
+    """Resolve a subject using the existing subject detector only."""
+    try:
+        subjects = get_memory_subjects(user_id)
+        detected = detect_subject(message, subjects)
+        if detected:
+            return str(detected).strip()
+    except Exception:
+        pass
+    return None
+
+
+def _v93_plan_state_text(item):
+    if not isinstance(item, dict):
+        return ""
+    return str(item.get("memory") or "").strip()
+
+
+def _v93_plan_state_key(item):
+    try:
+        version = int(item.get("version_number"))
+    except Exception:
+        version = -1
+    try:
+        memory_id = int(item.get("memory_id"))
+    except Exception:
+        memory_id = 0
+    return (
+        str(item.get("created_at") or ""),
+        memory_id,
+        version,
+    )
+
+
+def _v93_build_states(timeline):
+    items = [
+        dict(item)
+        for item in (timeline or [])
+        if _v93_plan_state_text(item)
+    ]
+    items.sort(key=_v93_plan_state_key)
+
+    states = []
+    seen = set()
+    for item in items:
+        try:
+            memory_id = int(item.get("memory_id"))
+        except Exception:
+            memory_id = None
+        try:
+            version = int(item.get("version_number"))
+        except Exception:
+            version = None
+
+        key = (memory_id, version, _v93_plan_state_text(item))
+        if key in seen:
+            continue
+        seen.add(key)
+
+        states.append({
+            "memory_id": memory_id,
+            "version_number": version,
+            "state": _v93_plan_state_text(item),
+            "subject": str(item.get("subject") or "general"),
+            "created_at": item.get("created_at"),
+            "change_type": item.get("change_type"),
+            "change_reason": str(item.get("change_reason") or ""),
+            "is_current": bool(item.get("is_current")),
+        })
+    return states
+
+
+def _v93_build_transitions(states):
+    transitions = []
+    for index in range(1, len(states)):
+        previous = states[index - 1]
+        current = states[index]
+        if previous.get("state") == current.get("state"):
+            continue
+
+        evidence_ids = []
+        for value in (
+            previous.get("memory_id"),
+            current.get("memory_id"),
+        ):
+            if value and value not in evidence_ids:
+                evidence_ids.append(value)
+
+        transitions.append({
+            "from_state": previous.get("state", ""),
+            "to_state": current.get("state", ""),
+            "from_memory_id": previous.get("memory_id"),
+            "to_memory_id": current.get("memory_id"),
+            "from_version": previous.get("version_number"),
+            "to_version": current.get("version_number"),
+            "change_type": current.get("change_type"),
+            "change_reason": current.get("change_reason", ""),
+            "changed_at": current.get("created_at"),
+            "evidence_memory_ids": evidence_ids,
+        })
+    return transitions
+
+
+def _v93_current_state(states):
+    current = [item for item in states if item.get("is_current")]
+    if current:
+        current.sort(
+            key=lambda item: (
+                str(item.get("created_at") or ""),
+                int(item.get("version_number") or -1),
+            ),
+            reverse=True,
+        )
+        return current[0]
+    return states[-1] if states else None
+
+
+def _v93_build_evidence(states):
+    evidence = []
+    seen = set()
+    for item in states:
+        memory_id = item.get("memory_id")
+        if not memory_id or memory_id in seen:
+            continue
+        seen.add(memory_id)
+        evidence.append({
+            "source_type": "memory",
+            "source_id": memory_id,
+            "label": "Memory #" + str(memory_id),
+            "text": item.get("state", ""),
+            "version_number": item.get("version_number"),
+            "created_at": item.get("created_at"),
+        })
+    return evidence[:10]
+
+
+def analyze_plan_state_tracking_v93(user_id, message, memories=None, limit=100):
+    """Build a chronological plan-state model from persisted versions."""
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=max(80, int(limit or 100)),
+        )
+    memories = list(memories or [])
+
+    subject = _v93_plan_state_subject(user_id, message)
+    timeline = []
+
+    if subject:
+        try:
+            timeline = get_memory_versions(
+                user_id=user_id,
+                subject=subject,
+            )
+        except Exception:
+            timeline = []
+
+    # If a subject was not resolved, use only version records belonging to
+    # memories already retrieved for this question. This prevents unrelated
+    # projects from being mixed into the timeline.
+    if not timeline:
+        relevant_ids = set()
+        for item in memories:
+            try:
+                relevant_ids.add(int(item.get("id")))
+            except Exception:
+                pass
+        if relevant_ids:
+            try:
+                all_versions = get_memory_versions(user_id=user_id)
+                timeline = [
+                    item for item in all_versions
+                    if int(item.get("memory_id") or 0) in relevant_ids
+                ]
+            except Exception:
+                timeline = []
+
+    states = _v93_build_states(timeline)
+    transitions = _v93_build_transitions(states)
+    initial_state = states[0] if states else None
+    current_state = _v93_current_state(states)
+
+    return {
+        "detected": True,
+        "subject": subject,
+        "read_only": True,
+        "prescriptive": False,
+        "truth_not_established": True,
+        "evolution_supported": bool(transitions),
+        "state_count": len(states),
+        "transition_count": len(transitions),
+        "initial_state": initial_state,
+        "current_state": current_state,
+        "states": states[:100],
+        "transitions": transitions[:100],
+        "evidence": _v93_build_evidence(states),
+        "evidence_basis": "persisted_memory_versions",
+    }
+
+
+def build_plan_state_answer_v93(analysis):
+    """Create a deterministic, evidence-grounded user-facing answer."""
+    if not isinstance(analysis, dict):
+        return "I don't have enough stored version information to reconstruct how your plan changed."
+
+    states = analysis.get("states") or []
+    transitions = analysis.get("transitions") or []
+    subject = analysis.get("subject") or "your plan"
+
+    if not states:
+        return (
+            "I couldn't establish a plan timeline from your stored memory versions. "
+            "I don't have enough versioned evidence to describe how the plan changed over time."
+        )
+
+    if not transitions:
+        current = analysis.get("current_state") or states[-1]
+        return (
+            "I found one supported state for " + str(subject) + ".\n\n"
+            "Current recorded state: " + str(current.get("state") or "") + "\n\n"
+            "The stored version history does not establish a distinct earlier-to-later change yet."
+        )
+
+    initial = analysis.get("initial_state") or states[0]
+    current = analysis.get("current_state") or states[-1]
+
+    lines = [
+        "Based on your stored memory versions, your plan evolved over time:",
+        "",
+        "Earlier recorded state: " + str(initial.get("state") or ""),
+    ]
+
+    for index, transition in enumerate(transitions[:5], start=1):
+        lines.extend([
+            "",
+            "Change " + str(index) + ":",
+            str(transition.get("from_state") or "")
+            + " → "
+            + str(transition.get("to_state") or ""),
+        ])
+        reason = str(transition.get("change_reason") or "").strip()
+        if reason:
+            lines.append("Recorded change reason: " + reason)
+
+    lines.extend([
+        "",
+        "Current recorded state: " + str(current.get("state") or ""),
+        "",
+        "This is a reconstruction of stored memory/version evidence; it does not establish facts outside Dusra Brain or recommend what you should do next.",
+    ])
+    return "\n".join(lines)
+
+
+def build_plan_state_trace_v93(analysis):
+    value = analysis if isinstance(analysis, dict) else {}
+    initial = value.get("initial_state") or {}
+    current = value.get("current_state") or {}
+    return {
+        "detected": bool(value.get("detected")),
+        "subject": value.get("subject"),
+        "evolution_supported": bool(value.get("evolution_supported")),
+        "state_count": int(value.get("state_count") or 0),
+        "transition_count": int(value.get("transition_count") or 0),
+        "initial_memory_id": initial.get("memory_id"),
+        "initial_version": initial.get("version_number"),
+        "current_memory_id": current.get("memory_id"),
+        "current_version": current.get("version_number"),
+        "evidence_memory_ids": [
+            item.get("source_id")
+            for item in (value.get("evidence") or [])
+            if isinstance(item, dict) and item.get("source_id") is not None
+        ][:20],
+        "read_only": True,
+        "prescriptive": False,
+        "truth_not_established": True,
+        "evidence_basis": "persisted_memory_versions",
+    }
+
 # PHASE 9.2 — PLAN EVIDENCE & GROUNDING
 # ============================================================
 #
@@ -20627,6 +20955,9 @@ class handler(
                     True,
                 "plan_evolution_state_tracking":
                     True,
+
+                "plan_state_tracking":
+                    True,
                 "plan_consistency_tension_intelligence":
                     True,
             }
@@ -20808,7 +21139,10 @@ class handler(
                         "evidence_trace": [],
                         "evidence_count": 0,
                         "grounded": bool(outcome_result.get("persisted")),
-                        "decision_outcome_trace":
+                        "plan_state_tracking_trace":
+                        plan_state_trace_v93,
+
+                    "decision_outcome_trace":
                             build_decision_outcome_trace(
                                 outcome_result
                             ),
@@ -23301,6 +23635,81 @@ class handler(
                         "invalid_evidence_count": 0,
                         "reasoning_used": False,
                         "verification_fallback_used": True,
+                    }
+
+            # ------------------------------------------------
+            # V9.3 — PLAN EVOLUTION & STATE TRACKING
+            # ------------------------------------------------
+            # Read-only plan-history layer. It runs only for explicit
+            # plan-change/evolution questions and does not modify memory,
+            # decisions, outcomes, or create actions.
+            plan_state_analysis_v93 = None
+            plan_state_trace_v93 = {
+                "detected": False,
+                "read_only": True,
+                "prescriptive": False,
+            }
+
+            if is_plan_evolution_tracking_question_v93(message):
+                try:
+                    plan_state_analysis_v93 = analyze_plan_state_tracking_v93(
+                        user_id=user_id,
+                        message=message,
+                        memories=memories,
+                        limit=100,
+                    )
+                    plan_state_trace_v93 = build_plan_state_trace_v93(
+                        plan_state_analysis_v93
+                    )
+
+                    plan_answer_v93 = build_plan_state_answer_v93(
+                        plan_state_analysis_v93
+                    ).strip()
+
+                    if plan_answer_v93:
+                        response = plan_answer_v93
+
+                    plan_evidence_v93 = (
+                        plan_state_analysis_v93.get("evidence")
+                        or []
+                    )
+
+                    existing_keys_v93 = {
+                        (
+                            item.get("source_type"),
+                            item.get("source_id"),
+                        )
+                        for item in evidence_trace
+                        if isinstance(item, dict)
+                    }
+
+                    for item in plan_evidence_v93:
+                        if not isinstance(item, dict):
+                            continue
+                        key = (
+                            item.get("source_type"),
+                            item.get("source_id"),
+                        )
+                        if key in existing_keys_v93:
+                            continue
+                        evidence_trace.append(item)
+                        existing_keys_v93.add(key)
+
+                    evidence_trace = evidence_trace[:10]
+                    if plan_evidence_v93:
+                        grounded = True
+
+                except Exception:
+                    plan_state_analysis_v93 = None
+                    plan_state_trace_v93 = {
+                        "detected": True,
+                        "evolution_supported": False,
+                        "state_count": 0,
+                        "transition_count": 0,
+                        "read_only": True,
+                        "prescriptive": False,
+                        "truth_not_established": True,
+                        "error": "plan_state_tracking_unavailable",
                     }
 
             # ------------------------------------------------
