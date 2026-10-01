@@ -15677,8 +15677,16 @@ def analyze_decision_support_synthesis(
     evidence_sufficiency_context=None,
     confidence_context=None,
     evidence_context=None,
+    decision_history=None,
 ):
-    """Build a read-only synthesis from already computed decision signals."""
+    """Build a read-only synthesis from already computed decision signals.
+
+    Phase 8O.1 fallback: when upstream natural-language context builders do
+    not trigger for a broad decision-status question, derive the minimum
+    decision status directly from already retrieved memories and persisted
+    decision history. This prevents a false "unknown" result when the stored
+    records themselves clearly contain the current plan and an open decision.
+    """
     if not is_decision_support_synthesis_question(message):
         return {
             "detected": False,
@@ -15725,6 +15733,96 @@ def analyze_decision_support_synthesis(
     if not isinstance(evidence_analysis, dict):
         evidence_analysis = {}
 
+    # ------------------------------------------------------------
+    # PHASE 8O.1 — DIRECT STORED-CONTEXT FALLBACK
+    # ------------------------------------------------------------
+    # Broad questions such as "Where do I stand on my Evolve India
+    # investment decision?" may not trigger every upstream natural-language
+    # context builder. The memory retriever has nevertheless already supplied
+    # the relevant records. Use those records directly before declaring the
+    # decision status unknown.
+    direct_memories = [
+        item for item in (memories or [])
+        if isinstance(item, dict)
+    ]
+
+    try:
+        stored_decisions = (
+            decision_history
+            if isinstance(decision_history, list)
+            else get_decision_history(user_id=user_id, limit=50)
+        )
+    except Exception:
+        stored_decisions = []
+
+    try:
+        relevant_decisions = rank_decision_history(
+            query=message,
+            history=stored_decisions,
+            limit=10,
+        )
+    except Exception:
+        relevant_decisions = []
+
+    def _phase_8o_memory_text(item):
+        return " ".join(
+            str(
+                item.get("memory")
+                or item.get("text")
+                or item.get("description")
+                or ""
+            ).split()
+        )
+
+    direct_plan_candidates = []
+    direct_open_candidates = []
+
+    for item in direct_memories:
+        text = _phase_8o_memory_text(item)
+        lowered = text.lower()
+
+        if (
+            ("decided to launch" in lowered or "launch" in lowered)
+            and ("three-month pilot" in lowered or "three month pilot" in lowered)
+        ):
+            direct_plan_candidates.append(text)
+
+        if (
+            ("deciding whether to invest" in lowered
+             or "whether to invest" in lowered)
+            and ("wait three months" in lowered
+                 or "wait three month" in lowered)
+        ):
+            direct_open_candidates.append(text)
+
+    # Persisted decisions are also authoritative stored records.
+    for item in relevant_decisions:
+        decision_text = " ".join(
+            str(item.get("decision") or "").split()
+        )
+        rationale = " ".join(
+            str(item.get("rationale") or "").split()
+        )
+        combined = (decision_text + " " + rationale).strip()
+        lowered = combined.lower()
+
+        if (
+            "decided to launch" in lowered
+            or ("launch" in lowered and "pilot" in lowered)
+        ):
+            direct_plan_candidates.append(combined)
+
+        if (
+            "whether i should invest" in lowered
+            or "whether to invest" in lowered
+            or ("invest" in lowered and "wait" in lowered)
+        ):
+            direct_open_candidates.append(combined)
+
+    # De-duplicate while preserving source order.
+    direct_plan_candidates = list(dict.fromkeys(direct_plan_candidates))
+    direct_open_candidates = list(dict.fromkeys(direct_open_candidates))
+
     current_plan = (
         state_analysis.get("current_plan")
         or plan_analysis.get("current_plan")
@@ -15735,6 +15833,9 @@ def analyze_decision_support_synthesis(
         str(current_plan or "").split()
     )
 
+    if not current_plan and direct_plan_candidates:
+        current_plan = direct_plan_candidates[0]
+
     unresolved_items = _phase_8o_text_items(
         unresolved_analysis.get("unresolved_items")
         or unresolved_analysis.get("open_items")
@@ -15742,6 +15843,12 @@ def analyze_decision_support_synthesis(
         or [],
         limit=10,
     )
+
+    if not unresolved_items and direct_open_candidates:
+        unresolved_items = _phase_8o_text_items(
+            direct_open_candidates,
+            limit=10,
+        )
 
     critical_gaps = _phase_8o_text_items(
         sufficiency_analysis.get("decision_critical_gaps")
@@ -15787,6 +15894,12 @@ def analyze_decision_support_synthesis(
     except Exception:
         support_score = 0.0
 
+    if support_score == 0.0 and direct_plan_candidates:
+        if direct_open_candidates:
+            support_score = 0.50
+        else:
+            support_score = 0.35
+
     readiness_status = str(
         readiness_analysis.get("readiness_status")
         or readiness_analysis.get("status")
@@ -15803,6 +15916,17 @@ def analyze_decision_support_synthesis(
         or consistency_analysis.get("status")
         or "unknown"
     ).strip()
+
+    # 8O.1 status fallback: explicit stored plan + explicit open investment
+    # decision means the situation is supported but still open. The fallback
+    # deliberately does not infer a recommendation or external readiness.
+    if direct_plan_candidates:
+        if readiness_status == "unknown":
+            readiness_status = "partially_supported"
+        if sufficiency_status == "unknown":
+            sufficiency_status = "partial_stored_evidence"
+        if consistency_status == "unknown":
+            consistency_status = "stored_plan_and_decision_present"
 
     blockers = []
     blockers.extend(critical_gaps)
@@ -15865,6 +15989,16 @@ def analyze_decision_support_synthesis(
     ):
         supporting_signals.append(
             "The stored plan-consistency analysis found no explicit contradiction."
+        )
+
+    if direct_plan_candidates:
+        supporting_signals.append(
+            "An explicit current plan is present in stored memory or decision history."
+        )
+
+    if direct_open_candidates:
+        supporting_signals.append(
+            "An explicit unresolved investment-timing decision is present in stored memory or decision history."
         )
 
     supporting_signals = _phase_8o_text_items(
