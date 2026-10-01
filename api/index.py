@@ -12708,10 +12708,11 @@ def _v97_deterministic_answer(reasoning):
         if current.get("stage"):
             current_parts.append("Stage: " + _v97_clean_text(current.get("stage")))
         parts.append("Current state: " + " ".join(current_parts))
-    if changes:
-        # V9.8 presentation cleanup: show only substantive historical transitions.
-        # Repeated version records and transitions that simply restate the current
-        # plan are not useful "changes" in the user-facing answer.
+    if changes and not explicit_unresolved_split:
+        # V9.8.1: keep historical transitions for general context questions.
+        # Explicit unresolved-vs-missing questions are intentionally focused on
+        # unresolved items and missing information; noisy version-history
+        # transitions are not useful in that response.
         current_plan_norm = _v97_clean_text(current.get("plan")).lower()
         current_stage_norm = _v97_clean_text(current.get("stage")).lower()
         seen_change_keys = set()
@@ -12723,32 +12724,22 @@ def _v97_deterministic_answer(reasoning):
             new = _v97_clean_text(item.get("to"))
             old_norm = " ".join(old.lower().split())
             new_norm = " ".join(new.lower().split())
-
-            # Ignore empty/no-op transitions.
             if not old_norm and not new_norm:
                 continue
             if old_norm and new_norm and old_norm == new_norm:
                 continue
-
-            # If the transition's destination is exactly the already-established
-            # current plan/stage, it is a restatement rather than a useful change.
             if new_norm and new_norm in {current_plan_norm, current_stage_norm}:
                 continue
-
-            # Deduplicate repeated version transitions.
             change_key = (old_norm, new_norm)
             if change_key in seen_change_keys:
                 continue
             seen_change_keys.add(change_key)
-
             if old and new:
                 change_parts.append(old + " → " + new)
             elif new:
                 change_parts.append(new)
-
             if len(change_parts) >= 4:
                 break
-
         if change_parts:
             parts.append("Changed: " + " ".join(change_parts))
     if explicit_unresolved_split:
