@@ -21727,7 +21727,15 @@ class handler(
                                     "source_type": "decision_history",
                                     "source_id": did,
                                     "label": "Decision #" + str(did),
-                                    "text": str(item.get("decision_text") or "").strip(),
+                                    # Use the exact stored decision text when the
+                                    # comparison item does not carry its own text.
+                                    # This is required by the deterministic grounding
+                                    # verifier for decision_history sources.
+                                    "text": str(
+                                        item.get("decision_text")
+                                        or stored_text
+                                        or ""
+                                    ).strip(),
                                 })
                         for memory_id in item.get("memory_ids", [])[:10]:
                             try:
