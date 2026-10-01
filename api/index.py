@@ -167,6 +167,69 @@ def _ensure_auth_tables():
         conn.commit()
 
 
+def _ensure_integration_tables():
+    """Create per-user integration preference storage.
+
+    This stores connection intent/status only. Provider secrets/tokens are not
+    stored here; those require provider-specific secure flows.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS dusra_integration_preferences (
+                    user_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (user_id, provider),
+                    FOREIGN KEY (user_id) REFERENCES dusra_users(id) ON DELETE CASCADE
+                )
+            """)
+        conn.commit()
+
+
+INTEGRATION_CATALOG = [
+    {"id": "whatsapp", "name": "WhatsApp", "description": "Conversations → memory", "status": "available"},
+    {"id": "telegram", "name": "Telegram", "description": "Messages → memory", "status": "available"},
+    {"id": "slack", "name": "Slack", "description": "Team context → memory", "status": "available"},
+    {"id": "web", "name": "Web", "description": "Ask your brain anywhere", "status": "active"},
+]
+
+
+def _get_integrations(user_id):
+    _ensure_integration_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT provider, enabled FROM dusra_integration_preferences WHERE user_id=%s",
+                (user_id,),
+            )
+            states = {row[0]: bool(row[1]) for row in cur.fetchall()}
+    result = []
+    for item in INTEGRATION_CATALOG:
+        result.append({**item, "enabled": bool(states.get(item["id"], item["id"] == "web"))})
+    return result
+
+
+def _set_integration_enabled(user_id, provider, enabled):
+    provider = str(provider or "").strip().lower()
+    if provider not in {item["id"] for item in INTEGRATION_CATALOG if item["id"] != "web"}:
+        raise ValueError("Unsupported integration provider.")
+    _ensure_integration_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO dusra_integration_preferences (user_id, provider, enabled)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, provider) DO UPDATE SET
+                    enabled=EXCLUDED.enabled,
+                    updated_at=NOW()
+            """, (user_id, provider, bool(enabled)))
+        conn.commit()
+    return _get_integrations(user_id)
+
+
 def _user_id_for_email(email):
     return "user_" + hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:32]
 
@@ -21730,6 +21793,16 @@ class handler(
             return
         user_id = user["id"]
 
+        # ----------------------------------------------------
+        # V9.8.2 — PER-USER INTEGRATION CENTER
+        # ----------------------------------------------------
+        if parsed.path == "/api/integrations":
+            try:
+                send_json(self, {"integrations": _get_integrations(user_id)})
+            except Exception as error:
+                send_json(self, {"error": str(error)}, 500)
+            return
+
 
         # ----------------------------------------------------
         # PHASE 6 — INITIAL MEMORY VERSION BASELINE
@@ -22978,6 +23051,29 @@ class handler(
 
             user = _require_authenticated_user(self)
             if not user:
+                return
+
+            user_id = user["id"]
+
+            # ----------------------------------------------------
+            # V9.8.2 — PER-USER INTEGRATION CENTER
+            # ----------------------------------------------------
+            if parsed.path == "/api/integrations":
+                try:
+                    action = str(body.get("action", "")).strip().lower()
+                    provider = str(body.get("provider", "")).strip().lower()
+                    if action not in {"enable", "disable"}:
+                        raise ValueError("Integration action must be enable or disable.")
+                    integrations = _set_integration_enabled(
+                        user_id=user_id,
+                        provider=provider,
+                        enabled=(action == "enable"),
+                    )
+                    send_json(self, {"ok": True, "integrations": integrations})
+                except ValueError as error:
+                    send_json(self, {"ok": False, "error": str(error)}, 400)
+                except Exception as error:
+                    send_json(self, {"ok": False, "error": str(error)}, 500)
                 return
 
             message = str(
