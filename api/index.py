@@ -12728,7 +12728,19 @@ def _v97_focus_reasoning_context(
     available, the already-built plan-state and unresolved-gap evidence.
     """
     source = dict(reasoning) if isinstance(reasoning, dict) else {}
+    user_id = str(source.get("_user_id") or "")
     subject = _v97_clean_text(focus_subject, 160)
+
+    if not subject:
+        message_text = _v97_clean_text(message, 1500)
+        phrase_candidates = re.findall(
+            r"\b[A-Z][A-Za-z0-9&-]*(?:\s+[A-Z][A-Za-z0-9&-]*)+\b",
+            message_text,
+        )
+        if phrase_candidates:
+            phrase_candidates.sort(key=lambda value: (-len(value), value.lower()))
+            subject = _v97_clean_text(phrase_candidates[0], 160)
+
     subject_terms = [
         token
         for token in re.findall(r"[a-z0-9]+", subject.lower())
@@ -12736,10 +12748,10 @@ def _v97_focus_reasoning_context(
     ]
 
     subject_memories = []
-    if subject:
+    if subject and user_id:
         try:
             subject_memories = get_subject_memories(
-                user_id=source.get("_user_id") or "",
+                user_id=user_id,
                 subject=subject,
                 session_id="default",
                 limit=100,
@@ -12747,36 +12759,54 @@ def _v97_focus_reasoning_context(
         except Exception:
             subject_memories = []
 
-    if subject_terms:
-        filtered_known = []
-        for item in source.get("known") or []:
-            text = _v97_clean_text(item)
-            lowered = text.lower()
-            if any(term in lowered for term in subject_terms):
-                filtered_known.append(text)
-        # Important: an explicit subject focus must never fall back to the
-        # broad V9.6 known list. An empty focused list is safer than leakage.
-        source["known"] = _v97_unique(filtered_known, 12)
+    if subject_terms and not subject_memories and user_id:
+        try:
+            candidate_memories = get_relevant_memories(
+                user_id=user_id,
+                message=message,
+                session_id="default",
+                limit=100,
+            ) or []
+        except Exception:
+            candidate_memories = []
+        for item in candidate_memories:
+            if not isinstance(item, dict):
+                continue
+            memory_text = _v97_clean_text(item.get("memory"))
+            lowered = memory_text.lower()
+            if all(term in lowered for term in subject_terms):
+                subject_memories.append(item)
+
+    if subject:
+        focused_known = []
+        for item in subject_memories:
+            if isinstance(item, dict):
+                memory_text = _v97_clean_text(item.get("memory"))
+                if memory_text:
+                    focused_known.append(memory_text)
+        if focused_known:
+            source["known"] = _v97_unique(focused_known, 12)
+        else:
+            filtered_known = []
+            for item in source.get("known") or []:
+                text = _v97_clean_text(item)
+                lowered = text.lower()
+                if all(term in lowered for term in subject_terms):
+                    filtered_known.append(text)
+            source["known"] = _v97_unique(filtered_known, 12)
 
     # Restrict evidence IDs to memories belonging to the focused subject.
     if subject and subject_memories:
-        subject_ids = {
+        subject_ids = [
             item.get("id")
             for item in subject_memories
             if isinstance(item, dict) and item.get("id") is not None
-        }
+        ]
         evidence = source.get("evidence") or {}
         if isinstance(evidence, dict):
-            existing_ids = evidence.get("source_ids") or []
-            focused_ids = [
-                source_id
-                for source_id in existing_ids
-                if source_id in subject_ids
-            ]
-            if focused_ids:
-                source["evidence"] = dict(evidence)
-                source["evidence"]["source_ids"] = focused_ids[:20]
-                source["evidence"]["source_count"] = len(focused_ids[:20])
+            source["evidence"] = dict(evidence)
+            source["evidence"]["source_ids"] = subject_ids[:20]
+            source["evidence"]["source_count"] = len(subject_ids[:20])
 
     state_context = plan_state_context if isinstance(plan_state_context, dict) else {}
     state_analysis = state_context.get("analysis") or {}
@@ -12846,7 +12876,7 @@ def _v97_focus_reasoning_context(
                 versions,
                 key=lambda item: (
                     str(item.get("created_at") or "") if isinstance(item, dict) else "",
-                    int(item.get("version") or 0) if isinstance(item, dict) else 0,
+                    int(item.get("version_number") or item.get("version") or 0) if isinstance(item, dict) else 0,
                 ),
             )
             version_changes = []
@@ -12866,6 +12896,39 @@ def _v97_focus_reasoning_context(
                 previous_text = current_text
             if version_changes:
                 source["changes"] = version_changes[:10]
+
+    if subject and subject_memories and not source.get("changes") and user_id:
+        version_changes = []
+        for memory_item in subject_memories[:20]:
+            if not isinstance(memory_item, dict) or memory_item.get("id") is None:
+                continue
+            try:
+                item_versions = get_memory_versions(
+                    user_id=user_id,
+                    memory_id=memory_item.get("id"),
+                ) or []
+            except Exception:
+                item_versions = []
+            ordered = sorted(
+                [item for item in item_versions if isinstance(item, dict)],
+                key=lambda item: (
+                    int(item.get("version_number") or item.get("version") or 0),
+                    str(item.get("created_at") or ""),
+                ),
+            )
+            previous = ""
+            for version_item in ordered:
+                current = _v97_clean_text(version_item.get("memory"))
+                if previous and current and current != previous:
+                    version_changes.append({
+                        "from": previous,
+                        "to": current,
+                        "source": "stored_memory_versions",
+                    })
+                if current:
+                    previous = current
+        if version_changes:
+            source["changes"] = version_changes[:10]
 
     gap_context = unresolved_gap_context if isinstance(unresolved_gap_context, dict) else {}
     gap_analysis = gap_context.get("analysis") or {}
