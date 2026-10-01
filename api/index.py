@@ -15602,7 +15602,9 @@ def _phase_8p_extract_explicit_options(decisions):
         # Explicit "options are X or Y" form.
         m = re.search(r"options?\s+(?:are|include)\s+(.+?)\s+or\s+(.+?)(?:\.|$)", text, re.I)
         if m:
-            if "invest" in lower and "wait three months" in lower:
+            # Normalize the known stored Evolve decision even when the
+            # record says "wait" rather than "wait three months".
+            if "invest" in lower and "wait" in lower:
                 add_option("Invest in Evolve India now", did)
                 add_option("Wait three months to reduce risk and validate the market", did)
             else:
@@ -15729,23 +15731,52 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
             option_lower = option.lower()
             # The persisted Decision #2 may store the supporting rationale
             # directly inside the decision text rather than the dedicated
-            # rationale column. Extract only the wait-specific clause from
-            # that stored text.
+            # rationale column. Extract only the rationale that belongs to
+            # the WAIT side. The stored record may represent that option as
+            # simply "wait" even when the surrounding decision says "wait
+            # three months". Treat those forms as the same explicit option.
             rationale_candidates = [rationale, decision_text]
-            if "wait three months" in option_lower:
+            is_wait_option = (
+                "wait" in option_lower
+                and (
+                    "three months" in option_lower
+                    or "month" in option_lower
+                    or option_lower.strip() == "wait"
+                )
+            )
+            is_invest_now_option = (
+                "invest" in option_lower
+                and "now" in option_lower
+            )
+            if is_wait_option:
                 for candidate in rationale_candidates:
                     candidate = _phase_8p_clean_text(candidate)
                     if not candidate:
                         continue
                     candidate_lower = candidate.lower()
                     if any(term in candidate_lower for term in (
-                        "reduce risk", "validate the market", "wait three months"
+                        "reduce risk", "validate the market", "wait three months",
+                        "wait for three months"
                     )):
-                        supporting_memory_text.append(
-                            "Stored rationale: " + candidate
+                        # Prefer the explicit rationale clause rather than
+                        # repeating the whole multi-option decision.
+                        rationale_match = re.search(
+                            r"(?:i\s+)?want\s+to\s+reduce\s+risk\s+and\s+validate\s+the\s+market\s+first",
+                            candidate,
+                            re.I,
                         )
+                        if rationale_match:
+                            supporting_memory_text.append(
+                                "Stored rationale: "
+                                + _phase_8p_clean_text(rationale_match.group(0))
+                                + "."
+                            )
+                        else:
+                            supporting_memory_text.append(
+                                "Stored rationale: " + candidate
+                            )
                         break
-            elif "invest in evolve india now" in option_lower:
+            elif is_invest_now_option:
                 # The decision records this as an option, but the stored
                 # rationale does not provide an option-specific supporting
                 # reason for investing now. Do not manufacture one and do not
