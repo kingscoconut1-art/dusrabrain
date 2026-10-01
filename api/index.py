@@ -12817,6 +12817,17 @@ def _v97_focus_reasoning_context(
         for token in re.findall(r"[a-z0-9]+", subject.lower())
         if len(token) >= 3
     ]
+    # Use distinctive subject terms when broad project words such as
+    # "india" would otherwise over-constrain retrieval. For a subject like
+    # "Evolve India", "evolve" is the material retrieval anchor.
+    generic_subject_terms = {
+        "india", "project", "business", "company", "plan", "work",
+        "initiative", "venture", "launch", "strategy", "proposal",
+    }
+    subject_match_terms = [
+        token for token in subject_terms
+        if token not in generic_subject_terms and len(token) >= 4
+    ] or subject_terms
 
     subject_memories = []
     if subject and user_id:
@@ -12855,7 +12866,14 @@ def _v97_focus_reasoning_context(
                 continue
             memory_text = _v97_clean_text(item.get("memory"))
             lowered = memory_text.lower()
-            if all(term in lowered for term in subject_terms):
+            if (
+                any(term in lowered for term in subject_match_terms)
+                and (
+                    len(subject_match_terms) == 1
+                    or all(term in lowered for term in subject_match_terms)
+                    or any(term in lowered for term in subject_match_terms if len(term) >= 6)
+                )
+            ):
                 subject_memories.append(item)
 
     # Deduplicate the focused memory set by persistent memory id.
@@ -13090,10 +13108,42 @@ def _v97_focus_reasoning_context(
                 "still deciding",
                 "open decision",
                 "remains open",
+                "awaiting",
+                "pending",
+                "not finalized",
+                "not finalised",
+                "needs confirmation",
+                "yet to confirm",
+                "to be confirmed",
+                "not yet agreed",
             )):
                 inferred_from_stored_text.append(item)
         if inferred_from_stored_text:
-            source["unresolved"] = _v97_unique(inferred_from_stored_text, 6)
+            source["unresolved"] = _v97_unique(inferred_from_stored_text, 8)
+
+    # For an explicit unresolved-vs-missing question, derive the two buckets
+    # only from the already-focused stored memories. Missing information is
+    # not guessed from arbitrary absent fields; it is limited to explicit
+    # unknown/gap records already present in the reasoning packet.
+    if _v97_is_explicit_unresolved_split_question(message):
+        explicit_memory_unresolved = []
+        for item in subject_memories:
+            text = _v97_clean_text(item.get("memory")) if isinstance(item, dict) else ""
+            lowered = text.lower()
+            if text and any(marker in lowered for marker in (
+                "deciding whether", "whether to invest", "still deciding",
+                "open decision", "remains open", "awaiting", "pending",
+                "not finalized", "not finalised", "needs confirmation",
+                "yet to confirm", "to be confirmed", "not yet agreed",
+                "subject to confirmation", "subject to discussion",
+            )):
+                explicit_memory_unresolved.append(text)
+        if explicit_memory_unresolved:
+            source["unresolved"] = _v97_unique(explicit_memory_unresolved, 10)
+        source["unknowns"] = _v97_unique(
+            list(source.get("unknowns") or []) + list(source.get("information_gaps") or []),
+            8,
+        )
 
     return source
 
