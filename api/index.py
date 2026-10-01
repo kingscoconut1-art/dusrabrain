@@ -13195,6 +13195,18 @@ def generate_agent_reasoning_response_v97(
     )
     value["_v97_message"] = _v97_clean_text(message, 1200)
 
+    # V9.7.5 — deterministic output for explicit unresolved-vs-missing
+    # questions. Do not allow model synthesis to reintroduce stale
+    # "missing plan/stage" placeholders or collapse the two buckets.
+    if _v97_is_explicit_unresolved_split_question(message):
+        return {
+            "answered": True,
+            "status": "answered",
+            "answer": _v97_deterministic_answer(value),
+            "method": "deterministic_explicit_unresolved_split",
+            "focused_reasoning": value,
+        }
+
     prompt_context = build_agent_reasoning_prompt_context_v96(value)
     prompt_context.pop("_user_id", None)
     prompt_context.pop("_v97_message", None)
