@@ -28570,3 +28570,263 @@ def build_decision_outcome_evidence_trace(analysis):
 
 
 # ============================================================
+# ============================================================
+# PHASE 8R — GENERAL MEMORY EVIDENCE TRACE FALLBACK
+# ============================================================
+#
+# Purpose:
+# The completed Recall pipeline may retrieve relevant memories while
+# the grounded-answer model returns an empty evidence_trace for a
+# normal/general question. This phase promotes ONLY those already
+# retrieved memories into the existing evidence-trace structure.
+#
+# No new evidence is created. No database write occurs. Existing
+# model-generated evidence is never replaced.
+# ============================================================
+
+
+def _phase_8r_build_memory_evidence_trace(
+    memories,
+    limit=10
+):
+    """Convert already-retrieved memories into canonical evidence records."""
+
+    if not isinstance(memories, list):
+        return []
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 10
+
+    limit = max(1, min(10, limit))
+
+    evidence_trace = []
+    seen_ids = set()
+
+    for item in memories[:limit]:
+        if not isinstance(item, dict):
+            continue
+
+        memory_id = item.get("id")
+        memory_text = str(item.get("memory") or "").strip()
+
+        if memory_id is None or not memory_text:
+            continue
+
+        try:
+            normalized_id = int(memory_id)
+        except Exception:
+            normalized_id = str(memory_id)
+
+        if normalized_id in seen_ids:
+            continue
+
+        seen_ids.add(normalized_id)
+
+        evidence_trace.append({
+            "source_type": "memory",
+            "source_id": memory_id,
+            "label": "Memory #" + str(memory_id),
+            "text": memory_text,
+        })
+
+    return evidence_trace
+
+
+def _phase_8r_extract_memories_from_grounded_call(
+    args,
+    kwargs
+):
+    """Extract the already-retrieved memory collection from the call."""
+
+    if isinstance(kwargs, dict):
+        memories = kwargs.get("memories")
+        if isinstance(memories, list):
+            return memories
+
+    # Current signature:
+    # generate_grounded_answer(message, session_id, title, memories, ...)
+    if isinstance(args, (tuple, list)) and len(args) > 3:
+        memories = args[3]
+        if isinstance(memories, list):
+            return memories
+
+    return []
+
+
+def _phase_8r_normalize_grounded_result(result):
+    """Keep the existing grounded-answer result contract intact."""
+
+    if isinstance(result, dict):
+        return dict(result)
+
+    return {
+        "answer": str(result or "").strip(),
+        "evidence_trace": [],
+        "grounded": False,
+    }
+
+
+def _phase_8r_apply_general_memory_fallback(
+    grounded_result,
+    memories
+):
+    """Add retrieved-memory evidence only when no evidence was returned."""
+
+    result = _phase_8r_normalize_grounded_result(
+        grounded_result
+    )
+
+    existing_trace = result.get(
+        "evidence_trace",
+        []
+    )
+
+    if not isinstance(existing_trace, list):
+        existing_trace = []
+
+    # Existing validated/model evidence always wins and is preserved.
+    if existing_trace:
+        result["evidence_trace"] = existing_trace
+        result["grounded"] = bool(
+            result.get("grounded", False)
+        ) or bool(existing_trace)
+        result.setdefault(
+            "evidence_trace_fallback",
+            False
+        )
+        result.setdefault(
+            "evidence_trace_source",
+            "grounded_answer_model"
+        )
+        result["evidence_trace_count"] = len(existing_trace)
+        return result
+
+    # No evidence was returned. Promote only memories already selected
+    # by Recall Intelligence.
+    fallback_trace = _phase_8r_build_memory_evidence_trace(
+        memories=memories,
+        limit=10
+    )
+
+    if not fallback_trace:
+        result["evidence_trace"] = []
+        result["evidence_trace_fallback"] = False
+        result["evidence_trace_source"] = "none"
+        result["evidence_trace_count"] = 0
+        return result
+
+    result["evidence_trace"] = fallback_trace
+    result["grounded"] = bool(
+        result.get("answer", "")
+    ) and bool(fallback_trace)
+    result["evidence_trace_fallback"] = True
+    result["evidence_trace_source"] = "retrieved_memory"
+    result["evidence_trace_count"] = len(fallback_trace)
+
+    return result
+
+
+# ============================================================
+# PHASE 8R — PRESERVE EXISTING GROUNDED ANSWER ENGINE
+# ============================================================
+
+try:
+    _dusra_brain_original_generate_grounded_answer = (
+        generate_grounded_answer
+    )
+except NameError:
+    _dusra_brain_original_generate_grounded_answer = None
+
+
+def generate_grounded_answer(*args, **kwargs):
+    """
+    Compatibility wrapper around the completed grounded-answer engine.
+
+    The original implementation remains authoritative. This wrapper only
+    adds deterministic evidence from already-retrieved memories when the
+    original result contains no evidence trace.
+    """
+
+    original_function = (
+        _dusra_brain_original_generate_grounded_answer
+    )
+
+    if original_function is None:
+        return {
+            "answer": "",
+            "evidence_trace": [],
+            "grounded": False,
+            "evidence_trace_fallback": False,
+            "evidence_trace_source": "none",
+            "evidence_trace_count": 0,
+        }
+
+    try:
+        grounded_result = original_function(
+            *args,
+            **kwargs
+        )
+    except Exception as exc:
+        grounded_result = {
+            "answer": "",
+            "evidence_trace": [],
+            "grounded": False,
+            "grounded_error": str(exc),
+        }
+
+    memories = _phase_8r_extract_memories_from_grounded_call(
+        args=args,
+        kwargs=kwargs
+    )
+
+    return _phase_8r_apply_general_memory_fallback(
+        grounded_result=grounded_result,
+        memories=memories
+    )
+
+
+def build_phase_8r_evidence_trace(grounded_result):
+    """Compact public verification trace for Phase 8R."""
+
+    result = (
+        grounded_result
+        if isinstance(grounded_result, dict)
+        else {}
+    )
+
+    evidence_trace = result.get(
+        "evidence_trace",
+        []
+    )
+
+    if not isinstance(evidence_trace, list):
+        evidence_trace = []
+
+    return {
+        "built": True,
+        "evidence_count": len(evidence_trace),
+        "grounded": bool(result.get("grounded", False)),
+        "fallback_used": bool(
+            result.get("evidence_trace_fallback", False)
+        ),
+        "source": str(
+            result.get("evidence_trace_source") or "none"
+        ),
+        "memory_evidence_count": sum(
+            1
+            for item in evidence_trace
+            if isinstance(item, dict)
+            and str(item.get("source_type") or "") == "memory"
+        ),
+        "read_only": True,
+        "new_evidence_created": False,
+        "database_written": False,
+        "version": "8R-V1",
+    }
+
+
+# ============================================================
+# PHASE 8R — END
+# ============================================================
