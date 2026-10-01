@@ -9521,6 +9521,7 @@ def analyze_plan_state_tracking(
 
     return {
         "plan_state_tracking": True,
+                    "agent_reasoning_v97": True,
         "evolution_supported": evolution_supported,
         "read_only": True,
         "prescriptive": False,
@@ -12518,6 +12519,241 @@ def build_agent_reasoning_prompt_context_v96(reasoning):
             "Use only these grounded context fields. Do not invent missing facts, "
             "do not infer outcomes, do not modify decisions or memory, and do not execute actions."
         ),
+    }
+
+
+# ============================================================
+# V9.7 — CONTROLLED AGENT REASONING RESPONSE LAYER
+# ============================================================
+# Purpose:
+#   Turn the V9.6 evidence-bounded reasoning state into a user-facing
+#   agent-style response for explicit context/reasoning questions.
+#
+# Guardrails:
+#   - Uses only the V9.6 reasoning packet.
+#   - Never invents facts, dates, numbers, outcomes, or relationships.
+#   - Never selects an option or recommends an action.
+#   - Never mutates memory or decisions.
+#   - Never executes tools or external actions.
+#   - Falls back to deterministic wording if model synthesis fails.
+# ============================================================
+
+
+def _v97_clean_text(value, limit=800):
+    text = " ".join(str(value or "").strip().split())
+    return text[:limit]
+
+
+def _v97_unique(values, limit=12):
+    result = []
+    seen = set()
+    if not isinstance(values, (list, tuple)):
+        return result
+    for value in values:
+        text = _v97_clean_text(value)
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def is_agent_reasoning_question_v97(message):
+    text = _v97_clean_text(message, 1000).lower()
+    if not text:
+        return False
+    patterns = (
+        "what is known about",
+        "what do you know about",
+        "what do you know of",
+        "what has changed about",
+        "what changed about",
+        "what is still unresolved about",
+        "what is unresolved about",
+        "what remains unresolved about",
+        "what do you know and what has changed",
+        "what is known, what has changed",
+        "summarize what you know about",
+        "give me the context on",
+        "give me the context for",
+        "what is the current context for",
+        "what is the current context of",
+        "what context do you have about",
+        "what context do you have on",
+    )
+    return any(pattern in text for pattern in patterns)
+
+
+def _v97_deterministic_answer(reasoning):
+    value = reasoning if isinstance(reasoning, dict) else {}
+    known = _v97_unique(value.get("known") or [], 6)
+    current = value.get("current_state") or {}
+    changes = value.get("changes") or []
+    unresolved = _v97_unique(value.get("unresolved") or [], 6)
+    unknowns = _v97_unique(value.get("unknowns") or [], 5)
+    evidence = value.get("evidence") or {}
+
+    parts = []
+    if known:
+        parts.append("Known: " + " ".join(known[:4]))
+    if current.get("plan") or current.get("stage"):
+        current_parts = []
+        if current.get("plan"):
+            current_parts.append("Plan: " + _v97_clean_text(current.get("plan")))
+        if current.get("stage"):
+            current_parts.append("Stage: " + _v97_clean_text(current.get("stage")))
+        parts.append("Current state: " + " ".join(current_parts))
+    if changes:
+        change_parts = []
+        for item in changes[:4]:
+            if not isinstance(item, dict):
+                continue
+            old = _v97_clean_text(item.get("from"))
+            new = _v97_clean_text(item.get("to"))
+            if old and new:
+                change_parts.append(old + " → " + new)
+            elif new:
+                change_parts.append(new)
+        if change_parts:
+            parts.append("Changed: " + " ".join(change_parts))
+    if unresolved:
+        parts.append("Unresolved: " + " ".join(unresolved[:4]))
+    elif unknowns:
+        parts.append("Still unknown: " + " ".join(unknowns[:3]))
+
+    source_count = int(evidence.get("source_count") or 0)
+    if source_count:
+        parts.append(
+            "This context is grounded in "
+            + str(source_count)
+            + " stored evidence source(s)."
+        )
+    else:
+        parts.append("No stored evidence source was available for this reasoning packet.")
+
+    parts.append(
+        "This is a grounded summary of stored context; it does not decide what you should do next."
+    )
+    return "\n\n".join(parts).strip()
+
+
+def _v97_validate_model_response(text, reasoning):
+    """Reject empty/model-error output; keep content bounded to supplied context."""
+    value = reasoning if isinstance(reasoning, dict) else {}
+    candidate = _v97_clean_text(text, 5000)
+    if not candidate:
+        return ""
+    lowered = candidate.lower()
+    forbidden = (
+        "i recommend",
+        "you should",
+        "you must",
+        "do this",
+        "take action",
+        "i would choose",
+        "the best option",
+        "you need to choose",
+    )
+    if any(item in lowered for item in forbidden):
+        return ""
+    if not value.get("safe_to_reason"):
+        return ""
+    return candidate
+
+
+def generate_agent_reasoning_response_v97(message, reasoning):
+    """Generate a controlled agent-style response from V9.6 only."""
+    value = reasoning if isinstance(reasoning, dict) else {}
+    if not is_agent_reasoning_question_v97(message):
+        return {
+            "answered": False,
+            "status": "not_targeted",
+            "answer": "",
+            "method": "none",
+        }
+
+    if not bool(value.get("safe_to_reason")):
+        return {
+            "answered": False,
+            "status": "restricted",
+            "answer": "",
+            "method": "gate_blocked",
+        }
+
+    prompt_context = build_agent_reasoning_prompt_context_v96(value)
+    system_prompt = """You are the controlled reasoning layer of Dusra Brain.
+Use ONLY the supplied grounded context.
+Do not invent facts, dates, numbers, outcomes, motives, relationships, or current events.
+Do not recommend an option, tell the user what they should do, or make a decision.
+Do not infer an outcome.
+Clearly distinguish known information, current state, recorded changes, and unresolved items.
+If something is not present in the supplied context, say it is not established.
+Keep the answer concise and factual.
+Return plain text only with these headings when supported:
+Known:
+Current state:
+Changed:
+Unresolved:
+Evidence:
+"""
+    user_prompt = (
+        "Question:\n"
+        + _v97_clean_text(message, 1200)
+        + "\n\nGrounded context:\n"
+        + json.dumps(prompt_context, ensure_ascii=False, default=str)
+    )
+
+    try:
+        raw = groq_request(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0,
+        )
+        validated = _v97_validate_model_response(raw, value)
+        if validated:
+            return {
+                "answered": True,
+                "status": "answered",
+                "answer": validated,
+                "method": "grounded_agent_reasoning",
+            }
+    except Exception:
+        pass
+
+    return {
+        "answered": True,
+        "status": "answered",
+        "answer": _v97_deterministic_answer(value),
+        "method": "deterministic_grounded_fallback",
+    }
+
+
+def build_agent_reasoning_response_trace_v97(result, reasoning):
+    data = result if isinstance(result, dict) else {}
+    value = reasoning if isinstance(reasoning, dict) else {}
+    evidence = value.get("evidence") or {}
+    guardrails = value.get("guardrails") or {}
+    return {
+        "built": True,
+        "version": "9.7",
+        "answered": bool(data.get("answered")),
+        "status": _v97_clean_text(data.get("status"), 60),
+        "method": _v97_clean_text(data.get("method"), 80),
+        "reasoning_version": "9.6",
+        "evidence_source_count": int(evidence.get("source_count") or 0),
+        "grounded": bool(value.get("safe_to_reason")),
+        "read_only": bool(guardrails.get("read_only", True)),
+        "prescriptive": bool(guardrails.get("prescriptive", False)),
+        "tool_execution": bool(guardrails.get("tool_execution", False)),
+        "automatic_action": bool(guardrails.get("automatic_action", False)),
+        "memory_modified": bool(guardrails.get("memory_modified", False)),
+        "decision_modified": bool(guardrails.get("decision_modified", False)),
+        "outcome_inferred": bool(guardrails.get("outcome_inferred", False)),
     }
 
 
@@ -24465,6 +24701,47 @@ class handler(
             )
 
             # ------------------------------------------------
+            # V9.7 — CONTROLLED AGENT REASONING RESPONSE
+            # ------------------------------------------------
+            agent_reasoning_response_v97 = generate_agent_reasoning_response_v97(
+                message,
+                agent_reasoning_v96,
+            )
+
+            agent_reasoning_response_trace_v97 = (
+                build_agent_reasoning_response_trace_v97(
+                    agent_reasoning_response_v97,
+                    agent_reasoning_v96,
+                )
+            )
+
+            if agent_reasoning_response_v97.get("answered"):
+                response = str(
+                    agent_reasoning_response_v97.get("answer") or response
+                ).strip()
+
+                for source_id in (
+                    (agent_reasoning_v96.get("evidence") or {}).get(
+                        "source_ids", []
+                    )
+                )[:10]:
+                    if source_id is None:
+                        continue
+                    if not any(
+                        isinstance(item, dict)
+                        and item.get("source_id") == source_id
+                        for item in evidence_trace
+                    ):
+                        evidence_trace.append({
+                            "source_type": "memory",
+                            "source_id": source_id,
+                            "label": "Memory #" + str(source_id),
+                            "text": "Stored evidence used by V9.7 agent reasoning.",
+                        })
+                evidence_trace = evidence_trace[:10]
+                grounded = True
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -24639,6 +24916,10 @@ class handler(
 
                     "agent_reasoning_prompt_context_v96":
                         agent_reasoning_prompt_context_v96,
+                    "agent_reasoning_response_v97":
+                        agent_reasoning_response_v97,
+                    "agent_reasoning_response_trace_v97":
+                        agent_reasoning_response_trace_v97,
 
                     "decision_context_interpretation_trace":
                         decision_context_interpretation_trace,
