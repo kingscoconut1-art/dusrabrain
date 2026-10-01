@@ -19375,19 +19375,18 @@ class handler(
             )
 
             # ------------------------------------------------
-            # PHASE 8N — EVIDENCE TRACE FALLBACK
+            # PHASE 8N — EVIDENCE TRACE SOURCE FIX
             # ------------------------------------------------
-            # If Phase 8N explicitly identified stored evidence
-            # but the grounded-answer model returned no evidence
-            # references, promote those already-identified stored
-            # memories into the normal Evidence Trace.
+            # Phase 8N deterministically identifies stored memory evidence.
+            # For an evidence-sufficiency / missing-evidence question, that
+            # stored-memory set is authoritative for the Evidence Trace.
+            # Do not let the grounded-answer model replace it with a
+            # conversation source merely because the model returned one.
             #
-            # This does NOT create new evidence. The evidence has
-            # already been deterministically identified by
-            # analyze_evidence_sufficiency() from stored memories.
+            # This does NOT create new evidence. It promotes only the
+            # memories already returned by analyze_evidence_sufficiency().
             if (
-                not evidence_trace
-                and isinstance(
+                isinstance(
                     memory_evidence_sufficiency_context,
                     dict
                 )
@@ -19412,7 +19411,8 @@ class handler(
                         or []
                     )
 
-                    evidence_trace = []
+                    phase_8n_memory_trace = []
+                    seen_phase_8n_ids = set()
 
                     for item in stored_evidence[:10]:
 
@@ -19429,7 +19429,23 @@ class handler(
                         if memory_id is None:
                             continue
 
-                        evidence_trace.append(
+                        try:
+                            memory_id_key = int(
+                                memory_id
+                            )
+                        except Exception:
+                            memory_id_key = str(
+                                memory_id
+                            )
+
+                        if memory_id_key in seen_phase_8n_ids:
+                            continue
+
+                        seen_phase_8n_ids.add(
+                            memory_id_key
+                        )
+
+                        phase_8n_memory_trace.append(
                             {
                                 "source_type":
                                     "memory",
@@ -19453,7 +19469,8 @@ class handler(
                             }
                         )
 
-                    if evidence_trace:
+                    if phase_8n_memory_trace:
+                        evidence_trace = phase_8n_memory_trace
                         grounded = True
 
             grounded = bool(
