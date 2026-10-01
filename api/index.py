@@ -12276,6 +12276,251 @@ def build_agent_context_quality_trace_v95(validation):
         "automatic_action": False,
     }
 
+# ============================================================
+# V9.6 — GROUNDED AGENT REASONING LAYER
+# ============================================================
+# Purpose:
+#   Convert the verified V9.5 agent context packet into a structured,
+#   evidence-bounded reasoning state for a future AI agent.
+#
+# This phase does NOT execute tools, mutate memory, change decisions,
+# infer outcomes, or create actions. It only reasons over information
+# that has already passed through the V9.5 context gate.
+# ============================================================
+
+
+def _v96_clean_text(value, limit=600):
+    text = " ".join(str(value or "").strip().split())
+    return text[:limit]
+
+
+def _v96_unique_texts(values, limit=20):
+    result = []
+    seen = set()
+    for value in values if isinstance(values, (list, tuple)) else []:
+        text = _v96_clean_text(value)
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _v96_memory_facts(packet, limit=12):
+    facts = []
+    for item in (packet.get("memories") or []):
+        if not isinstance(item, dict):
+            continue
+        text = _v96_clean_text(
+            item.get("memory") or item.get("text") or item.get("content")
+        )
+        if text:
+            facts.append(text)
+        if len(facts) >= limit:
+            break
+    return _v96_unique_texts(facts, limit)
+
+
+def _v96_evidence_ids(packet):
+    ids = []
+    for item in (packet.get("evidence") or []):
+        if not isinstance(item, dict):
+            continue
+        value = item.get("source_id")
+        if value is None:
+            continue
+        if value not in ids:
+            ids.append(value)
+    return ids[:30]
+
+
+def _v96_state_changes(packet):
+    state = packet.get("plan_state") or {}
+    initial = _v96_clean_text(state.get("initial_state"))
+    current = _v96_clean_text(state.get("current_state"))
+    if not initial and not current:
+        return []
+    if initial and current and initial.lower() != current.lower():
+        return [
+            {
+                "from": initial,
+                "to": current,
+                "source": "stored_memory_versions",
+            }
+        ]
+    if current:
+        return [
+            {
+                "from": "",
+                "to": current,
+                "source": "stored_memory_versions",
+            }
+        ]
+    return [
+        {
+            "from": initial,
+            "to": "",
+            "source": "stored_memory_versions",
+        }
+    ]
+
+
+def build_agent_reasoning_v96(packet, validation):
+    """Build a deterministic, evidence-bounded reasoning state."""
+    value = packet if isinstance(packet, dict) else {}
+    gate = validation if isinstance(validation, dict) else {}
+
+    memories = _v96_memory_facts(value)
+    evidence_ids = _v96_evidence_ids(value)
+    unresolved = value.get("unresolved") or {}
+    decision_readiness = value.get("decision_readiness") or {}
+    plan_state = value.get("plan_state") or {}
+    consistency = value.get("consistency") or {}
+    outcomes = value.get("decision_outcomes") or {}
+    guardrails = value.get("guardrails") or {}
+
+    known = []
+    current_plan = _v96_clean_text(value.get("current_plan"))
+    current_stage = _v96_clean_text(value.get("current_stage"))
+
+    if current_plan:
+        known.append(current_plan)
+    if current_stage:
+        known.append("Current stage: " + current_stage)
+    known.extend(memories[:8])
+    known = _v96_unique_texts(known, 12)
+
+    changes = _v96_state_changes(value)
+
+    decisions = []
+    readiness_status = _v96_clean_text(decision_readiness.get("status"), 100)
+    readiness_reason = _v96_clean_text(decision_readiness.get("reason"), 300)
+    if readiness_status:
+        decisions.append("Decision readiness: " + readiness_status)
+    if readiness_reason:
+        decisions.append("Decision readiness reason: " + readiness_reason)
+    if bool(outcomes.get("detected")):
+        decisions.append(
+            "Confirmed decision outcomes available: "
+            + str(int(outcomes.get("count") or 0))
+        )
+
+    unresolved_items = _v96_unique_texts(
+        unresolved.get("items") or [],
+        15,
+    )
+
+    unknowns = []
+    if not current_plan:
+        unknowns.append("No current plan was assembled from the supplied context.")
+    if not current_stage:
+        unknowns.append("No current stage was assembled from the supplied context.")
+    if not evidence_ids:
+        unknowns.append("No evidence source was available for the reasoning packet.")
+    unknowns.extend(unresolved_items[:8])
+    unknowns = _v96_unique_texts(unknowns, 12)
+
+    reasoning_steps = [
+        "1. Use only the context that passed the V9.5 grounding gate.",
+        "2. Separate stored facts from current-state fields and unresolved information.",
+        "3. Compare recorded plan states only when stored version evidence provides both states.",
+        "4. Preserve decision readiness and unresolved questions without selecting an option.",
+        "5. Keep the resulting reasoning read-only and evidence-bounded.",
+    ]
+
+    blockers = list(gate.get("blockers") or [])
+    gate_ready = bool(gate.get("safe_to_consume"))
+    reasoning_status = "ready" if gate_ready else "restricted"
+
+    return {
+        "built": True,
+        "version": "9.6",
+        "status": reasoning_status,
+        "safe_to_reason": gate_ready,
+        "known": known,
+        "current_state": {
+            "plan": current_plan,
+            "stage": current_stage,
+        },
+        "changes": changes,
+        "decisions": _v96_unique_texts(decisions, 10),
+        "unresolved": unresolved_items,
+        "unknowns": unknowns,
+        "consistency": {
+            "classification": _v96_clean_text(consistency.get("classification"), 100),
+            "conflict_count": int(consistency.get("conflict_count") or 0),
+        },
+        "evidence": {
+            "source_ids": evidence_ids,
+            "source_count": len(evidence_ids),
+        },
+        "reasoning_steps": reasoning_steps,
+        "gate_blockers": _v96_unique_texts(blockers, 10),
+        "guardrails": {
+            "read_only": True,
+            "prescriptive": False,
+            "tool_execution": False,
+            "automatic_action": False,
+            "memory_modified": False,
+            "decision_modified": False,
+            "outcome_inferred": False,
+        },
+    }
+
+
+def build_agent_reasoning_trace_v96(reasoning):
+    """Compact UI/API verification trace for V9.6."""
+    value = reasoning if isinstance(reasoning, dict) else {}
+    state = value.get("current_state") or {}
+    evidence = value.get("evidence") or {}
+    guardrails = value.get("guardrails") or {}
+    return {
+        "built": bool(value.get("built")),
+        "version": "9.6",
+        "status": _v96_clean_text(value.get("status"), 50),
+        "safe_to_reason": bool(value.get("safe_to_reason")),
+        "known_count": len(value.get("known") or []),
+        "change_count": len(value.get("changes") or []),
+        "decision_signal_count": len(value.get("decisions") or []),
+        "unresolved_count": len(value.get("unresolved") or []),
+        "unknown_count": len(value.get("unknowns") or []),
+        "has_current_plan": bool(state.get("plan")),
+        "has_current_stage": bool(state.get("stage")),
+        "evidence_source_count": int(evidence.get("source_count") or 0),
+        "gate_blocker_count": len(value.get("gate_blockers") or []),
+        "read_only": bool(guardrails.get("read_only", True)),
+        "prescriptive": bool(guardrails.get("prescriptive", False)),
+        "tool_execution": bool(guardrails.get("tool_execution", False)),
+        "automatic_action": bool(guardrails.get("automatic_action", False)),
+        "memory_modified": bool(guardrails.get("memory_modified", False)),
+        "decision_modified": bool(guardrails.get("decision_modified", False)),
+        "outcome_inferred": bool(guardrails.get("outcome_inferred", False)),
+    }
+
+
+def build_agent_reasoning_prompt_context_v96(reasoning):
+    """Prepare a bounded future-agent prompt context without executing an agent."""
+    value = reasoning if isinstance(reasoning, dict) else {}
+    return {
+        "version": "9.6",
+        "status": _v96_clean_text(value.get("status"), 50),
+        "known": list(value.get("known") or [])[:12],
+        "current_state": value.get("current_state") or {},
+        "changes": list(value.get("changes") or [])[:10],
+        "decisions": list(value.get("decisions") or [])[:10],
+        "unresolved": list(value.get("unresolved") or [])[:12],
+        "unknowns": list(value.get("unknowns") or [])[:12],
+        "evidence_source_ids": list((value.get("evidence") or {}).get("source_ids") or [])[:20],
+        "instruction": (
+            "Use only these grounded context fields. Do not invent missing facts, "
+            "do not infer outcomes, do not modify decisions or memory, and do not execute actions."
+        ),
+    }
+
+
 # PHASE 9.2 — PLAN EVIDENCE & GROUNDING
 # ============================================================
 #
@@ -24202,6 +24447,24 @@ class handler(
             )
 
             # ------------------------------------------------
+            # V9.6 — GROUNDED AGENT REASONING
+            # ------------------------------------------------
+            agent_reasoning_v96 = build_agent_reasoning_v96(
+                agent_context_v94,
+                agent_context_quality_v95,
+            )
+
+            agent_reasoning_trace_v96 = build_agent_reasoning_trace_v96(
+                agent_reasoning_v96
+            )
+
+            agent_reasoning_prompt_context_v96 = (
+                build_agent_reasoning_prompt_context_v96(
+                    agent_reasoning_v96
+                )
+            )
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -24367,6 +24630,15 @@ class handler(
 
                     "agent_context_quality_v95":
                         agent_context_quality_v95,
+
+                    "agent_reasoning_trace_v96":
+                        agent_reasoning_trace_v96,
+
+                    "agent_reasoning_v96":
+                        agent_reasoning_v96,
+
+                    "agent_reasoning_prompt_context_v96":
+                        agent_reasoning_prompt_context_v96,
 
                     "decision_context_interpretation_trace":
                         decision_context_interpretation_trace,
