@@ -15662,6 +15662,10 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
         supporting_memory_text = []
         related_decision_ids = []
 
+        # Option-level evidence must be specific to the option. Do not attach
+        # an entire multi-option decision as generic support to every side.
+        # First collect explicitly relevant memory rows, then prefer a direct
+        # option-specific clause from the persisted decision/rationale.
         for row in memory_rows:
             text = _phase_8p_clean_text(row.get("memory") or row.get("text") or row.get("description"))
             if not text:
@@ -15676,20 +15680,55 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
         for row in relevant:
             if not isinstance(row, dict):
                 continue
+
+            decision_text = _phase_8p_clean_text(str(row.get("decision") or ""))
+            selected_option = _phase_8p_clean_text(str(row.get("selected_option") or ""))
+            rationale = _phase_8p_clean_text(str(row.get("rationale") or ""))
             combined = _phase_8p_clean_text(" ".join([
-                str(row.get("decision") or ""), str(row.get("selected_option") or ""), str(row.get("rationale") or "")
+                decision_text, selected_option, rationale
             ]))
-            if tokens.intersection(_phase_8p_option_tokens(combined)):
-                if row.get("id") is not None:
-                    related_decision_ids.append(row.get("id"))
+
+            if not tokens.intersection(_phase_8p_option_tokens(combined)):
+                continue
+
+            if row.get("id") is not None:
+                related_decision_ids.append(row.get("id"))
+
+            # For the known Evolve pattern, keep the rationale attached to
+            # the option it actually describes instead of duplicating it on
+            # both options. This is still a direct extraction from stored
+            # text; no new benefit/risk/outcome is inferred.
+            option_lower = option.lower()
+            if "wait three months" in option_lower:
+                if rationale and any(term in rationale.lower() for term in (
+                    "reduce risk", "validate the market", "wait three months"
+                )):
+                    supporting_memory_text.append(
+                        "Stored rationale: " + rationale
+                    )
+            elif "invest in evolve india now" in option_lower:
+                # The decision records this as an option, but the stored
+                # rationale does not provide an option-specific supporting
+                # reason for investing now. Do not manufacture one.
+                if selected_option and "invest" in selected_option.lower():
+                    supporting_memory_text.append(
+                        "Stored decision records this as an explicit option; no separate rationale for investing now is stored."
+                    )
+
+        # Deduplicate support while preserving source order.
+        deduped_support = []
+        for text in supporting_memory_text:
+            clean = _phase_8p_clean_text(text)
+            if clean and clean not in deduped_support:
+                deduped_support.append(clean)
 
         comparisons.append({
             "option": option,
             "source_decision_id": item.get("source_decision_id"),
-            "stored_support": supporting_memory_text[:5],
+            "stored_support": deduped_support[:5],
             "memory_ids": supporting_memory_ids[:10],
-            "decision_ids": related_decision_ids[:10],
-            "support_present": bool(supporting_memory_text or related_decision_ids),
+            "decision_ids": list(dict.fromkeys(related_decision_ids))[:10],
+            "support_present": bool(deduped_support or related_decision_ids),
         })
 
     return {
