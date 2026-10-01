@@ -12561,6 +12561,55 @@ def _v97_unique(values, limit=12):
     return result
 
 
+def _v97_normalize_subject_text(value):
+    return re.sub(
+        r"[^a-z0-9]+",
+        " ",
+        _v97_clean_text(value, 300).lower(),
+    ).strip()
+
+
+def _v97_detect_focus_subject(message, available_subjects):
+    """Deterministically identify an explicitly named stored subject."""
+    text = _v97_normalize_subject_text(message)
+    if not text or not isinstance(available_subjects, (list, tuple)):
+        return None
+
+    normalized_message = " " + text + " "
+    candidates = []
+    for subject in available_subjects:
+        normalized_subject = _v97_normalize_subject_text(subject)
+        if not normalized_subject:
+            continue
+        if (
+            " " + normalized_subject + " "
+        ) in normalized_message:
+            candidates.append((len(normalized_subject), str(subject)))
+
+    if candidates:
+        candidates.sort(key=lambda item: (-item[0], item[1].lower()))
+        return candidates[0][1]
+
+    # Conservative token-overlap fallback for minor wording differences.
+    message_tokens = set(text.split())
+    scored = []
+    for subject in available_subjects:
+        normalized_subject = _v97_normalize_subject_text(subject)
+        subject_tokens = {
+            token for token in normalized_subject.split()
+            if len(token) >= 3
+        }
+        overlap = len(message_tokens & subject_tokens)
+        if subject_tokens and overlap == len(subject_tokens):
+            scored.append((overlap, len(normalized_subject), str(subject)))
+
+    if scored:
+        scored.sort(key=lambda item: (-item[0], -item[1], item[2].lower()))
+        return scored[0][2]
+
+    return None
+
+
 def is_agent_reasoning_question_v97(message):
     text = _v97_clean_text(message, 1000).lower()
     if not text:
@@ -12686,6 +12735,18 @@ def _v97_focus_reasoning_context(
         if len(token) >= 3
     ]
 
+    subject_memories = []
+    if subject:
+        try:
+            subject_memories = get_subject_memories(
+                user_id=source.get("_user_id") or "",
+                subject=subject,
+                session_id="default",
+                limit=100,
+            )
+        except Exception:
+            subject_memories = []
+
     if subject_terms:
         filtered_known = []
         for item in source.get("known") or []:
@@ -12693,8 +12754,29 @@ def _v97_focus_reasoning_context(
             lowered = text.lower()
             if any(term in lowered for term in subject_terms):
                 filtered_known.append(text)
-        if filtered_known:
-            source["known"] = _v97_unique(filtered_known, 12)
+        # Important: an explicit subject focus must never fall back to the
+        # broad V9.6 known list. An empty focused list is safer than leakage.
+        source["known"] = _v97_unique(filtered_known, 12)
+
+    # Restrict evidence IDs to memories belonging to the focused subject.
+    if subject and subject_memories:
+        subject_ids = {
+            item.get("id")
+            for item in subject_memories
+            if isinstance(item, dict) and item.get("id") is not None
+        }
+        evidence = source.get("evidence") or {}
+        if isinstance(evidence, dict):
+            existing_ids = evidence.get("source_ids") or []
+            focused_ids = [
+                source_id
+                for source_id in existing_ids
+                if source_id in subject_ids
+            ]
+            if focused_ids:
+                source["evidence"] = dict(evidence)
+                source["evidence"]["source_ids"] = focused_ids[:20]
+                source["evidence"]["source_count"] = len(focused_ids[:20])
 
     state_context = plan_state_context if isinstance(plan_state_context, dict) else {}
     state_analysis = state_context.get("analysis") or {}
@@ -12712,6 +12794,25 @@ def _v97_focus_reasoning_context(
                 if isinstance(source.get("current_state"), dict)
                 else "",
         }
+
+    # If the natural-language plan-state context did not resolve a current
+    # state, reconstruct a conservative latest stored state directly from the
+    # focused subject's memories. This remains evidence-backed and read-only.
+    if (
+        subject
+        and not (isinstance(current_state, dict) and current_state.get("state"))
+        and subject_memories
+    ):
+        ordered_memories = sorted(
+            subject_memories,
+            key=lambda item: str(item.get("created_at") or ""),
+        )
+        latest_memory = ordered_memories[-1] if ordered_memories else None
+        if isinstance(latest_memory, dict) and latest_memory.get("memory"):
+            source["current_state"] = {
+                "plan": _v97_clean_text(latest_memory.get("memory")),
+                "stage": "latest stored project state",
+            }
 
     focused_changes = []
     for transition in transitions[:10] if isinstance(transitions, list) else []:
@@ -12731,6 +12832,40 @@ def _v97_focus_reasoning_context(
             })
     if focused_changes:
         source["changes"] = focused_changes[:10]
+    elif subject:
+        try:
+            versions = get_memory_versions(
+                user_id=source.get("_user_id") or "",
+                subject=subject,
+            )
+        except Exception:
+            versions = []
+
+        if isinstance(versions, list) and len(versions) >= 2:
+            ordered_versions = sorted(
+                versions,
+                key=lambda item: (
+                    str(item.get("created_at") or "") if isinstance(item, dict) else "",
+                    int(item.get("version") or 0) if isinstance(item, dict) else 0,
+                ),
+            )
+            version_changes = []
+            previous_text = ""
+            for item in ordered_versions:
+                if not isinstance(item, dict):
+                    continue
+                current_text = _v97_clean_text(item.get("memory"))
+                if not current_text:
+                    continue
+                if previous_text and current_text != previous_text:
+                    version_changes.append({
+                        "from": previous_text,
+                        "to": current_text,
+                        "source": "stored_memory_versions",
+                    })
+                previous_text = current_text
+            if version_changes:
+                source["changes"] = version_changes[:10]
 
     gap_context = unresolved_gap_context if isinstance(unresolved_gap_context, dict) else {}
     gap_analysis = gap_context.get("analysis") or {}
@@ -12807,6 +12942,7 @@ def generate_agent_reasoning_response_v97(
     )
 
     prompt_context = build_agent_reasoning_prompt_context_v96(value)
+    prompt_context.pop("_user_id", None)
     system_prompt = """You are the controlled reasoning layer of Dusra Brain.
 Use ONLY the supplied grounded context.
 Do not invent facts, dates, numbers, outcomes, motives, relationships, or current events.
@@ -12844,6 +12980,7 @@ Evidence:
                 "status": "answered",
                 "answer": validated,
                 "method": "grounded_agent_reasoning",
+                "focused_reasoning": value,
             }
     except Exception:
         pass
@@ -12853,6 +12990,7 @@ Evidence:
         "status": "answered",
         "answer": _v97_deterministic_answer(value),
         "method": "deterministic_grounded_fallback",
+        "focused_reasoning": value,
     }
 
 
@@ -24829,12 +24967,23 @@ class handler(
             v97_focus_subject = None
             try:
                 v97_subjects = get_memory_subjects(user_id)
-                v97_focus_subject = detect_subject(
+                # Prefer deterministic matching when the user explicitly names
+                # a stored subject. The model-based detector remains the
+                # fallback for wording that is not an exact subject mention.
+                v97_focus_subject = _v97_detect_focus_subject(
                     message,
                     v97_subjects,
                 )
+                if not v97_focus_subject:
+                    v97_focus_subject = detect_subject(
+                        message,
+                        v97_subjects,
+                    )
             except Exception:
                 v97_focus_subject = None
+
+            agent_reasoning_v96 = dict(agent_reasoning_v96)
+            agent_reasoning_v96["_user_id"] = user_id
 
             agent_reasoning_response_v97 = generate_agent_reasoning_response_v97(
                 message,
@@ -24856,8 +25005,11 @@ class handler(
                     agent_reasoning_response_v97.get("answer") or response
                 ).strip()
 
+                focused_reasoning = agent_reasoning_response_v97.get(
+                    "focused_reasoning"
+                ) or agent_reasoning_v96
                 for source_id in (
-                    (agent_reasoning_v96.get("evidence") or {}).get(
+                    (focused_reasoning.get("evidence") or {}).get(
                         "source_ids", []
                     )
                 )[:10]:
