@@ -15494,6 +15494,45 @@ def build_memory_evolution_chat_context(
     }
 
 
+
+def build_evidence_sufficiency_prompt_context(
+    evidence_sufficiency_context,
+):
+    value = (
+        evidence_sufficiency_context
+        if isinstance(evidence_sufficiency_context, dict)
+        else {}
+    )
+
+    if not value.get("detected"):
+        return "detected=false"
+
+    analysis = value.get("analysis")
+    if not isinstance(analysis, dict):
+        return "detected=true\nanalysis=unavailable"
+
+    return (
+        "detected=true\n"
+        + "sufficiency="
+        + str(analysis.get("sufficiency") or "unknown")
+        + "\n"
+        + "stored_evidence_count="
+        + str(analysis.get("stored_evidence_count") or 0)
+        + "\n"
+        + "stored_evidence="
+        + str(analysis.get("stored_evidence") or [])
+        + "\n"
+        + "missing_evidence="
+        + str(analysis.get("missing_evidence") or [])
+        + "\n"
+        + "decision_critical_gaps="
+        + str(analysis.get("decision_critical_gaps") or [])
+        + "\n"
+        + "note="
+        + str(analysis.get("note") or "")
+    )
+
+
 def generate_grounded_answer(
     message,
     session_id,
@@ -15512,6 +15551,7 @@ def generate_grounded_answer(
     plan_consistency_context=None,
     unresolved_gap_context=None,
     decision_readiness_context=None,
+    evidence_sufficiency_context=None,
 ):
     """
     Generate the answer and evidence references
@@ -15660,6 +15700,22 @@ context, NOT proof that the user should decide now and NOT a recommendation.
 Never tell the user which option to choose. Never invent missing
 requirements, deadlines, facts, or evidence. If unresolved items remain,
 say they remain unresolved rather than deciding them.
+
+
+EVIDENCE SUFFICIENCY / MISSING EVIDENCE CONTEXT:
+{build_evidence_sufficiency_prompt_context(evidence_sufficiency_context)}
+
+EVIDENCE SUFFICIENCY HANDLING:
+
+If EVIDENCE SUFFICIENCY / MISSING EVIDENCE CONTEXT is marked detected=true,
+answer the user's evidence-gap question using only the supplied deterministic
+analysis. Distinguish evidence explicitly stored in memory from information
+that is not explicitly represented in stored context. Report decision-critical
+gaps only when they are supplied by the analysis. "Missing" means not stored
+or not resolved in the supplied context; it does not mean false, unavailable
+in the real world, or disproven. Do not invent due-diligence requirements,
+numbers, deadlines, documents, market facts, or external evidence. Do not
+recommend an investment action or tell the user what they should choose.
 
 
 UNRESOLVED QUESTIONS / DECISION GAPS CONTEXT:
@@ -18303,7 +18359,36 @@ class handler(
                 send_json(
                     self,
                     {
-                        "decision_outcome_trace":
+                        "evidence_sufficiency_trace":
+                        {
+                            "built": isinstance(
+                                memory_evidence_sufficiency_context,
+                                dict,
+                            ),
+                            "detected": bool(
+                                memory_evidence_sufficiency_context.get(
+                                    "detected",
+                                    False,
+                                )
+                            )
+                            if isinstance(
+                                memory_evidence_sufficiency_context,
+                                dict,
+                            )
+                            else False,
+                            "analysis": (
+                                memory_evidence_sufficiency_context.get(
+                                    "analysis"
+                                )
+                                if isinstance(
+                                    memory_evidence_sufficiency_context,
+                                    dict,
+                                )
+                                else None
+                            ),
+                        },
+
+                    "decision_outcome_trace":
                             build_decision_outcome_trace(outcome_result),
                         "outcome":
                             outcome_result,
@@ -18881,6 +18966,25 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8N
+            # EVIDENCE SUFFICIENCY / MISSING EVIDENCE
+            # ------------------------------------------------
+
+            memory_evidence_sufficiency_context = (
+                build_evidence_sufficiency_chat_context(
+                    user_id=user_id,
+                    message=message,
+                    memories=memories,
+                    plan_context=memory_plan_context,
+                    plan_state_context=memory_plan_state_context,
+                    consistency_context=memory_plan_consistency_context,
+                    unresolved_gap_context=memory_unresolved_gap_context,
+                    readiness_context=memory_decision_readiness_context,
+                )
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -18903,6 +19007,7 @@ class handler(
                 plan_consistency_context=memory_plan_consistency_context,
                 unresolved_gap_context=memory_unresolved_gap_context,
                 decision_readiness_context=memory_decision_readiness_context,
+                evidence_sufficiency_context=memory_evidence_sufficiency_context,
             )
 
             response = grounded_result.get(
@@ -19504,6 +19609,132 @@ class handler(
 
                     response = " ".join(answer_parts).strip()
 
+
+
+            # ------------------------------------------------
+            # PHASE 8N — AUTHORITATIVE EVIDENCE SUFFICIENCY ANSWER
+            # ------------------------------------------------
+
+            if is_evidence_sufficiency_question(message):
+
+                evidence_analysis = (
+                    memory_evidence_sufficiency_context.get(
+                        "analysis"
+                    )
+                    if isinstance(
+                        memory_evidence_sufficiency_context,
+                        dict,
+                    )
+                    else None
+                )
+
+                if isinstance(
+                    evidence_analysis,
+                    dict,
+                ):
+                    sufficiency = str(
+                        evidence_analysis.get(
+                            "sufficiency",
+                            "insufficient_stored_evidence",
+                        )
+                        or "insufficient_stored_evidence"
+                    )
+
+                    stored_count = int(
+                        evidence_analysis.get(
+                            "stored_evidence_count",
+                            0,
+                        )
+                        or 0
+                    )
+
+                    missing_items = list(
+                        evidence_analysis.get(
+                            "missing_evidence",
+                            [],
+                        )
+                        or []
+                    )
+
+                    critical_gaps = list(
+                        evidence_analysis.get(
+                            "decision_critical_gaps",
+                            [],
+                        )
+                        or []
+                    )
+
+                    if sufficiency == "stored_evidence_present":
+                        evidence_label = (
+                            "The stored context contains explicit "
+                            "supporting evidence for this question."
+                        )
+                    elif sufficiency == "partial_stored_evidence":
+                        evidence_label = (
+                            "The stored context contains some explicit "
+                            "supporting evidence, but it also contains "
+                            "unresolved evidence gaps."
+                        )
+                    else:
+                        evidence_label = (
+                            "The stored context does not contain enough "
+                            "explicit evidence to establish a complete "
+                            "evidence picture for this question."
+                        )
+
+                    answer_parts = [evidence_label]
+
+                    answer_parts.append(
+                        "Explicit stored evidence items: "
+                        + str(stored_count)
+                        + "."
+                    )
+
+                    if critical_gaps:
+                        gap_texts = []
+                        for item in critical_gaps[:5]:
+                            if isinstance(item, dict):
+                                gap_texts.append(
+                                    str(
+                                        item.get("gap")
+                                        or "Unresolved evidence gap"
+                                    )
+                                )
+                            else:
+                                gap_texts.append(str(item))
+
+                        answer_parts.append(
+                            "Decision-critical gaps in stored context: "
+                            + "; ".join(gap_texts)
+                            + "."
+                        )
+                    elif missing_items:
+                        gap_texts = []
+                        for item in missing_items[:5]:
+                            if isinstance(item, dict):
+                                gap_texts.append(
+                                    str(
+                                        item.get("gap")
+                                        or "Unresolved evidence gap"
+                                    )
+                                )
+                            else:
+                                gap_texts.append(str(item))
+
+                        answer_parts.append(
+                            "Evidence gaps identified: "
+                            + "; ".join(gap_texts)
+                            + "."
+                        )
+
+                    answer_parts.append(
+                        "Here, 'missing' means not explicitly represented "
+                        "or resolved in your stored context; it does not "
+                        "mean the information is false or unavailable "
+                        "outside Dusra Brain."
+                    )
+
+                    response = " ".join(answer_parts).strip()
 
 
             # ------------------------------------------------
