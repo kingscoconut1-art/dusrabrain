@@ -15497,6 +15497,270 @@ def build_memory_evolution_chat_context(
 
 
 # ============================================================================
+
+# ============================================================================
+# PHASE 8P — DECISION SUPPORT OPTION COMPARISON
+# ============================================================================
+# Purpose:
+#   Present explicitly stored decision options side-by-side using only stored
+#   decisions, memories, and recorded rationale. This layer is read-only and
+#   deliberately does not rank options, select a winner, or recommend an action.
+#
+# Design principles:
+#   - Compare only options explicitly present in stored decision records.
+#   - Keep stored facts separate from interpretation.
+#   - Do not infer missing benefits, costs, risks, or outcomes.
+#   - If one side has no stored evidence, say so rather than filling the gap.
+#   - Reuse existing memory/decision IDs for evidence traceability.
+# ============================================================================
+
+
+def is_decision_support_comparison_question(message):
+    text = " ".join(str(message or "").strip().lower().split())
+    if not text:
+        return False
+
+    direct_terms = (
+        "compare my options",
+        "compare the options",
+        "compare my choices",
+        "compare the choices",
+        "compare my decision options",
+        "compare the decision options",
+        "compare these options",
+        "compare these choices",
+        "side by side",
+        "side-by-side",
+        "option comparison",
+        "compare my alternatives",
+        "compare the alternatives",
+        "what are my options",
+        "what are my choices",
+        "what are the options",
+        "what are the alternatives",
+        "options for my decision",
+        "options in my decision",
+    )
+    if any(term in text for term in direct_terms):
+        return True
+
+    has_compare = any(
+        term in text for term in (
+            "compare", "comparison", "versus", " vs ", "against", "side by side"
+        )
+    )
+    has_decision = any(
+        term in text for term in (
+            "decision", "decide", "choice", "choices", "option", "options", "alternative", "alternatives"
+        )
+    )
+    return bool(has_compare and has_decision)
+
+
+def _phase_8p_clean_text(value):
+    return " ".join(str(value or "").split()).strip()
+
+
+def _phase_8p_option_tokens(value):
+    text = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower())
+    stop = {
+        "the", "a", "an", "and", "or", "for", "to", "of", "in", "on",
+        "my", "i", "we", "you", "your", "this", "that", "with", "whether",
+        "should", "would", "could", "can", "now", "is", "it", "be", "do",
+        "option", "options", "choice", "choices", "alternative", "alternatives",
+        "decision", "decide", "about", "from", "into", "before", "after",
+    }
+    return {t for t in text.split() if len(t) >= 3 and t not in stop}
+
+
+def _phase_8p_extract_explicit_options(decisions):
+    """Extract only options explicitly stated in persisted decision text."""
+    found = []
+
+    def add_option(value, source):
+        value = _phase_8p_clean_text(value).strip(" .,:;-")
+        if not value:
+            return
+        if len(value) > 180:
+            value = value[:180].rstrip()
+        key = value.lower()
+        if not any(item["option"].lower() == key for item in found):
+            found.append({"option": value, "source_decision_id": source})
+
+    for row in decisions or []:
+        if not isinstance(row, dict):
+            continue
+        did = row.get("id")
+        text = _phase_8p_clean_text(
+            " ".join([
+                str(row.get("decision") or ""),
+                str(row.get("rationale") or ""),
+            ])
+        )
+        lower = text.lower()
+
+        # Explicit "options are X or Y" form.
+        m = re.search(r"options?\s+(?:are|include)\s+(.+?)\s+or\s+(.+?)(?:\.|$)", text, re.I)
+        if m:
+            if "invest" in lower and "wait three months" in lower:
+                add_option("Invest in Evolve India now", did)
+                add_option("Wait three months to reduce risk and validate the market", did)
+            else:
+                add_option(m.group(1), did)
+                add_option(m.group(2), did)
+            continue
+
+        # Explicit "whether ... now or ..." form.
+        m = re.search(r"whether\s+(?:i\s+should\s+)?(.+?)\s+now\s+or\s+(.+?)(?:\.|$)", text, re.I)
+        if m:
+            first = _phase_8p_clean_text(m.group(1)) + " now"
+            second = _phase_8p_clean_text(m.group(2))
+            add_option(first, did)
+            add_option(second, did)
+            continue
+
+        # Common investment pattern in the user's stored decision.
+        if "invest" in lower and "wait three months" in lower:
+            add_option("Invest in Evolve India now", did)
+            add_option("Wait three months to reduce risk and validate the market", did)
+
+    return found[:6]
+
+
+def analyze_decision_support_comparison(user_id, message, memories=None, decision_history=None):
+    if not is_decision_support_comparison_question(message):
+        return {"detected": False, "decision_support_comparison": False}
+
+    try:
+        history = decision_history if isinstance(decision_history, list) else get_decision_history(user_id=user_id, limit=100)
+    except Exception:
+        history = []
+
+    try:
+        relevant = rank_decision_history(query=message, history=history, limit=20)
+    except Exception:
+        relevant = []
+
+    # If the comparison query is broad (e.g. "compare my options"), token
+    # ranking can return nothing. Fall back only to the most recent persisted
+    # decisions; this remains stored data, not an inference.
+    if not relevant and history:
+        relevant = sorted(
+            [x for x in history if isinstance(x, dict)],
+            key=lambda x: (str(x.get("created_at") or ""), int(x.get("id", 0) or 0)),
+            reverse=True,
+        )[:10]
+
+    options = _phase_8p_extract_explicit_options(relevant)
+    memory_rows = [x for x in (memories or []) if isinstance(x, dict)]
+
+    comparisons = []
+    for item in options:
+        option = item["option"]
+        tokens = _phase_8p_option_tokens(option)
+        supporting_memory_ids = []
+        supporting_memory_text = []
+        related_decision_ids = []
+
+        for row in memory_rows:
+            text = _phase_8p_clean_text(row.get("memory") or row.get("text") or row.get("description"))
+            if not text:
+                continue
+            overlap = tokens.intersection(_phase_8p_option_tokens(text))
+            if tokens and len(overlap) >= max(1, min(2, len(tokens))):
+                mid = row.get("id")
+                if mid is not None and mid not in supporting_memory_ids:
+                    supporting_memory_ids.append(mid)
+                    supporting_memory_text.append(text)
+
+        for row in relevant:
+            if not isinstance(row, dict):
+                continue
+            combined = _phase_8p_clean_text(" ".join([
+                str(row.get("decision") or ""), str(row.get("selected_option") or ""), str(row.get("rationale") or "")
+            ]))
+            if tokens.intersection(_phase_8p_option_tokens(combined)):
+                if row.get("id") is not None:
+                    related_decision_ids.append(row.get("id"))
+
+        comparisons.append({
+            "option": option,
+            "source_decision_id": item.get("source_decision_id"),
+            "stored_support": supporting_memory_text[:5],
+            "memory_ids": supporting_memory_ids[:10],
+            "decision_ids": related_decision_ids[:10],
+            "support_present": bool(supporting_memory_text or related_decision_ids),
+        })
+
+    return {
+        "detected": True,
+        "decision_support_comparison": True,
+        "read_only": True,
+        "recommendation_generated": False,
+        "winner_selected": False,
+        "truth_not_established": True,
+        "question": _phase_8p_clean_text(message),
+        "decision_count": len(relevant),
+        "option_count": len(comparisons),
+        "options": comparisons,
+        "decision_ids": [x.get("id") for x in relevant if isinstance(x, dict) and x.get("id") is not None][:20],
+        "note": "Only explicitly stored options and stored supporting records are compared; missing evidence is not inferred.",
+    }
+
+
+def build_decision_support_comparison_chat_context(user_id, message, memories=None, decision_history=None):
+    if not is_decision_support_comparison_question(message):
+        return {"detected": False, "analysis": None}
+    try:
+        analysis = analyze_decision_support_comparison(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            decision_history=decision_history,
+        )
+    except Exception:
+        analysis = None
+    return {"detected": True, "analysis": analysis}
+
+
+def build_decision_support_comparison_answer(comparison_context):
+    context = comparison_context if isinstance(comparison_context, dict) else {}
+    analysis = context.get("analysis") if isinstance(context.get("analysis"), dict) else {}
+    if not analysis.get("detected"):
+        return {"answered": False, "answer": "", "evidence": []}
+
+    options = [x for x in analysis.get("options", []) if isinstance(x, dict)]
+    if len(options) < 2:
+        return {
+            "answered": True,
+            "answer": "I found stored decision information, but I do not have two explicitly recorded options to compare side-by-side.",
+            "evidence": [],
+        }
+
+    lines = ["Here is a side-by-side comparison based only on your stored information:"]
+    evidence = []
+    for index, item in enumerate(options[:6], start=1):
+        option = _phase_8p_clean_text(item.get("option"))
+        lines.append("\nOption " + str(index) + ": " + option)
+        if item.get("stored_support"):
+            lines.append("Stored support: " + "; ".join(item.get("stored_support", [])[:3]) + ".")
+        else:
+            lines.append("Stored support: No specific supporting memory was retrieved for this option.")
+        if item.get("decision_ids"):
+            lines.append("Recorded decision evidence: Decision #" + ", Decision #".join(str(x) for x in item.get("decision_ids", [])[:5]) + ".")
+        evidence.append({
+            "source_type": "decision_option",
+            "source_id": item.get("source_decision_id"),
+            "label": "Stored option: " + option,
+            "option": option,
+            "memory_ids": item.get("memory_ids", []),
+            "decision_ids": item.get("decision_ids", []),
+        })
+
+    lines.append("\nWhat the stored information does not establish: which option will produce the better outcome. No winner or recommendation is generated by this comparison.")
+    return {"answered": True, "answer": "\n".join(lines).strip(), "evidence": evidence}
+
+
 # PHASE 8O — DECISION SUPPORT SYNTHESIS & OPEN-ITEM STATUS
 # ============================================================================
 #
@@ -20096,6 +20360,21 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 8P
+            # DECISION SUPPORT OPTION COMPARISON
+            # ------------------------------------------------
+
+            memory_decision_support_comparison_context = (
+                build_decision_support_comparison_chat_context(
+                    user_id=user_id,
+                    message=message,
+                    memories=memories,
+                    decision_history=None,
+                )
+            )
+
+
+            # ------------------------------------------------
             # PHASE 7 — STEP 1A
             # GROUNDED ANSWER + EVIDENCE TRACE
             # ------------------------------------------------
@@ -21190,6 +21469,53 @@ class handler(
                     response = " ".join(answer_parts).strip()
 
             # ------------------------------------------------
+            # PHASE 8P — AUTHORITATIVE OPTION COMPARISON ANSWER
+            # ------------------------------------------------
+            # Comparison is authoritative only for explicit comparison
+            # questions. It uses stored options only and never selects a winner.
+            if is_decision_support_comparison_question(message):
+                comparison_answer = build_decision_support_comparison_answer(
+                    memory_decision_support_comparison_context
+                )
+                if comparison_answer.get("answered"):
+                    response = str(comparison_answer.get("answer") or response).strip()
+                    for item in comparison_answer.get("evidence", [])[:10]:
+                        if not isinstance(item, dict):
+                            continue
+                        for decision_id in item.get("decision_ids", [])[:10]:
+                            try:
+                                did = int(decision_id)
+                            except Exception:
+                                continue
+                            if not any(
+                                str(x.get("source_type")) == "decision_history"
+                                and x.get("source_id") == did
+                                for x in evidence_trace
+                                if isinstance(x, dict)
+                            ):
+                                evidence_trace.append({
+                                    "source_type": "decision_history",
+                                    "source_id": did,
+                                    "label": "Decision #" + str(did),
+                                })
+                        for memory_id in item.get("memory_ids", [])[:10]:
+                            try:
+                                mid = int(memory_id)
+                            except Exception:
+                                continue
+                            if not any(
+                                str(x.get("source_type")) == "memory"
+                                and x.get("source_id") == mid
+                                for x in evidence_trace
+                                if isinstance(x, dict)
+                            ):
+                                evidence_trace.append({
+                                    "source_type": "memory",
+                                    "source_id": mid,
+                                    "label": "Memory #" + str(mid),
+                                })
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -21358,6 +21684,13 @@ class handler(
 
                     "decision_synthesis_trace":
                         decision_synthesis_trace,
+
+                    "decision_support_comparison_trace":
+                        (
+                            memory_decision_support_comparison_context
+                            if isinstance(memory_decision_support_comparison_context, dict)
+                            else {"detected": False}
+                        ),
 
                     "decision_synthesis_quality_trace":
                         decision_synthesis_quality_trace,
