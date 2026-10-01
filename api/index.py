@@ -12623,6 +12623,20 @@ def is_agent_reasoning_question_v97(message):
         "what is still unresolved about",
         "what is unresolved about",
         "what remains unresolved about",
+        "what is still unresolved in",
+        "what is unresolved in",
+        "what remains unresolved in",
+        "what is explicitly unresolved",
+        "what is explicitly unresolved in",
+        "what is explicitly still unresolved",
+        "what are the confirmed unresolved",
+        "confirmed unresolved items",
+        "separate confirmed unresolved",
+        "separate unresolved items from information that is missing",
+        "what information is missing from the stored context",
+        "what is missing from the stored context",
+        "what is missing from stored context",
+        "unresolved and missing information",
         "what do you know and what has changed",
         "what is known, what has changed",
         "summarize what you know about",
@@ -12636,6 +12650,40 @@ def is_agent_reasoning_question_v97(message):
     return any(pattern in text for pattern in patterns)
 
 
+def _v97_is_explicit_unresolved_split_question(message):
+    """Detect requests that explicitly ask for unresolved vs missing information."""
+    text = _v97_clean_text(message, 1200).lower()
+    if not text:
+        return False
+    unresolved = (
+        "what is explicitly unresolved",
+        "what are the confirmed unresolved",
+        "confirmed unresolved items",
+        "separate confirmed unresolved",
+        "what is still unresolved",
+        "what remains unresolved",
+        "what is unresolved",
+    )
+    missing = (
+        "information that is missing",
+        "what information is missing",
+        "what is missing from the stored context",
+        "what is missing from stored context",
+        "missing information",
+    )
+    if any(item in text for item in (
+        "what is explicitly unresolved",
+        "what is explicitly unresolved in",
+        "what are the confirmed unresolved",
+        "confirmed unresolved items",
+        "separate confirmed unresolved",
+    )):
+        return True
+    return any(item in text for item in unresolved) and any(
+        item in text for item in missing
+    )
+
+
 def _v97_deterministic_answer(reasoning):
     value = reasoning if isinstance(reasoning, dict) else {}
     known = _v97_unique(value.get("known") or [], 6)
@@ -12644,6 +12692,10 @@ def _v97_deterministic_answer(reasoning):
     unresolved = _v97_unique(value.get("unresolved") or [], 6)
     unknowns = _v97_unique(value.get("unknowns") or [], 5)
     evidence = value.get("evidence") or {}
+
+    explicit_unresolved_split = _v97_is_explicit_unresolved_split_question(
+        value.get("_v97_message") or ""
+    )
 
     parts = []
     if known:
@@ -12668,10 +12720,29 @@ def _v97_deterministic_answer(reasoning):
                 change_parts.append(new)
         if change_parts:
             parts.append("Changed: " + " ".join(change_parts))
-    if unresolved:
-        parts.append("Unresolved: " + " ".join(unresolved[:4]))
-    elif unknowns:
-        parts.append("Still unknown: " + " ".join(unknowns[:3]))
+    if explicit_unresolved_split:
+        if unresolved:
+            parts.append(
+                "Confirmed unresolved: " + " ".join(unresolved[:4])
+            )
+        else:
+            parts.append(
+                "Confirmed unresolved: No explicitly confirmed unresolved item was found in the supplied stored evidence."
+            )
+        if unknowns:
+            parts.append(
+                "Information missing from stored context: "
+                + " ".join(unknowns[:3])
+            )
+        else:
+            parts.append(
+                "Information missing from stored context: No separate missing-information item was recorded in the supplied context."
+            )
+    else:
+        if unresolved:
+            parts.append("Unresolved: " + " ".join(unresolved[:4]))
+        elif unknowns:
+            parts.append("Still unknown: " + " ".join(unknowns[:3]))
 
     source_count = int(evidence.get("source_count") or 0)
     if source_count:
@@ -13059,9 +13130,11 @@ def generate_agent_reasoning_response_v97(
         plan_state_context=plan_state_context,
         unresolved_gap_context=unresolved_gap_context,
     )
+    value["_v97_message"] = _v97_clean_text(message, 1200)
 
     prompt_context = build_agent_reasoning_prompt_context_v96(value)
     prompt_context.pop("_user_id", None)
+    prompt_context.pop("_v97_message", None)
     system_prompt = """You are the controlled reasoning layer of Dusra Brain.
 Use ONLY the supplied grounded context.
 Do not invent facts, dates, numbers, outcomes, motives, relationships, or current events.
@@ -13069,6 +13142,10 @@ Do not recommend an option, tell the user what they should do, or make a decisio
 Do not infer an outcome.
 Clearly distinguish known information, current state, recorded changes, and unresolved items.
 If something is not present in the supplied context, say it is not established.
+For an explicit unresolved-vs-missing-information question, separate the response into:
+Confirmed unresolved: only items explicitly supported as unresolved by the supplied stored evidence.
+Information missing from stored context: only items represented by the supplied unknowns/missing-context evidence.
+Do not convert missing information into an unresolved item.
 Keep the answer concise and factual.
 Return plain text only with these headings when supported:
 Known:
