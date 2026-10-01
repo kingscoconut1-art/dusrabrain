@@ -12664,8 +12664,123 @@ def _v97_validate_model_response(text, reasoning):
     return candidate
 
 
-def generate_agent_reasoning_response_v97(message, reasoning):
-    """Generate a controlled agent-style response from V9.6 only."""
+def _v97_focus_reasoning_context(
+    message,
+    reasoning,
+    focus_subject=None,
+    plan_state_context=None,
+    unresolved_gap_context=None,
+):
+    """Focus V9.7 on the project explicitly asked about.
+
+    V9.7 must not expose unrelated memories merely because they were retrieved
+    as background candidates. This helper keeps the existing grounded packet
+    but narrows the user-facing reasoning to the detected subject and, when
+    available, the already-built plan-state and unresolved-gap evidence.
+    """
+    source = dict(reasoning) if isinstance(reasoning, dict) else {}
+    subject = _v97_clean_text(focus_subject, 160)
+    subject_terms = [
+        token
+        for token in re.findall(r"[a-z0-9]+", subject.lower())
+        if len(token) >= 3
+    ]
+
+    if subject_terms:
+        filtered_known = []
+        for item in source.get("known") or []:
+            text = _v97_clean_text(item)
+            lowered = text.lower()
+            if any(term in lowered for term in subject_terms):
+                filtered_known.append(text)
+        if filtered_known:
+            source["known"] = _v97_unique(filtered_known, 12)
+
+    state_context = plan_state_context if isinstance(plan_state_context, dict) else {}
+    state_analysis = state_context.get("analysis") or {}
+    if not isinstance(state_analysis, dict):
+        state_analysis = {}
+
+    current_state = state_analysis.get("current_state") or {}
+    initial_state = state_analysis.get("initial_state") or {}
+    transitions = state_analysis.get("transitions") or []
+
+    if isinstance(current_state, dict) and current_state.get("state"):
+        source["current_state"] = {
+            "plan": _v97_clean_text(current_state.get("state")),
+            "stage": source.get("current_state", {}).get("stage", "")
+                if isinstance(source.get("current_state"), dict)
+                else "",
+        }
+
+    focused_changes = []
+    for transition in transitions[:10] if isinstance(transitions, list) else []:
+        if not isinstance(transition, dict):
+            continue
+        old = _v97_clean_text(
+            transition.get("from_state") or transition.get("from")
+        )
+        new = _v97_clean_text(
+            transition.get("to_state") or transition.get("to")
+        )
+        if old or new:
+            focused_changes.append({
+                "from": old,
+                "to": new,
+                "source": "stored_memory_versions",
+            })
+    if focused_changes:
+        source["changes"] = focused_changes[:10]
+
+    gap_context = unresolved_gap_context if isinstance(unresolved_gap_context, dict) else {}
+    gap_analysis = gap_context.get("analysis") or {}
+    if not isinstance(gap_analysis, dict):
+        gap_analysis = {}
+
+    focused_unresolved = []
+    for key in ("unresolved_items", "decision_gaps", "information_gaps"):
+        values = gap_analysis.get(key) or []
+        if isinstance(values, list):
+            for item in values:
+                if isinstance(item, dict):
+                    text = item.get("text") or item.get("question") or item.get("description")
+                else:
+                    text = item
+                text = _v97_clean_text(text)
+                if text:
+                    focused_unresolved.append(text)
+    if focused_unresolved:
+        source["unresolved"] = _v97_unique(focused_unresolved, 12)
+
+    # If the focused project has a concrete unresolved signal in the stored
+    # memories, preserve it even when the generic gap detector was not targeted
+    # by the exact wording of the user's question.
+    if subject_terms and not source.get("unresolved"):
+        inferred_from_stored_text = []
+        for item in source.get("known") or []:
+            lowered = item.lower()
+            if any(phrase in lowered for phrase in (
+                "deciding whether",
+                "whether to invest",
+                "still deciding",
+                "open decision",
+                "remains open",
+            )):
+                inferred_from_stored_text.append(item)
+        if inferred_from_stored_text:
+            source["unresolved"] = _v97_unique(inferred_from_stored_text, 6)
+
+    return source
+
+
+def generate_agent_reasoning_response_v97(
+    message,
+    reasoning,
+    focus_subject=None,
+    plan_state_context=None,
+    unresolved_gap_context=None,
+):
+    """Generate a controlled agent-style response from focused V9.6 context."""
     value = reasoning if isinstance(reasoning, dict) else {}
     if not is_agent_reasoning_question_v97(message):
         return {
@@ -12682,6 +12797,14 @@ def generate_agent_reasoning_response_v97(message, reasoning):
             "answer": "",
             "method": "gate_blocked",
         }
+
+    value = _v97_focus_reasoning_context(
+        message=message,
+        reasoning=value,
+        focus_subject=focus_subject,
+        plan_state_context=plan_state_context,
+        unresolved_gap_context=unresolved_gap_context,
+    )
 
     prompt_context = build_agent_reasoning_prompt_context_v96(value)
     system_prompt = """You are the controlled reasoning layer of Dusra Brain.
@@ -24703,9 +24826,22 @@ class handler(
             # ------------------------------------------------
             # V9.7 — CONTROLLED AGENT REASONING RESPONSE
             # ------------------------------------------------
+            v97_focus_subject = None
+            try:
+                v97_subjects = get_memory_subjects(user_id)
+                v97_focus_subject = detect_subject(
+                    message,
+                    v97_subjects,
+                )
+            except Exception:
+                v97_focus_subject = None
+
             agent_reasoning_response_v97 = generate_agent_reasoning_response_v97(
                 message,
                 agent_reasoning_v96,
+                focus_subject=v97_focus_subject,
+                plan_state_context=memory_plan_state_context,
+                unresolved_gap_context=memory_unresolved_gap_context,
             )
 
             agent_reasoning_response_trace_v97 = (
