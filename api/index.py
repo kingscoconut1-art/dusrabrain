@@ -13140,10 +13140,23 @@ def _v97_focus_reasoning_context(
                 explicit_memory_unresolved.append(text)
         if explicit_memory_unresolved:
             source["unresolved"] = _v97_unique(explicit_memory_unresolved, 10)
-        source["unknowns"] = _v97_unique(
-            list(source.get("unknowns") or []) + list(source.get("information_gaps") or []),
-            8,
-        )
+        # Keep missing information separate from unresolved items and stale placeholders.
+        candidate_unknowns = list(source.get("unknowns") or []) + list(source.get("information_gaps") or [])
+        unresolved_keys = {_v97_clean_text(item).lower() for item in (source.get("unresolved") or []) if _v97_clean_text(item)}
+        current_plan_text = _v97_clean_text((source.get("current_state") or {}).get("plan"))
+        current_stage_text = _v97_clean_text((source.get("current_state") or {}).get("stage"))
+        filtered_unknowns = []
+        for item in candidate_unknowns:
+            text = _v97_clean_text(item)
+            lowered = text.lower()
+            if not text or lowered in unresolved_keys:
+                continue
+            if current_plan_text and lowered == "no current plan was assembled from the supplied context.":
+                continue
+            if current_stage_text and lowered == "no current stage was assembled from the supplied context.":
+                continue
+            filtered_unknowns.append(text)
+        source["unknowns"] = _v97_unique(filtered_unknowns, 8)
 
     return source
 
