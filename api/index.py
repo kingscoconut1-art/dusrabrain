@@ -15667,9 +15667,37 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
         # First collect explicitly relevant memory rows, then prefer a direct
         # option-specific clause from the persisted decision/rationale.
         for row in memory_rows:
-            text = _phase_8p_clean_text(row.get("memory") or row.get("text") or row.get("description"))
+            text = _phase_8p_clean_text(
+                row.get("memory") or row.get("text") or row.get("description")
+            )
             if not text:
                 continue
+
+            lower_text = text.lower()
+
+            # A memory that explicitly describes BOTH alternatives is decision
+            # context, not option-specific support. Do not attach it to either
+            # side merely because both option names occur in the same sentence.
+            #
+            # Example:
+            #   "User is deciding whether to invest ... now or wait three
+            #    months ..."
+            #
+            # This record establishes that the two options exist, but it does
+            # not support either option individually.
+            is_multi_option_context = (
+                ("invest" in lower_text)
+                and ("wait" in lower_text)
+                and (
+                    "whether" in lower_text
+                    or "options" in lower_text
+                    or "option" in lower_text
+                    or " or " in lower_text
+                )
+            )
+            if is_multi_option_context:
+                continue
+
             overlap = tokens.intersection(_phase_8p_option_tokens(text))
             if tokens and len(overlap) >= max(1, min(2, len(tokens))):
                 mid = row.get("id")
@@ -15709,11 +15737,9 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
             elif "invest in evolve india now" in option_lower:
                 # The decision records this as an option, but the stored
                 # rationale does not provide an option-specific supporting
-                # reason for investing now. Do not manufacture one.
-                if selected_option and "invest" in selected_option.lower():
-                    supporting_memory_text.append(
-                        "Stored decision records this as an explicit option; no separate rationale for investing now is stored."
-                    )
+                # reason for investing now. Do not manufacture one and do not
+                # label the mere existence of an option as "support."
+                pass
 
         # Deduplicate support while preserving source order.
         deduped_support = []
@@ -15728,7 +15754,7 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
             "stored_support": deduped_support[:5],
             "memory_ids": supporting_memory_ids[:10],
             "decision_ids": list(dict.fromkeys(related_decision_ids))[:10],
-            "support_present": bool(deduped_support or related_decision_ids),
+            "support_present": bool(deduped_support),
         })
 
     return {
@@ -15786,7 +15812,13 @@ def build_decision_support_comparison_answer(comparison_context):
         else:
             lines.append("Stored support: No specific supporting memory was retrieved for this option.")
         if item.get("decision_ids"):
-            lines.append("Recorded decision evidence: Decision #" + ", Decision #".join(str(x) for x in item.get("decision_ids", [])[:5]) + ".")
+            lines.append(
+                "Recorded decision context: Decision #"
+                + ", Decision #".join(
+                    str(x) for x in item.get("decision_ids", [])[:5]
+                )
+                + "."
+            )
         evidence.append({
             "source_type": "decision_option",
             "source_id": item.get("source_decision_id"),
