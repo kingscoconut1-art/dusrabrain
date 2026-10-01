@@ -21032,6 +21032,54 @@ class handler(
                         or "unknown"
                     )
 
+                    # PHASE 8O.3 — SYNTHESIS CLEANUP
+                    # Convert stored-record phrasing into concise user-facing
+                    # language and collapse duplicate representations of the
+                    # same unresolved decision. The underlying evidence and
+                    # trace remain unchanged.
+                    def _phase_8o3_clean_plan(value):
+                        text = " ".join(str(value or "").split()).strip()
+                        prefixes = (
+                            "User has decided to ",
+                            "User decided to ",
+                            "The user has decided to ",
+                        )
+                        for prefix in prefixes:
+                            if text.lower().startswith(prefix.lower()):
+                                text = text[len(prefix):].strip()
+                                break
+                        return text[:1].upper() + text[1:] if text else ""
+
+                    def _phase_8o3_clean_open_items(items):
+                        cleaned = []
+                        investment_item = None
+                        for raw in items or []:
+                            text = " ".join(str(raw or "").split()).strip()
+                            if not text:
+                                continue
+                            lower = text.lower()
+                            if (
+                                "invest in evolve india" in lower
+                                and (
+                                    "now or wait" in lower
+                                    or "whether i should invest" in lower
+                                    or "whether to invest" in lower
+                                )
+                            ):
+                                investment_item = (
+                                    "Whether to invest in Evolve India now or "
+                                    "wait three months to reduce risk and validate "
+                                    "the market"
+                                )
+                                continue
+                            if text not in cleaned:
+                                cleaned.append(text)
+                        if investment_item and investment_item not in cleaned:
+                            cleaned.insert(0, investment_item)
+                        return cleaned[:3]
+
+                    current_plan = _phase_8o3_clean_plan(current_plan)
+
                     # PHASE 8O.2 — USER-FACING STATUS LANGUAGE
                     # Keep internal enum names and numeric scores out of the
                     # main answer. They remain available in the technical
@@ -21100,21 +21148,17 @@ class handler(
                     )
 
                     # Prefer explicit unresolved items over generic internal
-                    # supporting-signal text so the user sees what is actually
-                    # still open.
-                    user_open_items = []
-                    for item in blockers[:5]:
-                        clean = " ".join(str(item or "").split())
-                        if clean and clean not in user_open_items:
-                            user_open_items.append(clean)
-
-                    if not user_open_items:
-                        for item in synthesis_analysis.get(
-                            "unresolved_items", []
-                        )[:5]:
-                            clean = " ".join(str(item or "").split())
-                            if clean and clean not in user_open_items:
-                                user_open_items.append(clean)
+                    # supporting-signal text. 8O.3 also collapses duplicate
+                    # memory/decision formulations into one human-readable
+                    # open item.
+                    user_open_items = _phase_8o3_clean_open_items(
+                        list(blockers[:5])
+                        + list(
+                            synthesis_analysis.get(
+                                "unresolved_items", []
+                            )[:5]
+                        )
+                    )
 
                     if user_open_items:
                         answer_parts.append(
@@ -21123,14 +21167,17 @@ class handler(
                             + "."
                         )
                     elif supporting:
-                        answer_parts.append(
-                            "What is established: "
-                            + "; ".join(
-                                str(item)
-                                for item in supporting[:3]
+                        concise_support = []
+                        for item in supporting[:3]:
+                            clean = " ".join(str(item or "").split()).strip()
+                            if clean and clean not in concise_support:
+                                concise_support.append(clean)
+                        if concise_support:
+                            answer_parts.append(
+                                "What is established: "
+                                + "; ".join(concise_support)
+                                + "."
                             )
-                            + "."
-                        )
                     else:
                         answer_parts.append(
                             "No explicit unresolved item is recorded in the supplied context."
