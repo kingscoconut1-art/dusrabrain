@@ -15495,6 +15495,360 @@ def build_memory_evolution_chat_context(
 
 
 
+
+# ============================================================================
+# PHASE 8N — EVIDENCE SUFFICIENCY & MISSING EVIDENCE
+# ============================================================================
+
+def is_evidence_sufficiency_question(message):
+    text = str(message or "").strip().lower()
+
+    direct_terms = (
+        "what evidence am i missing",
+        "what evidence is missing",
+        "what information am i missing",
+        "what information is missing",
+        "what is missing before i decide",
+        "what is missing before i make this decision",
+        "what do i still need to know",
+        "what do i still need to know before deciding",
+        "what do i need to know before i decide",
+        "what do i need before i decide",
+        "what evidence do i need",
+        "what evidence do i still need",
+        "which evidence is missing",
+        "which information is missing",
+        "what gaps remain in my evidence",
+        "what gaps remain in my information",
+        "what are the evidence gaps",
+        "what are the information gaps",
+        "evidence sufficiency",
+        "evidence gap",
+        "evidence gaps",
+        "missing evidence",
+        "missing information",
+        "decision evidence",
+        "do i have enough evidence",
+        "do i have enough information",
+    )
+
+    if any(term in text for term in direct_terms):
+        return True
+
+    has_gap_language = any(
+        phrase in text
+        for phrase in (
+            "missing",
+            "still need",
+            "need to know",
+            "not enough",
+            "gap",
+            "gaps",
+        )
+    )
+
+    has_evidence_basis = any(
+        phrase in text
+        for phrase in (
+            "evidence",
+            "information",
+            "data",
+            "support",
+        )
+    )
+
+    has_decision_context = any(
+        phrase in text
+        for phrase in (
+            "decide",
+            "decision",
+            "invest",
+            "investment",
+            "ready",
+        )
+    )
+
+    return (
+        has_gap_language
+        and has_evidence_basis
+        and has_decision_context
+    )
+
+
+def _evidence_gap_text(value):
+    text = str(value or "").strip()
+    return " ".join(text.split())
+
+
+def _memory_has_substantive_text(memory):
+    if not isinstance(memory, dict):
+        return False
+
+    return bool(
+        _evidence_gap_text(
+            memory.get("memory")
+            or memory.get("content")
+            or memory.get("text")
+        )
+    )
+
+
+def _evidence_item_from_memory(memory):
+    if not isinstance(memory, dict):
+        return None
+
+    content = _evidence_gap_text(
+        memory.get("memory")
+        or memory.get("content")
+        or memory.get("text")
+    )
+
+    if not content:
+        return None
+
+    return {
+        "id": memory.get("id"),
+        "memory": content,
+        "category": memory.get("category") or "",
+        "importance": memory.get("importance") or 0,
+        "created_at": memory.get("created_at") or "",
+    }
+
+
+def _extract_explicit_unresolved_items(unresolved_gap_context):
+    if not isinstance(unresolved_gap_context, dict):
+        return []
+
+    analysis = unresolved_gap_context.get("analysis")
+
+    if not isinstance(analysis, dict):
+        return []
+
+    candidates = []
+
+    for key in (
+        "unresolved_items",
+        "unresolved_gaps",
+        "gaps",
+        "items",
+        "open_items",
+    ):
+        value = analysis.get(key)
+
+        if isinstance(value, list):
+            candidates.extend(value)
+
+    for key in (
+        "unresolved_item",
+        "unresolved_gap",
+        "primary_gap",
+        "gap",
+    ):
+        value = analysis.get(key)
+
+        if value:
+            candidates.append(value)
+
+    result = []
+    seen = set()
+
+    for item in candidates:
+
+        if isinstance(item, dict):
+            value = (
+                item.get("text")
+                or item.get("item")
+                or item.get("gap")
+                or item.get("description")
+                or item.get("issue")
+                or item.get("unresolved")
+            )
+        else:
+            value = item
+
+        value = _evidence_gap_text(value)
+
+        if not value:
+            continue
+
+        fingerprint = value.lower()
+
+        if fingerprint in seen:
+            continue
+
+        seen.add(fingerprint)
+        result.append(value)
+
+    return result[:20]
+
+
+def analyze_evidence_sufficiency(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+    readiness_context=None,
+):
+    stored_memories = [
+        item
+        for item in (memories or [])
+        if _memory_has_substantive_text(item)
+    ]
+
+    evidence_items = [
+        item
+        for item in (
+            _evidence_item_from_memory(memory)
+            for memory in stored_memories
+        )
+        if item is not None
+    ]
+
+    unresolved_items = _extract_explicit_unresolved_items(
+        unresolved_gap_context
+    )
+
+    readiness_analysis = (
+        readiness_context.get("analysis")
+        if isinstance(readiness_context, dict)
+        else None
+    )
+
+    readiness_gap = ""
+
+    if isinstance(readiness_analysis, dict):
+
+        for key in (
+            "unresolved",
+            "unresolved_item",
+            "unresolved_gap",
+            "primary_gap",
+            "gap",
+        ):
+
+            value = _evidence_gap_text(
+                readiness_analysis.get(key)
+            )
+
+            if value:
+                readiness_gap = value
+                break
+
+    if readiness_gap and readiness_gap.lower() not in {
+        item.lower()
+        for item in unresolved_items
+    }:
+        unresolved_items.append(readiness_gap)
+
+    present = []
+    seen_present = set()
+
+    for item in evidence_items:
+
+        content = item["memory"]
+        fingerprint = content.lower()
+
+        if fingerprint in seen_present:
+            continue
+
+        seen_present.add(fingerprint)
+        present.append(item)
+
+    missing = []
+    critical_missing = []
+
+    if unresolved_items:
+
+        for item in unresolved_items:
+
+            gap = _evidence_gap_text(item)
+
+            if not gap:
+                continue
+
+            missing_item = {
+                "gap": gap,
+                "status": "not_resolved_in_stored_context",
+                "decision_critical": True,
+            }
+
+            missing.append(missing_item)
+            critical_missing.append(missing_item)
+
+    else:
+
+        missing.append({
+            "gap": (
+                "No explicit unresolved evidence gap was stored for "
+                "this question."
+            ),
+            "status": "not_explicitly_identified",
+            "decision_critical": False,
+        })
+
+    if not present:
+        sufficiency = "insufficient_stored_evidence"
+    elif critical_missing:
+        sufficiency = "partial_stored_evidence"
+    else:
+        sufficiency = "stored_evidence_present"
+
+    return {
+        "detected": True,
+        "question": str(message or ""),
+        "sufficiency": sufficiency,
+        "stored_evidence_count": len(present),
+        "stored_evidence": present[:20],
+        "missing_evidence": missing[:20],
+        "decision_critical_gaps": critical_missing[:20],
+        "unresolved_items": unresolved_items[:20],
+        "note": (
+            "Missing means not explicitly represented or resolved in "
+            "stored context; it does not mean false, unavailable in "
+            "the real world, or disproven."
+        ),
+    }
+
+
+def build_evidence_sufficiency_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    consistency_context=None,
+    unresolved_gap_context=None,
+    readiness_context=None,
+):
+    if not is_evidence_sufficiency_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+        }
+
+    try:
+        analysis = analyze_evidence_sufficiency(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            plan_state_context=plan_state_context,
+            consistency_context=consistency_context,
+            unresolved_gap_context=unresolved_gap_context,
+            readiness_context=readiness_context,
+        )
+    except Exception:
+        analysis = None
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+    }
+
+
 def build_evidence_sufficiency_prompt_context(
     evidence_sufficiency_context,
 ):
