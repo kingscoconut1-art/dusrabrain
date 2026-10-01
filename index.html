@@ -2092,6 +2092,9 @@
 .db-logout-button{background:#fff;color:#111827}
 @media (max-width:720px){.db-auth-card{padding:24px;border-radius:18px}.db-auth-title{font-size:26px}.db-user-email{display:none}}
 
+
+        .db-integration-intro{border:1px solid var(--db-line,#333);padding:22px;margin:18px 0 16px;background:#0b0b0b}.db-integration-kicker{font-size:10px;letter-spacing:.16em;color:#8a8a8a;margin-bottom:9px}.db-integration-intro h3{margin:0 0 8px;font-size:20px}.db-integration-intro p{margin:0;color:#9b9b9b;line-height:1.6;max-width:760px}.db-private-integration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.db-private-integration-card{border:1px solid var(--db-line,#333);background:#080808;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:18px}.db-private-integration-card strong{display:block;font-size:15px;margin-bottom:5px}.db-private-integration-card span{display:block;color:#8d8d8d;font-size:12px}.db-integration-state{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin-bottom:8px}.db-integration-state.active{color:#b6ff4a}.db-integration-toggle{border:1px solid #555;background:#111;color:#fff;padding:8px 11px;cursor:pointer;font:inherit;font-size:11px}.db-integration-toggle:hover{border-color:var(--db-lime,#b6ff4a);color:var(--db-lime,#b6ff4a)}@media(max-width:700px){.db-private-integration-grid{grid-template-columns:1fr}}
+
 </style>
 
 <style>
@@ -2972,6 +2975,14 @@ body.home-active .container {
             >
                 🎯 Decisions
             </button>
+
+            <button
+                class="header-button"
+                id="integrationsButton"
+                type="button"
+            >
+                🔌 Integrations
+            </button>
             <span class="db-user-badge" id="dbUserBadge">
                 <span class="db-user-email" id="dbUserEmail"></span>
                 <button class="header-button db-logout-button" id="dbLogoutButton" type="button">Logout</button>
@@ -3354,6 +3365,32 @@ body.home-active .container {
         </div>
 
     </div>
+
+
+        <!-- =================================================
+             INTEGRATIONS
+        ================================================= -->
+
+        <div
+            id="integrationsView"
+            class="view"
+        >
+
+            <div class="dashboard-header">
+                <h2>🔌 Integrations</h2>
+                <button class="back-button" id="integrationsBackButton">← Back to Chat</button>
+            </div>
+
+            <div class="db-integration-intro">
+                <div class="db-integration-kicker">YOUR MEMORY LAYER</div>
+                <h3>Bring your daily conversations into Dusra Brain.</h3>
+                <p>Choose the channels you want Dusra Brain to prepare for. Connection credentials are handled separately by each provider.</p>
+            </div>
+
+            <div id="integrationStatus" class="search-info">Loading integrations...</div>
+            <div id="integrationGrid" class="db-private-integration-grid"></div>
+
+        </div>
 
 
         <!-- =================================================
@@ -4832,6 +4869,7 @@ body.home-active .container {
 
 
     const decisionView = document.getElementById("decisionView");
+    const integrationsView = document.getElementById("integrationsView");
 
     // ========================================================
     // VIEW MANAGEMENT
@@ -4858,6 +4896,10 @@ body.home-active .container {
         );
 
         decisionView.classList.remove(
+            "active"
+        );
+
+        integrationsView.classList.remove(
             "active"
         );
 
@@ -4936,6 +4978,61 @@ body.home-active .container {
             }
         );
 
+
+
+    // ========================================================
+    // INTEGRATIONS CENTER
+    // ========================================================
+    async function loadIntegrations() {
+        const grid = document.getElementById("integrationGrid");
+        const status = document.getElementById("integrationStatus");
+        if (!grid) return;
+        status.textContent = "Loading integrations...";
+        try {
+            const response = await fetch("/api/integrations", {headers:{"Accept":"application/json"}});
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Unable to load integrations.");
+            const items = Array.isArray(data.integrations) ? data.integrations : [];
+            grid.innerHTML = items.map(function(item) {
+                const active = !!item.enabled;
+                const isWeb = item.id === "web";
+                return '<div class="db-private-integration-card">' +
+                    '<div><div class="db-integration-state ' + (active ? 'active' : '') + '">' + (active ? (isWeb ? 'ACTIVE' : 'PREPARED') : 'NOT CONNECTED') + '</div>' +
+                    '<strong>' + item.name + '</strong><span>' + item.description + '</span></div>' +
+                    (isWeb ? '<div class="db-integration-state active">READY</div>' : '<button class="db-integration-toggle" data-integration-provider="' + item.id + '" data-integration-enabled="' + active + '">' + (active ? 'Disable' : 'Prepare') + '</button>') +
+                    '</div>';
+            }).join("");
+            status.textContent = "Integration preferences are private to your account.";
+        } catch (error) {
+            status.textContent = "Unable to load integrations: " + (error.message || "Unknown error");
+        }
+    }
+
+    document.addEventListener("click", async function(event) {
+        const toggle = event.target && event.target.closest ? event.target.closest("[data-integration-provider]") : null;
+        if (!toggle) return;
+        toggle.disabled = true;
+        const provider = toggle.getAttribute("data-integration-provider");
+        const currentlyEnabled = toggle.getAttribute("data-integration-enabled") === "true";
+        try {
+            const response = await fetch("/api/integrations", {method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:currentlyEnabled ? "disable" : "enable",provider:provider})});
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Unable to update integration.");
+            await loadIntegrations();
+        } catch (error) {
+            const status = document.getElementById("integrationStatus");
+            if (status) status.textContent = "Unable to update integration: " + (error.message || "Unknown error");
+            toggle.disabled = false;
+        }
+    });
+
+    document.getElementById("integrationsButton").addEventListener("click", function() {
+        showView(integrationsView);
+        loadIntegrations();
+    });
+    document.getElementById("integrationsBackButton").addEventListener("click", function() {
+        showView(chatView);
+    });
 
 
     // ========================================================
