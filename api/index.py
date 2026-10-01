@@ -10946,6 +10946,540 @@ def _confidence_calibrated_reasons(
 
 
 
+
+# ============================================================
+# PHASE 9.1 — PROJECT STATE / PLANNING INTELLIGENCE 2.0
+# ============================================================
+#
+# Purpose:
+#   Reconstruct the stored state of a project by joining the already
+#   persisted planning context, decision history, and explicitly recorded
+#   decision outcomes.
+#
+# This layer does NOT replace Phase 8I planning intelligence. It composes
+# that existing read-only analysis with historical decisions and confirmed
+# outcomes so a user can ask where a project currently stands.
+#
+# Integrity rules:
+#   - read-only
+#   - no memory mutation
+#   - no decision mutation
+#   - no outcome inference
+#   - no recommendation or winner selection
+#   - confirmed outcomes only
+#   - every public state claim must have a stored evidence source
+# ============================================================
+
+
+def is_project_state_question(message):
+    text = str(message or "").strip().lower()
+
+    if not text:
+        return False
+
+    terms = (
+        "where do i currently stand with",
+        "where do i stand with",
+        "where am i with",
+        "what is the current state of",
+        "what's the current state of",
+        "what is the status of my",
+        "what's the status of my",
+        "what is the current status of",
+        "what is my current status on",
+        "where does my project stand",
+        "where does this project stand",
+        "current state of my project",
+        "current project state",
+        "give me the current state",
+        "summarize the current state",
+        "summarise the current state",
+        "where am i currently",
+    )
+
+    return any(term in text for term in terms)
+
+
+def _project_state_decision_match(message, decision, memories):
+    decision_text = " ".join(
+        str(decision.get(key) or "")
+        for key in (
+            "title",
+            "decision",
+            "selected_option",
+            "rationale",
+        )
+    ).strip()
+
+    message_score = _planning_overlap(message, decision_text)
+
+    memory_score = 0.0
+    for item in memories or []:
+        if not isinstance(item, dict):
+            continue
+        memory_text = str(item.get("memory") or "").strip()
+        if not memory_text:
+            continue
+        memory_score = max(
+            memory_score,
+            _planning_overlap(memory_text, decision_text),
+        )
+
+    return max(message_score, memory_score)
+
+
+def _project_state_subject(message, memories, decisions, outcomes):
+    # Prefer an explicit non-generic memory subject that matches the query.
+    candidates = []
+    for item in memories or []:
+        if not isinstance(item, dict):
+            continue
+        subject = str(item.get("subject") or "").strip()
+        text = str(item.get("memory") or "").strip()
+        if subject and subject.lower() not in {"general", "new chat"}:
+            candidates.append((
+                _planning_overlap(message, text),
+                subject,
+            ))
+
+    if candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        if candidates[0][0] >= 0.05:
+            return candidates[0][1]
+
+    # Next prefer the stored decision title when it is meaningful.
+    for decision in decisions or []:
+        title = str(decision.get("title") or "").strip()
+        if title and title.lower() not in {"new chat", "default"}:
+            if _project_state_decision_match(message, decision, memories) >= 0.05:
+                return title
+
+    # Finally use the outcome-linked decision title.
+    for outcome in outcomes or []:
+        title = str(outcome.get("title") or "").strip()
+        if title and title.lower() not in {"new chat", "default"}:
+            return title
+
+    return ""
+
+
+def analyze_project_state(
+    user_id,
+    message,
+    memories=None,
+    plan_context=None,
+    plan_state_context=None,
+    evolution_context=None,
+    limit=80,
+):
+    """Build a deterministic, read-only project state snapshot."""
+    message = str(message or "").strip()
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 80
+    limit = max(1, min(200, limit))
+
+    if memories is None:
+        memories = get_relevant_memories(
+            user_id=user_id,
+            message=message,
+            session_id="default",
+            limit=limit,
+        )
+    memories = list(memories or [])[:limit]
+
+    if not isinstance(plan_context, dict):
+        plan_context = build_memory_plan_chat_context(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            brain_entities=[],
+            brain_relationships=[],
+            evolution_context=evolution_context,
+            decision_context=None,
+        )
+
+    plan_analysis = (
+        plan_context.get("analysis")
+        if isinstance(plan_context, dict)
+        and isinstance(plan_context.get("analysis"), dict)
+        else {}
+    )
+
+    if not isinstance(plan_state_context, dict):
+        plan_state_context = build_plan_state_chat_context(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            evolution_context=evolution_context,
+        )
+
+    state_analysis = (
+        plan_state_context.get("analysis")
+        if isinstance(plan_state_context, dict)
+        and isinstance(plan_state_context.get("analysis"), dict)
+        else {}
+    )
+
+    decisions = get_decision_history(
+        user_id=user_id,
+        limit=100,
+    )
+
+    matched_decisions = []
+    for decision in decisions:
+        score = _project_state_decision_match(
+            message,
+            decision,
+            memories,
+        )
+        if score >= 0.05:
+            item = dict(decision)
+            item["project_state_match_score"] = round(score, 4)
+            matched_decisions.append(item)
+
+    matched_decisions.sort(
+        key=lambda item: (
+            float(item.get("project_state_match_score") or 0.0),
+            str(item.get("created_at") or ""),
+        ),
+        reverse=True,
+    )
+    matched_decisions = matched_decisions[:20]
+
+    matched_ids = {
+        int(item.get("id"))
+        for item in matched_decisions
+        if str(item.get("id") or "").isdigit()
+    }
+
+    all_outcomes = get_decision_outcomes(
+        user_id=user_id,
+        decision_id=None,
+        limit=200,
+    )
+
+    matched_outcomes = []
+    for outcome in all_outcomes:
+        try:
+            decision_id = int(outcome.get("decision_id"))
+        except Exception:
+            continue
+
+        if decision_id not in matched_ids:
+            # Also allow direct text matching against the query. This is still
+            # evidence matching; it never infers an outcome.
+            outcome_text = " ".join(
+                str(outcome.get(key) or "")
+                for key in (
+                    "title",
+                    "decision",
+                    "outcome",
+                    "learning",
+                )
+            ).strip()
+            if _planning_overlap(message, outcome_text) < 0.05:
+                continue
+
+        if not bool(outcome.get("confirmed")):
+            continue
+
+        matched_outcomes.append(dict(outcome))
+
+    matched_outcomes = matched_outcomes[:20]
+
+    project_subject = _project_state_subject(
+        message,
+        memories,
+        matched_decisions,
+        matched_outcomes,
+    )
+
+    current_plan = str(
+        plan_analysis.get("current_plan") or ""
+    ).strip()
+
+    current_stage = str(
+        plan_analysis.get("current_stage")
+        or state_analysis.get("current_state", {}).get("state")
+        or "not established"
+    ).strip()
+
+    open_items = list(
+        plan_analysis.get("open_items") or []
+    )[:15]
+
+    objectives = list(
+        plan_analysis.get("objectives") or []
+    )[:15]
+
+    dependencies = list(
+        plan_analysis.get("dependencies") or []
+    )[:15]
+
+    changes = list(
+        plan_analysis.get("changes_over_time") or []
+    )[:15]
+
+    evidence = []
+
+    for item in matched_decisions[:10]:
+        decision_id = item.get("id")
+        if decision_id is None:
+            continue
+        decision_text = " ".join(
+            str(item.get(key) or "")
+            for key in (
+                "decision",
+                "selected_option",
+                "rationale",
+            )
+        ).strip()
+        evidence.append({
+            "source_type": "decision_history",
+            "source_id": decision_id,
+            "label": "Decision #" + str(decision_id),
+            "text": decision_text,
+        })
+
+    for outcome in matched_outcomes[:10]:
+        outcome_id = outcome.get("id")
+        if outcome_id is None:
+            continue
+        status = str(outcome.get("outcome_status") or "").strip()
+        outcome_text = str(outcome.get("outcome") or "").strip()
+        text_parts = []
+        if status:
+            text_parts.append("Status: " + status)
+        if outcome_text:
+            text_parts.append("Outcome: " + outcome_text)
+        learning = str(outcome.get("learning") or "").strip()
+        if learning:
+            text_parts.append("Learning: " + learning)
+        evidence.append({
+            "source_type": "decision_outcome",
+            "source_id": outcome_id,
+            "label": "Recorded outcome #" + str(outcome_id),
+            "text": "; ".join(text_parts),
+            "decision_id": outcome.get("decision_id"),
+            "outcome_status": outcome.get("outcome_status"),
+            "confirmed": True,
+        })
+
+    for item in list(plan_analysis.get("supporting_memories") or [])[:10]:
+        if not isinstance(item, dict):
+            continue
+        memory_id = item.get("id")
+        if memory_id is None:
+            continue
+        evidence.append({
+            "source_type": "memory",
+            "source_id": memory_id,
+            "label": "Memory #" + str(memory_id),
+            "text": str(item.get("memory") or "").strip(),
+        })
+
+    # A project state answer is considered grounded only when at least one
+    # stored source directly supports the returned state.
+    grounded = bool(evidence)
+
+    return {
+        "project_state_intelligence": True,
+        "detected": True,
+        "answered": grounded,
+        "grounded": grounded,
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "truth_not_established": True,
+        "subject": project_subject,
+        "current_plan": current_plan,
+        "current_stage": current_stage,
+        "objectives": objectives,
+        "dependencies": dependencies,
+        "open_items": open_items,
+        "related_decisions": matched_decisions,
+        "recorded_outcomes": matched_outcomes,
+        "changes_over_time": changes,
+        "plan_completeness_score": float(
+            plan_analysis.get("plan_completeness_score") or 0.0
+        ),
+        "evidence": evidence[:40],
+        "candidate_memory_count": len(memories),
+        "decision_count": len(matched_decisions),
+        "outcome_count": len(matched_outcomes),
+    }
+
+
+def build_project_state_answer(result):
+    """Build a deterministic answer only from V9.1 stored evidence."""
+    data = result if isinstance(result, dict) else {}
+    if not data.get("answered"):
+        return {
+            "built": True,
+            "answered": False,
+            "grounded": False,
+            "answer": "",
+            "evidence": [],
+        }
+
+    subject = str(data.get("subject") or "").strip()
+    heading = (
+        "Based on your stored information, here is the current state"
+        + (" of " + subject if subject else " of this project")
+        + ":"
+    )
+
+    lines = [heading]
+
+    current_plan = str(data.get("current_plan") or "").strip()
+    if current_plan:
+        lines.append("\nCurrent plan: " + current_plan)
+
+    stage = str(data.get("current_stage") or "not established").strip()
+    if stage and stage != "not established":
+        lines.append("Current stage: " + stage)
+
+    objectives = [str(x).strip() for x in data.get("objectives") or [] if str(x).strip()]
+    if objectives:
+        lines.append("Objectives: " + "; ".join(objectives[:5]))
+
+    decisions = data.get("related_decisions") or []
+    if decisions:
+        decision_lines = []
+        for item in decisions[:5]:
+            decision_id = item.get("id")
+            text = str(item.get("decision") or "").strip()
+            if decision_id is not None and text:
+                decision_lines.append("Decision #" + str(decision_id) + ": " + text)
+        if decision_lines:
+            lines.append("Recorded decisions: " + " | ".join(decision_lines))
+
+    outcomes = data.get("recorded_outcomes") or []
+    if outcomes:
+        outcome_lines = []
+        for item in outcomes[:5]:
+            status = str(item.get("outcome_status") or "").strip()
+            text = str(item.get("outcome") or "").strip()
+            if text:
+                prefix = (status + ": ") if status else ""
+                outcome_lines.append(
+                    "Recorded outcome #"
+                    + str(item.get("id"))
+                    + ": "
+                    + prefix
+                    + text
+                )
+        if outcome_lines:
+            lines.append("Recorded outcomes: " + " | ".join(outcome_lines))
+
+    open_items = [str(x).strip() for x in data.get("open_items") or [] if str(x).strip()]
+    if open_items:
+        lines.append("Open items: " + "; ".join(open_items[:5]))
+
+    lines.append(
+        "\nThis is a synthesis of your stored information; it does not establish facts outside Dusra Brain or decide what you should do."
+    )
+
+    return {
+        "built": True,
+        "answered": True,
+        "grounded": True,
+        "answer": "\n".join(lines),
+        "evidence": [
+            item for item in data.get("evidence") or []
+            if isinstance(item, dict)
+        ][:40],
+    }
+
+
+def build_project_state_trace(result, answer_result=None):
+    data = result if isinstance(result, dict) else {}
+    answer = answer_result if isinstance(answer_result, dict) else {}
+    return {
+        "built": True,
+        "detected": bool(data.get("detected")),
+        "answered": bool(answer.get("answered", data.get("answered"))),
+        "grounded": bool(answer.get("grounded", data.get("grounded"))),
+        "subject": str(data.get("subject") or ""),
+        "current_stage": str(data.get("current_stage") or "not established"),
+        "decision_count": len(data.get("related_decisions") or []),
+        "outcome_count": len(data.get("recorded_outcomes") or []),
+        "open_item_count": len(data.get("open_items") or []),
+        "evidence_count": len(data.get("evidence") or []),
+        "read_only": True,
+        "prescriptive": False,
+        "automatic_mutation": False,
+        "recommendation_generated": False,
+        "decision_modified": False,
+        "memory_modified": False,
+        "outcome_inferred": False,
+        "version": "9.1",
+    }
+
+
+def build_project_state_chat_context(
+    user_id,
+    message,
+    memories,
+    plan_context=None,
+    plan_state_context=None,
+    evolution_context=None,
+):
+    if not is_project_state_question(message):
+        return {
+            "detected": False,
+            "analysis": None,
+            "answer": None,
+            "trace": build_project_state_trace({}, {}),
+        }
+
+    try:
+        analysis = analyze_project_state(
+            user_id=user_id,
+            message=message,
+            memories=memories,
+            plan_context=plan_context,
+            plan_state_context=plan_state_context,
+            evolution_context=evolution_context,
+            limit=100,
+        )
+        answer = build_project_state_answer(analysis)
+    except Exception as error:
+        analysis = {
+            "project_state_intelligence": True,
+            "detected": True,
+            "answered": False,
+            "grounded": False,
+            "read_only": True,
+            "prescriptive": False,
+            "automatic_mutation": False,
+            "truth_not_established": True,
+            "subject": "",
+            "current_plan": "",
+            "current_stage": "not established",
+            "objectives": [],
+            "dependencies": [],
+            "open_items": [],
+            "related_decisions": [],
+            "recorded_outcomes": [],
+            "changes_over_time": [],
+            "evidence": [],
+            "error": str(error),
+        }
+        answer = build_project_state_answer(analysis)
+
+    return {
+        "detected": True,
+        "analysis": analysis,
+        "answer": answer,
+        "trace": build_project_state_trace(analysis, answer),
+    }
+
+
 # ============================================================
 # PHASE 8H.1 — NATURAL LANGUAGE CONFIDENCE INTEGRATION
 # ============================================================
@@ -18891,6 +19425,55 @@ class handler(
 
 
         # ----------------------------------------------------
+        # PHASE 9.1 — PROJECT STATE INTELLIGENCE
+        # ----------------------------------------------------
+
+        if params.get(
+            "project_state"
+        ) == ["true"]:
+
+            try:
+                message_value = params.get(
+                    "message",
+                    [""]
+                )[0]
+                memories_value = get_relevant_memories(
+                    user_id=user_id,
+                    message=message_value,
+                    session_id="default",
+                    limit=int(params.get("limit", ["80"])[0]),
+                )
+                result = analyze_project_state(
+                    user_id=user_id,
+                    message=message_value,
+                    memories=memories_value,
+                    limit=80,
+                )
+                answer = build_project_state_answer(result)
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "answer": answer,
+                        "project_state_trace":
+                            build_project_state_trace(
+                                result,
+                                answer,
+                            ),
+                    },
+                    200,
+                )
+            except Exception as error:
+                send_json(
+                    self,
+                    {"error": str(error)},
+                    500,
+                )
+
+            return
+
+
+        # ----------------------------------------------------
         # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
         # ----------------------------------------------------
 
@@ -20089,6 +20672,46 @@ class handler(
 
 
             # ------------------------------------------------
+            # PHASE 9.1 — PROJECT STATE INTELLIGENCE
+            # ------------------------------------------------
+
+            if action == "analyze_project_state":
+
+                result = analyze_project_state(
+                    user_id=user_id,
+                    message=body.get(
+                        "message",
+                        body.get(
+                            "claim",
+                            "",
+                        ),
+                    ),
+                    memories=body.get("memories"),
+                    plan_context=body.get("plan_context"),
+                    plan_state_context=body.get("plan_state_context"),
+                    evolution_context=body.get("evolution_context"),
+                    limit=body.get("limit", 80),
+                )
+                answer = build_project_state_answer(result)
+
+                send_json(
+                    self,
+                    {
+                        **result,
+                        "answer": answer,
+                        "project_state_trace":
+                            build_project_state_trace(
+                                result,
+                                answer,
+                            ),
+                    },
+                    200,
+                )
+
+                return
+
+
+            # ------------------------------------------------
             # PHASE 8I — MEMORY-TO-PLAN / PLANNING INTELLIGENCE
             # ------------------------------------------------
 
@@ -21024,6 +21647,19 @@ class handler(
                     user_id=user_id,
                     message=message,
                 )
+            )
+
+
+            # ------------------------------------------------
+            # PHASE 9.1 — PROJECT STATE / CURRENT STATE SNAPSHOT
+            # ------------------------------------------------
+            memory_project_state_context = build_project_state_chat_context(
+                user_id=user_id,
+                message=message,
+                memories=memories,
+                plan_context=memory_plan_context,
+                plan_state_context=memory_plan_state_context,
+                evolution_context=memory_evolution_context,
             )
 
 
@@ -22294,6 +22930,46 @@ class handler(
                     }
 
             # ------------------------------------------------
+            # PHASE 9.1 — AUTHORITATIVE PROJECT STATE ANSWER
+            # ------------------------------------------------
+            if memory_project_state_context.get("detected"):
+                project_state_answer = memory_project_state_context.get(
+                    "answer"
+                ) or {}
+
+                if project_state_answer.get("answered"):
+                    response = str(
+                        project_state_answer.get("answer") or response
+                    ).strip()
+
+                    for source in project_state_answer.get("evidence", [])[:40]:
+                        if not isinstance(source, dict):
+                            continue
+                        if not any(
+                            str(existing.get("source_type")) == str(source.get("source_type"))
+                            and existing.get("source_id") == source.get("source_id")
+                            for existing in evidence_trace
+                            if isinstance(existing, dict)
+                        ):
+                            evidence_trace.append(source)
+
+                    if evidence_trace:
+                        grounded = True
+
+                    reasoning_quality_trace = {
+                        **(reasoning_quality_trace if isinstance(reasoning_quality_trace, dict) else {}),
+                        "built": True,
+                        "passed": True,
+                        "status": "pass",
+                        "reason": "authoritative stored project-state evidence",
+                        "evidence_count": len(evidence_trace),
+                        "valid_evidence_count": len(evidence_trace),
+                        "invalid_evidence_count": 0,
+                        "reasoning_used": False,
+                        "verification_fallback_used": True,
+                    }
+
+            # ------------------------------------------------
             # SAVE ASSISTANT MESSAGE
             # ------------------------------------------------
 
@@ -22565,6 +23241,12 @@ class handler(
                             "action_created": False,
                             "read_only": True,
                         },
+
+                    "project_state_trace":
+                        memory_project_state_context.get(
+                            "trace",
+                            {"detected": False},
+                        ),
 
                     "session_id":
                         session_id,
