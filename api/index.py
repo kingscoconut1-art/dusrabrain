@@ -19374,11 +19374,95 @@ class handler(
                 []
             )
 
+            # ------------------------------------------------
+            # PHASE 8N — EVIDENCE TRACE FALLBACK
+            # ------------------------------------------------
+            # If Phase 8N explicitly identified stored evidence
+            # but the grounded-answer model returned no evidence
+            # references, promote those already-identified stored
+            # memories into the normal Evidence Trace.
+            #
+            # This does NOT create new evidence. The evidence has
+            # already been deterministically identified by
+            # analyze_evidence_sufficiency() from stored memories.
+            if (
+                not evidence_trace
+                and isinstance(
+                    memory_evidence_sufficiency_context,
+                    dict
+                )
+                and memory_evidence_sufficiency_context.get(
+                    "detected"
+                )
+            ):
+                evidence_analysis = (
+                    memory_evidence_sufficiency_context.get(
+                        "analysis"
+                    )
+                )
+
+                if isinstance(
+                    evidence_analysis,
+                    dict
+                ):
+                    stored_evidence = (
+                        evidence_analysis.get(
+                            "stored_evidence"
+                        )
+                        or []
+                    )
+
+                    evidence_trace = []
+
+                    for item in stored_evidence[:10]:
+
+                        if not isinstance(
+                            item,
+                            dict
+                        ):
+                            continue
+
+                        memory_id = item.get(
+                            "id"
+                        )
+
+                        if memory_id is None:
+                            continue
+
+                        evidence_trace.append(
+                            {
+                                "source_type":
+                                    "memory",
+
+                                "source_id":
+                                    memory_id,
+
+                                "label":
+                                    "Memory #"
+                                    + str(
+                                        memory_id
+                                    ),
+
+                                "text":
+                                    str(
+                                        item.get(
+                                            "memory"
+                                        )
+                                        or ""
+                                    ),
+                            }
+                        )
+
+                    if evidence_trace:
+                        grounded = True
+
             grounded = bool(
                 grounded_result.get(
                     "grounded",
                     False
                 )
+            ) or bool(
+                evidence_trace
             )
 
 
