@@ -15900,7 +15900,103 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
         "decision_ids": [x.get("id") for x in relevant if isinstance(x, dict) and x.get("id") is not None][:20],
         "note": "Only explicitly stored options and stored supporting records are compared; missing evidence is not inferred.",
         "phase_8p_comparison_version": "8P-V7",
+        "phase_8q_outcome_evidence_version": "8Q-V1",
     }
+
+
+# PHASE 8Q — EXPLICIT DECISION OUTCOME EVIDENCE
+# ============================================================================
+# Purpose:
+#   Add explicitly recorded decision outcomes to option comparisons without
+#   turning historical outcomes into recommendations or winners.
+#
+# Rules:
+#   - Only confirmed records from decision_outcomes are used.
+#   - No outcome is inferred from memory, language, or current plan state.
+#   - Historical outcome evidence is presented as evidence, not as a score.
+#   - No option ranking, winner selection, or recommendation is generated.
+#   - Existing Phase 8P comparison and grounding behavior remains intact.
+# ============================================================================
+
+
+def _phase_8q_clean_text(value):
+    return " ".join(str(value or "").split()).strip()
+
+
+def _phase_8q_attach_outcomes(user_id, analysis):
+    """Attach only explicitly confirmed outcomes to matching decision IDs."""
+    if not isinstance(analysis, dict):
+        return analysis
+
+    decision_ids = []
+    for item in analysis.get("options", []) or []:
+        if not isinstance(item, dict):
+            continue
+        for value in item.get("decision_ids", []) or []:
+            try:
+                did = int(value)
+            except Exception:
+                continue
+            if did > 0 and did not in decision_ids:
+                decision_ids.append(did)
+        try:
+            source_id = int(item.get("source_decision_id"))
+            if source_id > 0 and source_id not in decision_ids:
+                decision_ids.append(source_id)
+        except Exception:
+            pass
+
+    outcome_map = {}
+    try:
+        all_outcomes = get_decision_outcomes(
+            user_id=user_id,
+            decision_id=None,
+            limit=200,
+        )
+    except Exception:
+        all_outcomes = []
+
+    for outcome in all_outcomes or []:
+        if not isinstance(outcome, dict) or not outcome.get("confirmed"):
+            continue
+        try:
+            did = int(outcome.get("decision_id"))
+        except Exception:
+            continue
+        if did <= 0 or not decision_ids or did not in decision_ids:
+            continue
+        outcome_map.setdefault(did, []).append({
+            "id": outcome.get("id"),
+            "decision_id": did,
+            "outcome_status": _phase_8q_clean_text(outcome.get("outcome_status")),
+            "outcome": _phase_8q_clean_text(outcome.get("outcome")),
+            "expected_outcome": _phase_8q_clean_text(outcome.get("expected_outcome")),
+            "learning": _phase_8q_clean_text(outcome.get("learning")),
+            "confirmed": True,
+            "created_at": outcome.get("created_at"),
+        })
+
+    for item in analysis.get("options", []) or []:
+        if not isinstance(item, dict):
+            continue
+        ids = []
+        for value in (item.get("decision_ids", []) or []) + [item.get("source_decision_id")]:
+            try:
+                did = int(value)
+            except Exception:
+                continue
+            if did > 0 and did not in ids:
+                ids.append(did)
+        attached = []
+        for did in ids:
+            attached.extend(outcome_map.get(did, []))
+        item["recorded_outcomes"] = attached[:10]
+        item["outcome_evidence_present"] = bool(attached)
+
+    analysis["outcome_evidence_detected"] = bool(outcome_map)
+    analysis["outcome_evidence_count"] = sum(len(v) for v in outcome_map.values())
+    analysis["phase_8q_outcome_evidence_version"] = "8Q-V1"
+    return analysis
 
 
 def build_decision_support_comparison_chat_context(user_id, message, memories=None, decision_history=None):
@@ -15913,6 +16009,7 @@ def build_decision_support_comparison_chat_context(user_id, message, memories=No
             memories=memories,
             decision_history=decision_history,
         )
+        analysis = _phase_8q_attach_outcomes(user_id, analysis)
     except Exception:
         analysis = None
     return {"detected": True, "analysis": analysis}
@@ -15949,6 +16046,25 @@ def build_decision_support_comparison_answer(comparison_context):
                 )
                 + "."
             )
+
+        outcomes = [
+            x for x in item.get("recorded_outcomes", [])
+            if isinstance(x, dict) and x.get("confirmed")
+        ]
+        if outcomes:
+            outcome_lines = []
+            for outcome in outcomes[:3]:
+                status = _phase_8q_clean_text(outcome.get("outcome_status")) or "recorded"
+                text = _phase_8q_clean_text(outcome.get("outcome"))
+                learning = _phase_8q_clean_text(outcome.get("learning"))
+                if text:
+                    line = "".join([status, ": ", text])
+                    if learning:
+                        line += " Learning: " + learning
+                    outcome_lines.append(line)
+            if outcome_lines:
+                lines.append("Explicit recorded outcome evidence: " + " ".join(outcome_lines))
+
         evidence.append({
             "source_type": "decision_option",
             "source_id": item.get("source_decision_id"),
@@ -15957,6 +16073,11 @@ def build_decision_support_comparison_answer(comparison_context):
             "memory_ids": item.get("memory_ids", []),
             "decision_ids": item.get("decision_ids", []),
             "decision_text": str(item.get("source_decision_text") or "").strip(),
+            "outcome_ids": [
+                x.get("id") for x in item.get("recorded_outcomes", [])
+                if isinstance(x, dict) and x.get("id") is not None
+            ][:10],
+            "recorded_outcomes": item.get("recorded_outcomes", [])[:10],
         })
 
     lines.append("\nWhat the stored information does not establish: which option will produce the better outcome. No winner or recommendation is generated by this comparison.")
@@ -21754,6 +21875,37 @@ class handler(
                                     "label": "Memory #" + str(mid),
                                 })
 
+                        # PHASE 8Q: expose explicitly confirmed historical
+                        # outcomes as evidence sources. Outcomes are never
+                        # treated as a winner signal or recommendation.
+                        for outcome in item.get("recorded_outcomes", [])[:10]:
+                            if not isinstance(outcome, dict):
+                                continue
+                            try:
+                                oid = int(outcome.get("id"))
+                            except Exception:
+                                continue
+                            if oid <= 0:
+                                continue
+                            if not any(
+                                str(x.get("source_type")) == "decision_outcome"
+                                and x.get("source_id") == oid
+                                for x in evidence_trace
+                                if isinstance(x, dict)
+                            ):
+                                outcome_text = _phase_8q_clean_text(
+                                    outcome.get("outcome")
+                                )
+                                evidence_trace.append({
+                                    "source_type": "decision_outcome",
+                                    "source_id": oid,
+                                    "label": "Recorded outcome #" + str(oid),
+                                    "text": outcome_text,
+                                    "decision_id": outcome.get("decision_id"),
+                                    "outcome_status": outcome.get("outcome_status"),
+                                    "confirmed": True,
+                                })
+
                     # V9 FIX: the comparison evidence is appended after the
                     # earlier grounded flag is calculated. Recompute the flag
                     # here so the public Evidence Trace badge reflects the
@@ -21937,6 +22089,23 @@ class handler(
                             if isinstance(memory_decision_support_comparison_context, dict)
                             else {"detected": False}
                         ),
+
+                    "decision_outcome_evidence_trace":
+                        {
+                            "detected": bool(
+                                isinstance(memory_decision_support_comparison_context, dict)
+                                and isinstance(memory_decision_support_comparison_context.get("analysis"), dict)
+                                and memory_decision_support_comparison_context.get("analysis", {}).get("outcome_evidence_detected")
+                            ),
+                            "count": int(
+                                memory_decision_support_comparison_context.get("analysis", {}).get("outcome_evidence_count", 0)
+                                if isinstance(memory_decision_support_comparison_context, dict)
+                                and isinstance(memory_decision_support_comparison_context.get("analysis"), dict)
+                                else 0
+                            ),
+                            "read_only": True,
+                            "recommendation_generated": False,
+                        },
 
                     "decision_synthesis_quality_trace":
                         decision_synthesis_quality_trace,
