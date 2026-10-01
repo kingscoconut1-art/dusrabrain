@@ -15900,11 +15900,11 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
         "decision_ids": [x.get("id") for x in relevant if isinstance(x, dict) and x.get("id") is not None][:20],
         "note": "Only explicitly stored options and stored supporting records are compared; missing evidence is not inferred.",
         "phase_8p_comparison_version": "8P-V7",
-        "phase_8q_outcome_evidence_version": "8Q-V1",
+        "phase_8q_outcome_evidence_version": "8Q-V2",
     }
 
 
-# PHASE 8Q — EXPLICIT DECISION OUTCOME EVIDENCE
+# PHASE 8Q — EXPLICIT DECISION OUTCOME EVIDENCE V2
 # ============================================================================
 # Purpose:
 #   Add explicitly recorded decision outcomes to option comparisons without
@@ -15914,6 +15914,7 @@ def analyze_decision_support_comparison(user_id, message, memories=None, decisio
 #   - Only confirmed records from decision_outcomes are used.
 #   - No outcome is inferred from memory, language, or current plan state.
 #   - Historical outcome evidence is presented as evidence, not as a score.
+#   - Outcome provenance exposes status, expected outcome, learning, and confirmation.
 #   - No option ranking, winner selection, or recommendation is generated.
 #   - Existing Phase 8P comparison and grounding behavior remains intact.
 # ============================================================================
@@ -15995,7 +15996,8 @@ def _phase_8q_attach_outcomes(user_id, analysis):
 
     analysis["outcome_evidence_detected"] = bool(outcome_map)
     analysis["outcome_evidence_count"] = sum(len(v) for v in outcome_map.values())
-    analysis["phase_8q_outcome_evidence_version"] = "8Q-V1"
+    analysis["phase_8q_outcome_evidence_version"] = "8Q-V2"
+    analysis["outcome_evidence_trace"] = build_decision_outcome_evidence_trace(analysis)
     return analysis
 
 
@@ -21896,13 +21898,34 @@ class handler(
                                 outcome_text = _phase_8q_clean_text(
                                     outcome.get("outcome")
                                 )
+                                expected_text = _phase_8q_clean_text(
+                                    outcome.get("expected_outcome")
+                                )
+                                learning_text = _phase_8q_clean_text(
+                                    outcome.get("learning")
+                                )
+                                outcome_status = _phase_8q_clean_text(
+                                    outcome.get("outcome_status")
+                                )
+                                evidence_parts = []
+                                if outcome_status:
+                                    evidence_parts.append("Status: " + outcome_status)
+                                if outcome_text:
+                                    evidence_parts.append("Outcome: " + outcome_text)
+                                if expected_text:
+                                    evidence_parts.append("Expected: " + expected_text)
+                                if learning_text:
+                                    evidence_parts.append("Learning: " + learning_text)
                                 evidence_trace.append({
                                     "source_type": "decision_outcome",
                                     "source_id": oid,
                                     "label": "Recorded outcome #" + str(oid),
-                                    "text": outcome_text,
+                                    "text": "; ".join(evidence_parts).strip(),
                                     "decision_id": outcome.get("decision_id"),
                                     "outcome_status": outcome.get("outcome_status"),
+                                    "outcome": outcome_text,
+                                    "expected_outcome": expected_text,
+                                    "learning": learning_text,
                                     "confirmed": True,
                                 })
 
@@ -22091,21 +22114,25 @@ class handler(
                         ),
 
                     "decision_outcome_evidence_trace":
-                        {
-                            "detected": bool(
-                                isinstance(memory_decision_support_comparison_context, dict)
-                                and isinstance(memory_decision_support_comparison_context.get("analysis"), dict)
-                                and memory_decision_support_comparison_context.get("analysis", {}).get("outcome_evidence_detected")
-                            ),
-                            "count": int(
-                                memory_decision_support_comparison_context.get("analysis", {}).get("outcome_evidence_count", 0)
-                                if isinstance(memory_decision_support_comparison_context, dict)
-                                and isinstance(memory_decision_support_comparison_context.get("analysis"), dict)
-                                else 0
-                            ),
-                            "read_only": True,
-                            "recommendation_generated": False,
-                        },
+                        (
+                            memory_decision_support_comparison_context.get("analysis", {}).get("outcome_evidence_trace")
+                            if isinstance(memory_decision_support_comparison_context, dict)
+                            and isinstance(memory_decision_support_comparison_context.get("analysis"), dict)
+                            and isinstance(memory_decision_support_comparison_context.get("analysis", {}).get("outcome_evidence_trace"), dict)
+                            else {
+                                "built": True,
+                                "detected": False,
+                                "count": 0,
+                                "items": [],
+                                "confirmed_only": True,
+                                "inferred": False,
+                                "used_as_recommendation": False,
+                                "winner_selected": False,
+                                "decision_modified": False,
+                                "read_only": True,
+                                "version": "8Q-V2",
+                            }
+                        ),
 
                     "decision_synthesis_quality_trace":
                         decision_synthesis_quality_trace,
@@ -25243,6 +25270,52 @@ def build_decision_outcome_history_trace(outcomes):
         "decision_modified": False,
         "action_created": False,
         "read_only": True,
+    }
+
+
+def build_decision_outcome_evidence_trace(analysis):
+    """Build deterministic provenance for confirmed outcomes used in comparison."""
+    data = analysis if isinstance(analysis, dict) else {}
+    options = data.get("options", []) if isinstance(data.get("options"), list) else []
+    outcomes = []
+    seen = set()
+
+    for item in options:
+        if not isinstance(item, dict):
+            continue
+        for outcome in item.get("recorded_outcomes", []) or []:
+            if not isinstance(outcome, dict) or not outcome.get("confirmed"):
+                continue
+            try:
+                oid = int(outcome.get("id"))
+            except Exception:
+                continue
+            if oid <= 0 or oid in seen:
+                continue
+            seen.add(oid)
+            outcomes.append({
+                "outcome_id": oid,
+                "decision_id": outcome.get("decision_id"),
+                "outcome_status": _phase_8q_clean_text(outcome.get("outcome_status")),
+                "outcome": _phase_8q_clean_text(outcome.get("outcome")),
+                "expected_outcome": _phase_8q_clean_text(outcome.get("expected_outcome")),
+                "learning": _phase_8q_clean_text(outcome.get("learning")),
+                "confirmed": True,
+                "created_at": outcome.get("created_at"),
+            })
+
+    return {
+        "built": True,
+        "detected": bool(outcomes),
+        "count": len(outcomes),
+        "items": outcomes[:30],
+        "confirmed_only": True,
+        "inferred": False,
+        "used_as_recommendation": False,
+        "winner_selected": False,
+        "decision_modified": False,
+        "read_only": True,
+        "version": "8Q-V2",
     }
 
 
