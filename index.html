@@ -87,13 +87,10 @@
         .message {
             margin-bottom: 16px;
             display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            width: 100%;
         }
 
         .message.user {
-            align-items: flex-end;
+            justify-content: flex-end;
         }
 
         .bubble {
@@ -102,11 +99,6 @@
             border-radius: 12px;
             line-height: 1.5;
             white-space: pre-wrap;
-        }
-
-        .message.assistant .bubble {
-            width: 100%;
-            max-width: 100%;
         }
 
         .user .bubble {
@@ -120,8 +112,7 @@
         }
 
         .evidence-trace {
-            width: 100%;
-            max-width: 100%;
+            max-width: 80%;
             margin-top: 8px;
             margin-left: 0;
             border: 1px solid #dbe3ec;
@@ -211,172 +202,13 @@
             cursor: pointer;
         }
 
-        /* =====================================================
-           V9.3 — PLAN EVOLUTION TRACE
-           Read-only UI for version-backed plan evolution metadata.
-        ===================================================== */
-
-        .plan-evolution-trace {
-            width: 100%;
-            max-width: 100%;
-            margin-top: 8px;
-            border: 1px solid #dbe3ec;
-            border-radius: 12px;
-            background: #ffffff;
-            overflow: hidden;
-        }
-
-        .plan-evolution-trace-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 11px 12px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .plan-evolution-trace-title {
-            font-size: 13px;
-            font-weight: 800;
-            color: #334155;
-        }
-
-        .plan-evolution-trace-badges {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
-            justify-content: flex-end;
-        }
-
-        .plan-evolution-trace-badge {
-            font-size: 10px;
-            font-weight: 800;
-            padding: 4px 7px;
-            border-radius: 999px;
-            background: #eef2ff;
-            color: #4338ca;
-        }
-
-        .plan-evolution-trace-badge.readonly {
-            background: #f1f5f9;
-            color: #475569;
-        }
-
-        .plan-evolution-trace-body {
-            padding: 12px;
-        }
-
-        .plan-evolution-trace-subject {
-            font-size: 15px;
-            font-weight: 800;
-            color: #1f2937;
-            margin-bottom: 10px;
-        }
-
-        .plan-evolution-trace-stats {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .plan-evolution-trace-stat {
-            border: 1px solid #e5e7eb;
-            border-radius: 9px;
-            padding: 9px 10px;
-            background: #fafafa;
-        }
-
-        .plan-evolution-trace-stat-label {
-            display: block;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            color: #64748b;
-            font-weight: 800;
-            margin-bottom: 3px;
-        }
-
-        .plan-evolution-trace-stat-value {
-            font-size: 13px;
-            font-weight: 800;
-            color: #1f2937;
-        }
-
-        .plan-evolution-trace-flow {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .plan-evolution-trace-state {
-            border: 1px solid #e5e7eb;
-            border-radius: 9px;
-            padding: 9px 10px;
-            background: #ffffff;
-            min-width: 0;
-        }
-
-        .plan-evolution-trace-state-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: .04em;
-            color: #64748b;
-            font-weight: 800;
-            margin-bottom: 4px;
-        }
-
-        .plan-evolution-trace-state-value {
-            font-size: 12px;
-            color: #334155;
-            font-weight: 700;
-            line-height: 1.4;
-            word-break: break-word;
-        }
-
-        .plan-evolution-trace-arrow {
-            color: #6366f1;
-            font-size: 18px;
-            font-weight: 800;
-        }
-
-        .plan-evolution-trace-evidence {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #eef2f7;
-            font-size: 11px;
-            color: #64748b;
-            line-height: 1.5;
-        }
-
-        .plan-evolution-trace-note {
-            margin-top: 8px;
-            font-size: 11px;
-            color: #64748b;
-        }
-
-
         .evidence-trace-body.collapsed {
             display: none;
         }
 
         @media (max-width: 700px) {
-            .evidence-trace,
-            .plan-evolution-trace {
+            .evidence-trace {
                 max-width: 100%;
-            }
-
-            .plan-evolution-trace-flow {
-                grid-template-columns: 1fr;
-            }
-
-            .plan-evolution-trace-arrow {
-                text-align: center;
-                transform: rotate(90deg);
             }
         }
 
@@ -2062,9 +1894,6 @@
         .decision-outcome-body { margin-top:8px; color:#334155; line-height:1.5; white-space:pre-wrap; }
         @media(max-width:700px){ .decision-outcome-grid{grid-template-columns:1fr;} }
 
-
-.db-integration-intro{border:1px solid var(--db-line,#333);padding:22px;margin:18px 0 16px;background:#0b0b0b}.db-integration-kicker{font-size:10px;letter-spacing:.16em;color:#8a8a8a;margin-bottom:9px}.db-integration-intro h3{margin:0 0 8px;font-size:20px}.db-integration-intro p{margin:0;color:#9b9b9b;line-height:1.6;max-width:760px}.db-private-integration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.db-private-integration-card{border:1px solid var(--db-line,#333);background:#080808;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:18px}.db-private-integration-card strong{display:block;font-size:15px;margin-bottom:5px}.db-private-integration-card span{display:block;color:#8d8d8d;font-size:12px}.db-integration-state{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin-bottom:8px}.db-integration-state.active{color:#b6ff4a}.db-integration-toggle{border:1px solid #555;background:#111;color:#fff;padding:8px 11px;cursor:pointer;font:inherit;font-size:11px}.db-integration-toggle:hover{border-color:var(--db-lime,#b6ff4a);color:var(--db-lime,#b6ff4a)}@media(max-width:700px){.db-private-integration-grid{grid-template-columns:1fr}}
-
 </style>
 
 <style>
@@ -2158,13 +1987,25 @@ body.home-active .container {
     display: none !important;
 }
 
+
+/* =========================================================
+   DUSRA BRAIN — HOME PAGE DESIGN ONLY
+   No application logic or private-brain settings changed.
+========================================================= */
+
+body.home-active .header,
+body.home-active .container {
+    display: none !important;
+}
+
 .db-home {
     min-height: 100vh;
     background:
         radial-gradient(circle at 50% 0%, rgba(99,102,241,.13), transparent 34rem),
         #050505;
     color: #f5f5f5;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .db-home * {
@@ -2190,18 +2031,9 @@ body.home-active .container {
 }
 
 .db-home-brand {
-    display: inline-flex;
-    align-items: center;
-    text-decoration: none;
-}
-.db-home-brand {
     font-size: 20px;
     font-weight: 800;
     letter-spacing: -.045em;
-}
-.db-home-brand {
-        height: 46px;
-    }
 }
 
 .db-home-links {
@@ -2232,55 +2064,55 @@ body.home-active .container {
 .db-home-eyebrow {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 12px;
-    border: 1px solid rgba(255,255,255,.11);
+    gap: 14px;
+    padding: 11px 22px;
+    border: 1px solid rgba(255,255,255,.14);
     border-radius: 999px;
-    color: #a9a9b2;
-    font-size: 11px;
-    letter-spacing: .12em;
+    color: #aaaab3;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .18em;
     text-transform: uppercase;
 }
 
 .db-home-dot {
-    width: 6px;
-    height: 6px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: #fff;
 }
 
-.db-home h1 {
-    margin: 25px auto 18px;
-    max-width: 920px;
-    font-size: clamp(52px, 8vw, 104px);
-    line-height: .92;
+.db-home-hero h1 {
+    max-width: 900px;
+    margin: 48px auto 24px;
+    font-size: clamp(58px, 8vw, 112px);
+    line-height: .91;
     letter-spacing: -.075em;
-    font-weight: 800;
+    font-weight: 900;
 }
 
 .db-home-hero p {
-    max-width: 720px;
+    max-width: 760px;
     margin: 0 auto;
     color: #9999a3;
-    font-size: clamp(17px, 2vw, 21px);
-    line-height: 1.6;
+    font-size: clamp(18px, 2vw, 24px);
+    line-height: 1.55;
 }
 
 .db-home-actions {
     display: flex;
     justify-content: center;
-    gap: 12px;
-    margin-top: 34px;
+    gap: 14px;
+    margin-top: 42px;
     flex-wrap: wrap;
 }
 
 .db-home-primary,
 .db-home-secondary {
-    display: inline-block;
-    padding: 13px 20px;
+    padding: 16px 25px;
     border-radius: 999px;
-    font-weight: 750;
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 800;
 }
 
 .db-home-primary {
@@ -2289,352 +2121,80 @@ body.home-active .container {
 }
 
 .db-home-secondary {
-    border: 1px solid rgba(255,255,255,.12);
-    background: rgba(255,255,255,.045);
+    border: 1px solid rgba(255,255,255,.15);
+    color: #f5f5f5;
 }
 
 .db-home-architecture {
-    margin: 0 auto 100px;
-    padding: 34px;
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 28px;
-    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+    padding: 35px 0 100px;
 }
 
 .db-home-kicker {
-    color: #70707a;
-    font-size: 11px;
-    letter-spacing: .15em;
-    text-transform: uppercase;
-}
-
-.db-home-architecture .db-home-kicker {
+    color: #777782;
     text-align: center;
+    text-transform: uppercase;
+    letter-spacing: .22em;
+    font-size: 13px;
+    font-weight: 700;
 }
 
 .db-home-architecture h2 {
+    max-width: 900px;
+    margin: 18px auto 45px;
     text-align: center;
-    margin: 8px 0 30px;
-    font-size: 30px;
-    letter-spacing: -.04em;
+    font-size: clamp(42px, 6vw, 78px);
+    line-height: .98;
+    letter-spacing: -.065em;
+}
+
+.db-home-layers,
+.db-home-grid,
+.db-home-agent {
+    display: grid;
+    gap: 18px;
 }
 
 .db-home-layers {
-    display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
 }
 
-.db-home-layer,
 .db-home-card,
-.db-home-agent-copy,
-.db-home-agent-diagram {
+.db-home-panel,
+.db-home-agent-card {
     border: 1px solid rgba(255,255,255,.10);
-    background: rgba(0,0,0,.32);
-    border-radius: 20px;
+    border-radius: 22px;
+    background: #09090b;
 }
 
-.db-home-layer {
-    min-height: 230px;
-    padding: 25px;
+.db-home-card {
+    padding: 30px;
 }
 
-.db-home-number {
-    color: #666670;
-    font-size: 11px;
-    letter-spacing: .12em;
+.db-home-card h3 {
+    margin: 0 0 10px;
 }
 
-.db-home-layer h3 {
-    margin: 42px 0 9px;
-    font-size: 25px;
-    letter-spacing: -.04em;
-}
-
-.db-home-layer p,
 .db-home-card p,
-.db-home-agent-copy p {
-    color: #8f8f99;
-    font-size: 14px;
+.db-home-panel p,
+.db-home-agent-card p {
+    color: #8e8e98;
     line-height: 1.65;
-}
-
-.db-home-flow {
-    margin-top: 20px;
-    text-align: center;
-    color: #606069;
-    font-size: 12px;
 }
 
 .db-home-section {
     padding: 90px 0;
 }
 
-.db-home-section-head {
-    max-width: 760px;
-    margin-bottom: 42px;
-}
-
-.db-home-section h2 {
-    margin: 12px 0 16px;
-    font-size: clamp(36px, 5vw, 62px);
-    line-height: 1;
-    letter-spacing: -.06em;
-}
-
-.db-home-lead {
-    color: #92929c;
-    font-size: 18px;
-    line-height: 1.65;
-}
-
-.db-home-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-}
-
-.db-home-card {
-    min-height: 280px;
-    padding: 28px;
-}
-
-.db-home-card h3 {
-    margin: 65px 0 12px;
-    font-size: 25px;
-    letter-spacing: -.04em;
-}
-
-.db-home-chain {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-    padding: 28px;
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 22px;
-    background: rgba(255,255,255,.025);
-}
-
-.db-home-chain span {
-    padding: 10px 15px;
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 999px;
-    background: #09090b;
-    color: #ddd;
-    font-size: 13px;
-}
-
-.db-home-chain i {
-    color: #555;
-    font-style: normal;
-}
-
-
-.db-home-how {
-    padding: 90px 0;
-    border-top: 1px solid rgba(255,255,255,.08);
-}
-
-.db-home-how-intro {
-    max-width: 760px;
-    margin-bottom: 38px;
-}
-
-.db-home-how-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-}
-
-.db-home-how-step {
-    padding: 24px;
-    min-height: 220px;
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 20px;
-    background: rgba(255,255,255,.025);
-}
-
-.db-home-how-step-number {
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(255,255,255,.14);
-    border-radius: 50%;
-    color: #b5b5bd;
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.db-home-how-step h3 {
-    margin: 42px 0 10px;
-    font-size: 21px;
-    letter-spacing: -.035em;
-}
-
-.db-home-how-step p {
-    margin: 0;
-    color: #8f8f99;
-    font-size: 14px;
-    line-height: 1.65;
-}
-
-.db-home-simple-line {
-    margin-top: 28px;
-    padding: 18px 22px;
-    border-left: 2px solid rgba(255,255,255,.45);
-    color: #b0b0b8;
-    background: rgba(255,255,255,.025);
-    border-radius: 0 14px 14px 0;
-    font-size: 15px;
-}
-
-.db-home-made-india {
-    margin-top: 18px;
-    text-align: center;
-    color: #8d8d97;
-    font-size: 13px;
-    letter-spacing: .02em;
-}
-
-.db-home-made-india strong {
-    color: #f2f2f2;
-    font-weight: 700;
-}
-
-
-.db-home-connect {
-    padding: 90px 0;
-    border-top: 1px solid rgba(255,255,255,.08);
-}
-
-.db-home-connect-intro {
-    max-width: 760px;
-    margin-bottom: 38px;
-}
-
-.db-home-connect-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-}
-
-.db-home-connect-card {
-    min-height: 245px;
-    padding: 28px;
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 22px;
-    background: rgba(255,255,255,.025);
-}
-
-.db-home-connect-icon {
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(255,255,255,.12);
-    border-radius: 14px;
-    font-size: 22px;
-    background: rgba(255,255,255,.035);
-}
-
-.db-home-connect-card h3 {
-    margin: 28px 0 10px;
-    font-size: 22px;
-    letter-spacing: -.035em;
-}
-
-.db-home-connect-card p {
-    margin: 0;
-    color: #8f8f99;
-    font-size: 14px;
-    line-height: 1.65;
-}
-
-.db-home-connect-note {
-    margin-top: 24px;
-    padding: 18px 22px;
-    border: 1px solid rgba(255,255,255,.08);
-    border-radius: 16px;
-    color: #9b9ba4;
-    background: rgba(255,255,255,.02);
-    font-size: 13px;
-    line-height: 1.6;
-}
-
-.db-home-connect-note strong {
-    color: #f1f1f1;
-}
-
 .db-home-statement {
-    padding: 100px 0;
-    border-top: 1px solid rgba(255,255,255,.10);
-    border-bottom: 1px solid rgba(255,255,255,.10);
+    padding: 110px 0;
     text-align: center;
-}
-
-.db-home-statement p {
-    max-width: 900px;
-    margin: 0 auto;
-    font-size: clamp(32px, 5vw, 68px);
-    line-height: 1.02;
-    letter-spacing: -.06em;
-    font-weight: 700;
-}
-
-.db-home-muted {
-    color: #707079;
-}
-
-.db-home-agent {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
-}
-
-.db-home-agent-copy,
-.db-home-agent-diagram {
-    padding: 32px;
-}
-
-.db-home-agent-copy h3 {
-    margin: 12px 0;
-    font-size: 32px;
-    letter-spacing: -.05em;
-}
-
-.db-home-diagram {
-    min-height: 330px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 14px;
-}
-
-.db-home-node {
-    min-width: 190px;
-    padding: 13px 22px;
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 14px;
-    background: #09090b;
-    text-align: center;
-    font-size: 14px;
-    font-weight: 700;
-}
-
-.db-home-arrow {
-    color: #5e5e67;
 }
 
 .db-home-cta {
     padding: 115px 0 120px;
     text-align: center;
-    background: radial-gradient(circle at 50% 60%, rgba(255,255,255,.06), transparent 28rem);
+    background:
+        radial-gradient(circle at 50% 60%, rgba(255,255,255,.06), transparent 28rem);
 }
 
 .db-home-cta h2 {
@@ -2667,20 +2227,50 @@ body.home-active .container {
         display: none;
     }
 
+    .db-home-wrap {
+        width: min(100% - 40px, 1180px);
+    }
+
+    .db-home-nav {
+        height: 72px;
+    }
+
+    .db-home-enter {
+        padding: 13px 22px;
+        font-size: 14px;
+    }
+
     .db-home-hero {
-        padding-top: 75px;
+        padding: 110px 0 80px;
+    }
+
+    .db-home-hero h1 {
+        font-size: clamp(54px, 15vw, 82px);
+        margin-top: 55px;
+    }
+
+    .db-home-hero p {
+        font-size: 18px;
+        line-height: 1.55;
+    }
+
+    .db-home-actions {
+        margin-top: 40px;
+    }
+
+    .db-home-primary,
+    .db-home-secondary {
+        width: min(100%, 410px);
+        padding: 18px 24px;
+        font-size: 17px;
     }
 
     .db-home-architecture {
-        padding: 20px;
+        padding: 20px 0 75px;
     }
 
-    .db-home-connect-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .db-home-how-grid {
-        grid-template-columns: 1fr 1fr;
+    .db-home-architecture h2 {
+        font-size: clamp(42px, 11vw, 62px);
     }
 
     .db-home-layers,
@@ -2697,186 +2287,261 @@ body.home-active .container {
         padding: 75px 0;
     }
 }
-</style>
 
-<style id="db-memclaw-inspired-overrides">
-/* Dusra Brain — editorial / terminal memory-product visual system.
-   Inspired by the information density, terminal graphics and documentation
-   rhythm of modern developer-memory products; all visuals/content are original. */
-.db-memclaw-inspired{--db-lime:#c7ff5e;--db-muted:#8f8f8f;--db-line:#252525;--db-panel:#0c0c0c;background:#050505;color:#f4f4f0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;}
-.db-memclaw-inspired *{box-sizing:border-box}.db-memclaw-inspired a{color:inherit;text-decoration:none}.db-site-shell{width:min(1160px,calc(100% - 40px));margin:0 auto}
-.db-site-nav{height:74px;border-bottom:1px solid var(--db-line);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:24px;font-size:12px}.db-site-brand{display:flex;align-items:center;gap:9px;font-weight:900;letter-spacing:.08em}.db-brand-mark{width:25px;height:25px;border:1px solid #fff;display:grid;place-items:center;font-size:12px}.db-site-links{display:flex;gap:25px;color:#858585}.db-site-links a:hover{color:#fff}.db-site-enter{justify-self:end;border:1px solid #555;padding:9px 13px;background:#111;border-radius:2px}.db-site-enter:hover{border-color:var(--db-lime);color:var(--db-lime)}
-.db-terminal-hero{border-bottom:1px solid var(--db-line);padding:82px 0 92px}.db-hero-grid{display:grid;grid-template-columns:1.03fr .97fr;gap:70px;align-items:center}.db-mono-kicker,.db-section-index{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#929292}.db-live-dot{display:inline-block;width:7px;height:7px;background:var(--db-lime);border-radius:50%;margin-right:7px;box-shadow:0 0 12px rgba(199,255,94,.45)}.db-hero-copy h1{font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(48px,6vw,78px);line-height:.96;letter-spacing:-.065em;margin:22px 0 26px;font-weight:750}.db-hero-copy h1 span,.db-section h2 span,.db-connect-head h2 span{color:#8e8e8e}.db-hero-lead{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#a5a5a5;font-size:16px;line-height:1.65;max-width:620px}.db-hero-actions{display:flex;gap:12px;margin-top:30px;align-items:center}.db-primary-terminal{display:inline-flex;gap:18px;align-items:center;background:var(--db-lime);color:#050505!important;border:1px solid var(--db-lime);padding:12px 15px;font-size:12px;font-weight:850}.db-primary-terminal:hover{filter:brightness(.94)}.db-secondary-terminal{padding:12px 15px;border:1px solid #3c3c3c;color:#bbb}.db-hero-meta{display:flex;gap:10px;color:#666;font-size:10px;margin-top:22px}
-.db-console-wrap{transform:rotate(.5deg)}.db-console-window{border:1px solid #343434;background:#090909;box-shadow:16px 18px 0 #0c0c0c}.db-console-top,.db-terminal-head{height:38px;border-bottom:1px solid #292929;display:flex;align-items:center;justify-content:space-between;padding:0 13px;font-size:10px}.db-console-title{color:#8c8c8c}.db-console-status{color:var(--db-lime)}.db-console-body{padding:21px;min-height:365px;font-size:11px;line-height:1.65}.db-console-line{color:#d1d1d1;margin-bottom:13px}.db-prompt{display:inline-block;color:#888;width:52px}.db-prompt-ai{color:var(--db-lime)}.db-memory-result{border-left:2px solid var(--db-lime);padding:13px 15px;margin:15px 0 19px;background:#0e0e0e}.db-result-path{font-size:9px;color:#6d6d6d;margin-bottom:8px}.db-result-title{font-family:Inter,ui-sans-serif,sans-serif;font-weight:750;font-size:14px;color:#f2f2f2}.db-result-text{font-family:Inter,ui-sans-serif,sans-serif;color:#9c9c9c;line-height:1.55;margin-top:8px;font-size:11px}.db-result-tags{display:flex;gap:7px;margin-top:12px}.db-result-tags span{font-size:9px;border:1px solid #3b3b3b;padding:3px 6px;color:#aaa}.db-dim{color:#6c6c6c}.db-cursor{color:var(--db-lime);animation:dbblink 1s steps(2,start) infinite}.db-console-caption{font-size:9px;color:#666;margin-top:13px;text-align:right}@keyframes dbblink{50%{opacity:0}}
-.db-section{padding:105px 0}.db-section-border{border-bottom:1px solid var(--db-line)}.db-section-intro{max-width:760px}.db-section h2,.db-section-heading-row h2,.db-connect-head h2{font-family:Inter,ui-sans-serif,system-ui,sans-serif;font-size:clamp(36px,4.8vw,60px);line-height:1.02;letter-spacing:-.055em;margin:17px 0 22px}.db-section-intro p,.db-section-heading-row>p,.db-connect-head p{font-family:Inter,ui-sans-serif,sans-serif;color:#919191;line-height:1.7;font-size:14px;max-width:670px}
-.db-feature-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--db-line);border:1px solid var(--db-line);margin-top:70px}.db-feature-card{background:#070707;padding:25px;min-height:335px}.db-feature-top{display:flex;justify-content:space-between;color:#656565;font-size:9px;letter-spacing:.12em}.db-feature-visual{height:125px;border:1px solid #282828;background:#0b0b0b;margin:25px 0;display:flex;align-items:center;padding:20px;gap:10px;color:#888;font-size:11px}.db-search-visual{font-size:12px}.db-search-icon{font-size:25px;color:var(--db-lime)}.db-context-visual{justify-content:center}.db-chip{border:1px solid #3c3c3c;padding:7px 9px;color:#ddd}.db-decision-visual{display:flex;flex-direction:column;align-items:flex-start;gap:5px}.db-decision-visual strong{font-family:Inter,sans-serif;color:#eee;font-size:16px}.db-decision-visual small,.db-action-visual small{color:#666}.db-action-visual{flex-wrap:wrap}.db-check{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--db-lime);color:var(--db-lime)}.db-feature-card h3{font-family:Inter,sans-serif;font-size:20px;margin:0 0 9px;letter-spacing:-.03em}.db-feature-card p{font-family:Inter,sans-serif;color:#777;font-size:12px;line-height:1.6;margin:0}
-.db-dark-panel{background:#080808;border-top:1px solid #171717;border-bottom:1px solid #171717}.db-section-heading-row{display:flex;justify-content:space-between;gap:70px;align-items:flex-end}.db-section-heading-row>p{max-width:360px;margin-bottom:26px}.db-layer-stack{border-top:1px solid #2a2a2a;margin-top:65px}.db-layer-row{display:grid;grid-template-columns:70px 1fr 210px;gap:30px;padding:29px 0;border-bottom:1px solid #242424;align-items:start}.db-layer-num{color:var(--db-lime);font-size:12px}.db-layer-label{font-size:9px;color:#666;letter-spacing:.13em}.db-layer-main h3{font-family:Inter,sans-serif;font-size:21px;letter-spacing:-.03em;margin:8px 0}.db-layer-main p{font-family:Inter,sans-serif;color:#7e7e7e;line-height:1.6;font-size:12px;max-width:650px;margin:0}.db-layer-code{color:#666;font-size:10px;line-height:1.7;border-left:1px solid #333;padding-left:15px}
-.db-search-grid{display:grid;grid-template-columns:1fr 430px;gap:90px;align-items:start}.db-query-list{margin-top:35px;border-top:1px solid #292929}.db-query-list div{padding:14px 0;border-bottom:1px solid #242424;color:#999;font-size:11px}.db-query-list span{color:var(--db-lime);display:inline-block;width:35px}.db-search-terminal{border:1px solid #313131;background:#080808}.db-pipeline-step{display:grid;grid-template-columns:30px 1fr auto;gap:10px;padding:15px;border-bottom:1px solid #222;font-size:10px}.db-pipeline-step b{color:var(--db-lime)}.db-pipeline-step span{color:#bbb}.db-pipeline-step em{font-style:normal;color:#555}.db-pipeline-result{margin:15px;border:1px solid #334016;background:#0d1207;padding:17px}.db-pipeline-result div{font-size:8px;color:#7e914d;letter-spacing:.15em}.db-pipeline-result strong{display:block;font-family:Inter,sans-serif;color:#d9f7a4;font-size:16px;margin:8px 0}.db-pipeline-result span{font-size:9px;color:#6e745f}
-.db-connect-section{border-top:1px solid var(--db-line)}.db-connect-head{display:flex;justify-content:space-between;gap:70px;align-items:end}.db-connect-head p{max-width:360px;margin-bottom:27px}.db-connect-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--db-line);margin-top:55px}.db-connect-card{padding:27px 22px;border-right:1px solid var(--db-line);min-height:120px}.db-connect-card:last-child{border-right:0}.db-connect-card strong{display:block;font-family:Inter,sans-serif;font-size:17px;margin-bottom:9px}.db-connect-card span{font-size:9px;color:#666}
-.db-cta-section{padding:70px 0 100px}.db-cta-terminal{border:1px solid #303030;background:#090909;padding:55px;text-align:center;box-shadow:10px 10px 0 #0d0d0d}.db-cta-prompt{color:var(--db-lime);font-size:10px}.db-cta-terminal h2{font-family:Inter,sans-serif;font-size:48px;letter-spacing:-.05em;margin:18px 0 10px}.db-cta-terminal p{font-family:Inter,sans-serif;color:#7e7e7e;max-width:550px;margin:0 auto 28px;line-height:1.6;font-size:13px}.db-site-footer{border-top:1px solid var(--db-line);padding:24px 0;color:#555;font-size:9px}.db-footer-inner{display:flex;justify-content:space-between;gap:15px}
-@media(max-width:850px){.db-site-nav{grid-template-columns:1fr auto}.db-site-links{display:none}.db-hero-grid,.db-search-grid{grid-template-columns:1fr;gap:45px}.db-console-wrap{transform:none}.db-section-heading-row,.db-connect-head{display:block}.db-layer-row{grid-template-columns:42px 1fr}.db-layer-code{grid-column:2}.db-connect-grid{grid-template-columns:1fr 1fr}.db-connect-card:nth-child(2){border-right:0}.db-connect-card{border-bottom:1px solid var(--db-line)}.db-footer-inner{flex-direction:column}.db-feature-grid{grid-template-columns:1fr}}
-@media(max-width:560px){.db-site-shell{width:min(100% - 28px,1160px)}.db-terminal-hero{padding:58px 0 65px}.db-hero-copy h1{font-size:46px}.db-hero-actions{flex-direction:column;align-items:stretch}.db-hero-meta{flex-wrap:wrap}.db-section{padding:75px 0}.db-feature-grid{margin-top:45px}.db-connect-grid{grid-template-columns:1fr}.db-connect-card{border-right:0}.db-cta-terminal{padding:35px 20px}.db-cta-terminal h2{font-size:38px}}
 </style>
-
 </head>
 
 <body class="home-active">
+
+
 <!-- =========================================================
      DUSRA BRAIN — HOME PAGE
      This is an addition. Existing application markup remains
      below and is hidden only while the homepage is active.
 ========================================================= -->
 
-<div id="dusraHome" class="db-home db-memclaw-inspired">
+<div id="dusraHome" class="db-home">
 
-  <div class="db-site-shell">
-    <nav class="db-site-nav">
-      <a href="#" class="db-site-brand" aria-label="Dusra Brain home">
-        <span class="db-brand-mark">D</span><span>DUSRA BRAIN</span>
-      </a>
-      <div class="db-site-links">
-        <a href="#dbMemory">Features</a>
-        <a href="#dbHowItWorks">How it works</a>
-        <a href="#dbConnect">Connect</a>
-        <a href="#dbSearch">Search</a>
-      </div>
-      <a href="#" id="dusraEnterButton" class="db-site-enter">Open your brain <span>↗</span></a>
-    </nav>
-  </div>
+    <div class="db-home-wrap">
+        <nav class="db-home-nav">
+            <a href="#" class="db-home-brand">DUSRA BRAIN</a>
 
-  <main>
-    <section class="db-terminal-hero">
-      <div class="db-site-shell db-hero-grid">
-        <div class="db-hero-copy">
-          <div class="db-mono-kicker"><span class="db-live-dot"></span> personal memory, actually useful</div>
-          <h1>Your second brain,<br><span>actually remembers.</span></h1>
-          <p class="db-hero-lead">Dusra Brain keeps your memories, decisions, people and projects connected — so you can ask later without trying to remember where you put the context.</p>
-          <div class="db-hero-actions">
-            <a href="#" id="dusraHeroEnter" class="db-primary-terminal">Open Dusra Brain <span>→</span></a>
-            <a href="#dbMemory" class="db-secondary-terminal">See how it works</a>
-          </div>
-          <div class="db-hero-meta"><span>Private by account</span><span>•</span><span>Memory + decisions + action</span></div>
-        </div>
-
-        <div class="db-console-wrap" aria-label="Dusra Brain memory demo">
-          <div class="db-console-window">
-            <div class="db-console-top"><span class="db-console-title">dusra-brain</span><span class="db-console-status">● online</span></div>
-            <div class="db-console-body">
-              <div class="db-console-line"><span class="db-prompt">you</span> What did I discuss with Rick about Evolve?</div>
-              <div class="db-console-line db-console-answer"><span class="db-prompt db-prompt-ai">brain</span> I found the Evolve India discussion.</div>
-              <div class="db-memory-result">
-                <div class="db-result-path">memory / projects / evolve-india</div>
-                <div class="db-result-title">Three-month pilot before larger investment</div>
-                <div class="db-result-text">You discussed launch structure, product mix, initial inventory, import logistics and validating real sales before committing larger capital.</div>
-                <div class="db-result-tags"><span>decision</span><span>evolve</span><span>pilot</span></div>
-              </div>
-              <div class="db-console-line db-dim"><span class="db-prompt">brain</span> 5 grounded memories · 0.87 context match</div>
-              <div class="db-cursor">▌</div>
+            <div class="db-home-links">
+                <a href="#dbArchitecture">Architecture</a>
+                <a href="#dbMemory">Memory</a>
+                <a href="#dbDecisions">Decisions</a>
+                <a href="#dbAgent">AI Agent</a>
             </div>
-          </div>
-          <div class="db-console-caption">A memory assistant that shows the context behind the answer.</div>
-        </div>
-      </div>
-    </section>
 
-    <section id="dbMemory" class="db-section db-section-border">
-      <div class="db-site-shell">
-        <div class="db-section-intro">
-          <div class="db-section-index">01 / MEMORY</div>
-          <h2>Remember the useful stuff.<br><span>Find it when you need it.</span></h2>
-          <p>Save a thought, decision, conversation, person, project or document. Dusra Brain turns scattered context into something you can recall naturally.</p>
-        </div>
-
-        <div class="db-feature-grid">
-          <article class="db-feature-card">
-            <div class="db-feature-top"><span>01</span><span>RECALL</span></div>
-            <div class="db-feature-visual db-search-visual"><span class="db-search-icon">⌕</span><span>what was that plan we made?</span></div>
-            <h3>Total recall</h3>
-            <p>Ask in normal language. You do not have to remember the exact words you used months ago.</p>
-          </article>
-          <article class="db-feature-card">
-            <div class="db-feature-top"><span>02</span><span>CONTEXT</span></div>
-            <div class="db-feature-visual db-context-visual"><span class="db-chip">Rick</span><span>→</span><span class="db-chip">Evolve</span><span>→</span><span class="db-chip">Pilot</span></div>
-            <h3>Connected context</h3>
-            <p>People, projects, decisions and changes can stay connected instead of becoming isolated chat messages.</p>
-          </article>
-          <article class="db-feature-card">
-            <div class="db-feature-top"><span>03</span><span>DECISIONS</span></div>
-            <div class="db-feature-visual db-decision-visual"><span>Decision</span><strong>3-month pilot</strong><small>why · validate market first</small></div>
-            <h3>Decision memory</h3>
-            <p>Remember what you decided, why you decided it and what happened afterward.</p>
-          </article>
-          <article class="db-feature-card">
-            <div class="db-feature-top"><span>04</span><span>ACTION</span></div>
-            <div class="db-feature-visual db-action-visual"><span class="db-check">✓</span><span>follow up with Rick</span><small>saved for later</small></div>
-            <h3>From memory to action</h3>
-            <p>Turn remembered context into follow-ups, reminders and next steps as the product grows.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section id="dbHowItWorks" class="db-section db-dark-panel">
-      <div class="db-site-shell">
-        <div class="db-section-heading-row">
-          <div><div class="db-section-index">02 / HOW IT WORKS</div><h2>Three layers,<br><span>one personal intelligence.</span></h2></div>
-          <p>Built around your context instead of treating every conversation as a fresh start.</p>
-        </div>
-        <div class="db-layer-stack">
-          <article class="db-layer-row"><div class="db-layer-num">01</div><div class="db-layer-main"><div class="db-layer-label">MEMORY</div><h3>Personal memory as the source of context</h3><p>Facts, experiences, projects, people, preferences and decisions accumulate into your private brain.</p></div><div class="db-layer-code">memory.save()<br>memory.search()</div></article>
-          <article class="db-layer-row"><div class="db-layer-num">02</div><div class="db-layer-main"><div class="db-layer-label">UNDERSTANDING</div><h3>Connect what changed over time</h3><p>Dusra Brain can surface related memories, decision history, unresolved questions and evidence behind an answer.</p></div><div class="db-layer-code">context → links<br>decision → outcome</div></article>
-          <article class="db-layer-row"><div class="db-layer-num">03</div><div class="db-layer-main"><div class="db-layer-label">ACTION</div><h3>An AI layer that works with your history</h3><p>Ask, explore, review and eventually delegate actions without losing the context that made them useful.</p></div><div class="db-layer-code">ask()<br>reason()<br>act()</div></article>
-        </div>
-      </div>
-    </section>
-
-    <section id="dbSearch" class="db-section db-search-section">
-      <div class="db-site-shell db-search-grid">
-        <div>
-          <div class="db-section-index">03 / SEARCH</div>
-          <h2>Search your history,<br><span>not your memory.</span></h2>
-          <p>Dusra Brain is designed around questions people actually ask: “What did I decide?”, “What is still pending?”, “What did Rick say?”, “Why did I choose this?”</p>
-          <div class="db-query-list"><div><span>01</span> What did I decide last month?</div><div><span>02</span> What is still pending in my business?</div><div><span>03</span> What did I discuss with Rick?</div><div><span>04</span> Remind me what I was planning.</div></div>
-        </div>
-        <div class="db-search-terminal">
-          <div class="db-terminal-head"><span>retrieval pipeline</span><span>LIVE</span></div>
-          <div class="db-pipeline-step"><b>01</b><span>Understand the question</span><em>query</em></div>
-          <div class="db-pipeline-step"><b>02</b><span>Find related memories</span><em>memory</em></div>
-          <div class="db-pipeline-step"><b>03</b><span>Connect time + entities</span><em>context</em></div>
-          <div class="db-pipeline-step"><b>04</b><span>Ground the response</span><em>evidence</em></div>
-          <div class="db-pipeline-result"><div>RESULT</div><strong>5 grounded memories</strong><span>showing the context behind the answer</span></div>
-        </div>
-      </div>
-    </section>
-
-    <section id="dbConnect" class="db-section db-connect-section">
-      <div class="db-site-shell">
-        <div class="db-section-index">04 / CONNECT</div>
-        <div class="db-connect-head"><h2>Bring your conversations<br><span>closer to your brain.</span></h2><p>Dusra Brain is being built around the places you already work and communicate. The goal is one memory layer across your daily tools.</p></div>
-        <div class="db-connect-grid"><div class="db-connect-card"><strong>WhatsApp</strong><span>conversations → memory</span></div><div class="db-connect-card"><strong>Telegram</strong><span>messages → memory</span></div><div class="db-connect-card"><strong>Slack</strong><span>team context → memory</span></div><div class="db-connect-card"><strong>Web</strong><span>ask your brain anywhere</span></div></div>
-      </div>
-    </section>
-
-    <section class="db-cta-section">
-      <div class="db-site-shell">
-        <div class="db-cta-terminal">
-          <div class="db-cta-prompt">$ dusra-brain start</div>
-          <h2>Start remembering.</h2>
-          <p>Your personal memory layer for the conversations, decisions and ideas you do not want to lose.</p>
-          <a href="#" id="dusraCtaEnter" class="db-primary-terminal">Open Dusra Brain <span>→</span></a>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="db-site-footer">
-    <div class="db-site-shell db-footer-inner">
-      <span>© 2026 Dusra Brain</span><span>Personal memory · decision intelligence · AI</span><span>Made in India · Built for the world</span>
+            <a href="#" id="dusraEnterButton" class="db-home-enter">
+                Enter Dusra Brain
+            </a>
+        </nav>
     </div>
-  </footer>
+
+    <section class="db-home-hero">
+        <div class="db-home-wrap">
+            <div class="db-home-eyebrow">
+                <span class="db-home-dot"></span>
+                Personal AI Intelligence
+            </div>
+
+            <h1>Your Personal<br>AI Brain.</h1>
+
+            <p>
+                Personal Memory + Decision Intelligence + AI Agent —
+                one intelligence layer built around you.
+            </p>
+
+            <div class="db-home-actions">
+                <a href="#" id="dusraHeroEnter" class="db-home-primary">
+                    Enter Dusra Brain →
+                </a>
+
+                <a href="#dbArchitecture" class="db-home-secondary">
+                    Explore the architecture
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section id="dbArchitecture" class="db-home-wrap db-home-architecture">
+        <div class="db-home-kicker">The architecture</div>
+        <h2>Three layers. One personal intelligence.</h2>
+
+        <div class="db-home-layers">
+
+            <article class="db-home-layer">
+                <div class="db-home-number">01 / MEMORY</div>
+                <h3>Personal Memory</h3>
+                <p>
+                    Persistent context about your knowledge, experiences,
+                    projects, people and the things that matter to you.
+                </p>
+            </article>
+
+            <article class="db-home-layer">
+                <div class="db-home-number">02 / INTELLIGENCE</div>
+                <h3>Decision Intelligence</h3>
+                <p>
+                    Understand decisions across time — what you chose,
+                    why it changed, what happened and what you learned.
+                </p>
+            </article>
+
+            <article class="db-home-layer">
+                <div class="db-home-number">03 / ACTION</div>
+                <h3>AI Agent</h3>
+                <p>
+                    An intelligent layer that works with your personal
+                    context instead of treating every conversation as isolated.
+                </p>
+            </article>
+
+        </div>
+
+        <div class="db-home-flow">
+            MEMORY + DECISIONS → UNDERSTANDING → AI AGENT
+        </div>
+    </section>
+
+    <section id="dbMemory" class="db-home-section">
+        <div class="db-home-wrap">
+
+            <div class="db-home-section-head">
+                <div class="db-home-kicker">01 / Personal Memory</div>
+                <h2>Remember what matters.</h2>
+                <p class="db-home-lead">
+                    Your second brain should not depend on remembering the
+                    exact words you used yesterday. It should build a
+                    persistent understanding of your world.
+                </p>
+            </div>
+
+            <div class="db-home-grid">
+
+                <article class="db-home-card">
+                    <div class="db-home-number">01</div>
+                    <h3>Context</h3>
+                    <p>
+                        Keep important facts, experiences, projects,
+                        relationships and personal knowledge available over time.
+                    </p>
+                </article>
+
+                <article class="db-home-card">
+                    <div class="db-home-number">02</div>
+                    <h3>Recall</h3>
+                    <p>
+                        Find relevant information from your accumulated
+                        personal context instead of starting from zero.
+                    </p>
+                </article>
+
+                <article class="db-home-card">
+                    <div class="db-home-number">03</div>
+                    <h3>Continuity</h3>
+                    <p>
+                        Turn isolated conversations into a growing
+                        personal knowledge layer.
+                    </p>
+                </article>
+
+            </div>
+        </div>
+    </section>
+
+    <section id="dbDecisions" class="db-home-section">
+        <div class="db-home-wrap">
+
+            <div class="db-home-section-head">
+                <div class="db-home-kicker">02 / Decision Intelligence</div>
+                <h2>Your decisions have a history.</h2>
+                <p class="db-home-lead">
+                    Dusra Brain connects decisions with their context and
+                    evolution, creating a record that can become more useful
+                    as your experience grows.
+                </p>
+            </div>
+
+            <div class="db-home-chain">
+                <span>Decision</span>
+                <i>→</i>
+                <span>Reason</span>
+                <i>→</i>
+                <span>Change</span>
+                <i>→</i>
+                <span>Outcome</span>
+                <i>→</i>
+                <span>Learning</span>
+            </div>
+
+        </div>
+    </section>
+
+    <div class="db-home-statement">
+        <div class="db-home-wrap">
+            <p>
+                Chat is a conversation.<br>
+                <span class="db-home-muted">Dusra Brain is your context.</span>
+            </p>
+        </div>
+    </div>
+
+    <section id="dbAgent" class="db-home-section">
+        <div class="db-home-wrap">
+
+            <div class="db-home-section-head">
+                <div class="db-home-kicker">03 / AI Agent</div>
+                <h2>An agent that works with your brain.</h2>
+                <p class="db-home-lead">
+                    The agent is not the brain by itself. It is the layer
+                    that works across your memory, decisions and current context.
+                </p>
+            </div>
+
+            <div class="db-home-agent">
+
+                <div class="db-home-agent-copy">
+                    <div class="db-home-number">
+                        PERSONAL CONTEXT → INTELLIGENCE
+                    </div>
+
+                    <h3>Recall. Understand. Act.</h3>
+
+                    <p>
+                        Dusra Brain is designed so the agent can operate
+                        with a persistent personal context rather than
+                        treating every interaction as a blank slate.
+                    </p>
+                </div>
+
+                <div class="db-home-agent-diagram">
+                    <div class="db-home-diagram">
+                        <div class="db-home-node">Your Dusra Brain</div>
+                        <div class="db-home-arrow">↓</div>
+                        <div class="db-home-node">Personal Context</div>
+                        <div class="db-home-arrow">↓</div>
+                        <div class="db-home-node">AI Agent</div>
+                        <div class="db-home-arrow">↓</div>
+                        <div class="db-home-node">Recall · Think · Act</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <section class="db-home-cta">
+        <div class="db-home-wrap">
+
+            <div class="db-home-kicker">Build your second brain</div>
+
+            <h2>Start building your personal intelligence layer.</h2>
+
+            <p>
+                Your memories, your decisions, your context —
+                connected through one AI brain.
+            </p>
+
+            <a href="#" id="dusraCtaEnter" class="db-home-primary">
+                Enter Dusra Brain →
+            </a>
+
+        </div>
+    </section>
+
+    <footer class="db-home-footer">
+        <div class="db-home-wrap db-home-footer-inner">
+            <span>© 2026 Dusra Brain</span>
+            <span>Personal Memory · Decision Intelligence · AI Agent</span>
+        </div>
+    </footer>
+
 </div>
 
-<!-- =====================================================
+
+    <!-- =====================================================
          HEADER
     ===================================================== -->
 
@@ -2915,18 +2580,6 @@ body.home-active .container {
             >
                 🎯 Decisions
             </button>
-
-            <button
-                class="header-button"
-                id="integrationsButton"
-                type="button"
-            >
-                🔌 Integrations
-            </button>
-            <span class="db-user-badge" id="dbUserBadge">
-                <span class="db-user-email" id="dbUserEmail"></span>
-                <button class="header-button db-logout-button" id="dbLogoutButton" type="button">Logout</button>
-            </span>
 
         </div>
 
@@ -3308,32 +2961,6 @@ body.home-active .container {
 
 
         <!-- =================================================
-             INTEGRATIONS
-        ================================================= -->
-
-        <div
-            id="integrationsView"
-            class="view"
-        >
-
-            <div class="dashboard-header">
-                <h2>🔌 Integrations</h2>
-                <button class="back-button" id="integrationsBackButton">← Back to Chat</button>
-            </div>
-
-            <div class="db-integration-intro">
-                <div class="db-integration-kicker">YOUR MEMORY LAYER</div>
-                <h3>Bring your daily conversations into Dusra Brain.</h3>
-                <p>Choose the channels you want Dusra Brain to prepare for. Connection credentials are handled separately by each provider.</p>
-            </div>
-
-            <div id="integrationStatus" class="search-info">Loading integrations...</div>
-            <div id="integrationGrid" class="db-private-integration-grid"></div>
-
-        </div>
-
-
-        <!-- =================================================
              BRAIN EXPLORER
         ================================================= -->
 
@@ -3664,16 +3291,6 @@ body.home-active .container {
 
 
     <script>
-    /* Send the account session cookie with existing same-origin API calls. */
-    (function(){
-        const originalFetch=window.fetch;
-        window.fetch=function(resource,options){
-            const nextOptions=Object.assign({},options||{});
-            if(!nextOptions.credentials) nextOptions.credentials="include";
-            return originalFetch.call(window,resource,nextOptions);
-        };
-    })();
-
 
     // ========================================================
     // GLOBAL STATE
@@ -3923,183 +3540,6 @@ body.home-active .container {
     }
 
 
-    function createPlanEvolutionTrace(apiData) {
-
-        if (!apiData || typeof apiData !== "object") {
-            return null;
-        }
-
-        const trace =
-            apiData.plan_state_tracking_trace &&
-            typeof apiData.plan_state_tracking_trace === "object"
-                ? apiData.plan_state_tracking_trace
-                : null;
-
-        if (!trace || !trace.detected) {
-            return null;
-        }
-
-        const wrapper = document.createElement("div");
-        wrapper.className = "plan-evolution-trace";
-
-        const header = document.createElement("div");
-        header.className = "plan-evolution-trace-header";
-
-        const title = document.createElement("div");
-        title.className = "plan-evolution-trace-title";
-        title.textContent = "🧭 Plan Evolution Trace";
-        header.appendChild(title);
-
-        const badges = document.createElement("div");
-        badges.className = "plan-evolution-trace-badges";
-
-        const groundedBadge = document.createElement("span");
-        groundedBadge.className = "plan-evolution-trace-badge";
-        groundedBadge.textContent =
-            trace.evolution_supported ? "Evidence-backed" : "Evidence limited";
-        badges.appendChild(groundedBadge);
-
-        if (trace.read_only) {
-            const readOnlyBadge = document.createElement("span");
-            readOnlyBadge.className =
-                "plan-evolution-trace-badge readonly";
-            readOnlyBadge.textContent = "Read-only";
-            badges.appendChild(readOnlyBadge);
-        }
-
-        header.appendChild(badges);
-        wrapper.appendChild(header);
-
-        const body = document.createElement("div");
-        body.className = "plan-evolution-trace-body";
-
-        if (trace.subject) {
-            const subject = document.createElement("div");
-            subject.className = "plan-evolution-trace-subject";
-            subject.textContent = String(trace.subject);
-            body.appendChild(subject);
-        }
-
-        const stats = document.createElement("div");
-        stats.className = "plan-evolution-trace-stats";
-
-        function appendPlanTraceStat(label, value) {
-            const card = document.createElement("div");
-            card.className = "plan-evolution-trace-stat";
-
-            const labelNode = document.createElement("span");
-            labelNode.className = "plan-evolution-trace-stat-label";
-            labelNode.textContent = label;
-
-            const valueNode = document.createElement("span");
-            valueNode.className = "plan-evolution-trace-stat-value";
-            valueNode.textContent = String(value);
-
-            card.appendChild(labelNode);
-            card.appendChild(valueNode);
-            stats.appendChild(card);
-        }
-
-        appendPlanTraceStat(
-            "Recorded states",
-            Number(trace.state_count || 0)
-        );
-        appendPlanTraceStat(
-            "Recorded transitions",
-            Number(trace.transition_count || 0)
-        );
-
-        body.appendChild(stats);
-
-        const initialMemory =
-            trace.initial_memory_id !== null &&
-            trace.initial_memory_id !== undefined
-                ? "Memory #" + String(trace.initial_memory_id) +
-                  (trace.initial_version !== null &&
-                   trace.initial_version !== undefined
-                      ? " · v" + String(trace.initial_version)
-                      : "")
-                : "Not available";
-
-        const currentMemory =
-            trace.current_memory_id !== null &&
-            trace.current_memory_id !== undefined
-                ? "Memory #" + String(trace.current_memory_id) +
-                  (trace.current_version !== null &&
-                   trace.current_version !== undefined
-                      ? " · v" + String(trace.current_version)
-                      : "")
-                : "Not available";
-
-        const flow = document.createElement("div");
-        flow.className = "plan-evolution-trace-flow";
-
-        const initial = document.createElement("div");
-        initial.className = "plan-evolution-trace-state";
-
-        const initialLabel = document.createElement("div");
-        initialLabel.className = "plan-evolution-trace-state-label";
-        initialLabel.textContent = "Earlier recorded state";
-
-        const initialValue = document.createElement("div");
-        initialValue.className = "plan-evolution-trace-state-value";
-        initialValue.textContent = initialMemory;
-
-        initial.appendChild(initialLabel);
-        initial.appendChild(initialValue);
-
-        const arrow = document.createElement("div");
-        arrow.className = "plan-evolution-trace-arrow";
-        arrow.textContent = "→";
-        arrow.setAttribute("aria-hidden", "true");
-
-        const current = document.createElement("div");
-        current.className = "plan-evolution-trace-state";
-
-        const currentLabel = document.createElement("div");
-        currentLabel.className = "plan-evolution-trace-state-label";
-        currentLabel.textContent = "Current recorded state";
-
-        const currentValue = document.createElement("div");
-        currentValue.className = "plan-evolution-trace-state-value";
-        currentValue.textContent = currentMemory;
-
-        current.appendChild(currentLabel);
-        current.appendChild(currentValue);
-
-        flow.appendChild(initial);
-        flow.appendChild(arrow);
-        flow.appendChild(current);
-        body.appendChild(flow);
-
-        const evidenceIds = Array.isArray(trace.evidence_memory_ids)
-            ? trace.evidence_memory_ids.filter(function(id) {
-                return id !== null && id !== undefined;
-            })
-            : [];
-
-        if (evidenceIds.length) {
-            const evidence = document.createElement("div");
-            evidence.className = "plan-evolution-trace-evidence";
-            evidence.textContent =
-                "Version evidence: " +
-                evidenceIds.map(function(id) {
-                    return "Memory #" + String(id);
-                }).join(" · ");
-            body.appendChild(evidence);
-        }
-
-        const note = document.createElement("div");
-        note.className = "plan-evolution-trace-note";
-        note.textContent =
-            "Reconstructed from persisted memory versions. This trace is informational and does not recommend what to do next.";
-        body.appendChild(note);
-
-        wrapper.appendChild(body);
-        return wrapper;
-    }
-
-
     function createBrainRuntimeTrace(apiData) {
         if (!apiData || typeof apiData !== "object") {
             return null;
@@ -4293,13 +3733,6 @@ body.home-active .container {
 
             if (evidence) {
                 message.appendChild(evidence);
-            }
-
-            const planEvolutionTrace =
-                createPlanEvolutionTrace(apiData);
-
-            if (planEvolutionTrace) {
-                message.appendChild(planEvolutionTrace);
             }
 
             const runtimeTrace = createBrainRuntimeTrace(apiData);
@@ -4809,7 +4242,6 @@ body.home-active .container {
 
 
     const decisionView = document.getElementById("decisionView");
-    const integrationsView = document.getElementById("integrationsView");
 
     // ========================================================
     // VIEW MANAGEMENT
@@ -4836,10 +4268,6 @@ body.home-active .container {
         );
 
         decisionView.classList.remove(
-            "active"
-        );
-
-        integrationsView.classList.remove(
             "active"
         );
 
@@ -4918,61 +4346,6 @@ body.home-active .container {
             }
         );
 
-
-
-    // ========================================================
-    // INTEGRATIONS CENTER
-    // ========================================================
-    async function loadIntegrations() {
-        const grid = document.getElementById("integrationGrid");
-        const status = document.getElementById("integrationStatus");
-        if (!grid) return;
-        status.textContent = "Loading integrations...";
-        try {
-            const response = await fetch("/api/integrations", {headers:{"Accept":"application/json"}});
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || "Unable to load integrations.");
-            const items = Array.isArray(data.integrations) ? data.integrations : [];
-            grid.innerHTML = items.map(function(item) {
-                const active = !!item.enabled;
-                const isWeb = item.id === "web";
-                return '<div class="db-private-integration-card">' +
-                    '<div><div class="db-integration-state ' + (active ? 'active' : '') + '">' + (active ? (isWeb ? 'ACTIVE' : 'PREPARED') : 'NOT CONNECTED') + '</div>' +
-                    '<strong>' + item.name + '</strong><span>' + item.description + '</span></div>' +
-                    (isWeb ? '<div class="db-integration-state active">READY</div>' : '<button class="db-integration-toggle" data-integration-provider="' + item.id + '" data-integration-enabled="' + active + '">' + (active ? 'Disable' : 'Prepare') + '</button>') +
-                    '</div>';
-            }).join("");
-            status.textContent = "Integration preferences are private to your account.";
-        } catch (error) {
-            status.textContent = "Unable to load integrations: " + (error.message || "Unknown error");
-        }
-    }
-
-    document.addEventListener("click", async function(event) {
-        const toggle = event.target && event.target.closest ? event.target.closest("[data-integration-provider]") : null;
-        if (!toggle) return;
-        toggle.disabled = true;
-        const provider = toggle.getAttribute("data-integration-provider");
-        const currentlyEnabled = toggle.getAttribute("data-integration-enabled") === "true";
-        try {
-            const response = await fetch("/api/integrations", {method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:currentlyEnabled ? "disable" : "enable",provider:provider})});
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || "Unable to update integration.");
-            await loadIntegrations();
-        } catch (error) {
-            const status = document.getElementById("integrationStatus");
-            if (status) status.textContent = "Unable to update integration: " + (error.message || "Unknown error");
-            toggle.disabled = false;
-        }
-    });
-
-    document.getElementById("integrationsButton").addEventListener("click", function() {
-        showView(integrationsView);
-        loadIntegrations();
-    });
-    document.getElementById("integrationsBackButton").addEventListener("click", function() {
-        showView(chatView);
-    });
 
 
     // ========================================================
@@ -10107,18 +9480,22 @@ body.home-active .container {
 
 
     // ========================================================
-    // PRIVATE APPLICATION INITIALIZATION
+    // INITIALIZE
 
-    async function initializePrivateBrain() {
-        try {
-            await loadSessions();
-            await loadSessionHistory(activeSessionId);
-        } catch (error) {
-            console.error("Dusra Brain initialization failed:", error);
+    // ========================================================
+
+    loadSessions().then(
+        function() {
+
+            loadSessionHistory(
+                activeSessionId
+            );
+
         }
-    }
+    );
 
 
+    // ========================================================
     // ESCAPE KEY
     // ========================================================
 
@@ -10152,12 +9529,18 @@ body.home-active .container {
     );
 
 
-    
-async function enterDusraBrain() {
+    /* =========================================================
+       DUSRA BRAIN — HOME PAGE ENTRY
+       Reveals the EXISTING application; no backend/API changes.
+    ========================================================= */
+
+    function enterDusraBrain() {
         document.body.classList.remove("home-active");
 
         const home = document.getElementById("dusraHome");
-        if (home) home.style.display = "none";
+        if (home) {
+            home.style.display = "none";
+        }
 
         if (typeof showView === "function" && typeof chatView !== "undefined") {
             showView(chatView);
@@ -10165,43 +9548,55 @@ async function enterDusraBrain() {
 
         window.scrollTo(0, 0);
 
-        try {
-            await initializePrivateBrain();
-        } catch (error) {
-            console.error("Dusra Brain initialization failed:", error);
-        }
-
         if (typeof messageInput !== "undefined" && messageInput) {
             setTimeout(function() {
                 messageInput.focus();
-            }, 100);
+            }, 50);
         }
     }
 
-
-    ["dusraEnterButton", "dusraHeroEnter", "dusraCtaEnter"].forEach(function(id) {
+    [
+        "dusraEnterButton",
+        "dusraHeroEnter",
+        "dusraCtaEnter"
+    ].forEach(function(id) {
         const button = document.getElementById(id);
-        if (button && !button.dataset.dbDirectOpenBound) {
-            button.dataset.dbDirectOpenBound = "1";
+
+        if (button) {
             button.addEventListener("click", function(event) {
                 event.preventDefault();
                 enterDusraBrain();
             });
         }
     });
+
+
+
+    /* Dusra Brain logo/name -> return to home */
+    (function () {
+        const logo = document.getElementById("dbPrivateHomeLogo");
+        if (!logo) return;
+
+        logo.style.cursor = "pointer";
+        logo.addEventListener("click", function (event) {
+            event.preventDefault();
+
+            const home = document.getElementById("dusraHome");
+            if (home) {
+                home.style.display = "";
+            }
+
+            document.body.classList.add("home-active");
+
+            window.scrollTo({
+                top: 0,
+                left: 0,
+                behavior: "auto"
+            });
+        });
+    })();
+
 </script>
 
 </body>
-</html    // PRIVATE APPLICATION INITIALIZATION
-
-    async function initializePrivateBrain() {
-        try {
-            await loadSessions();
-            await loadSessionHistory(activeSessionId);
-        } catch (error) {
-            console.error("Dusra Brain initialization failed:", error);
-        }
-    }
-
-
->
+</html>
