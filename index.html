@@ -2063,37 +2063,7 @@
         @media(max-width:700px){ .decision-outcome-grid{grid-template-columns:1fr;} }
 
 
-/* =========================================================
-   DUSRA BRAIN — PRIVATE ACCOUNT AUTHENTICATION
-========================================================= */
-.db-auth-overlay{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.78);backdrop-filter:blur(10px)}
-.db-auth-overlay.active{display:flex}
-.db-auth-card{width:min(430px,100%);background:#fff;color:#111;border:1px solid #e5e5e5;border-radius:22px;padding:30px;box-shadow:0 30px 90px rgba(0,0,0,.35);position:relative}
-.db-auth-close{position:absolute;top:12px;right:14px;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:#f2f2f2;color:#222;font-size:22px;line-height:36px}
-.db-auth-brand{font-size:15px;font-weight:800;letter-spacing:-.02em;margin-bottom:24px}
-.db-auth-title{margin:0 0 8px;font-size:30px;line-height:1.1;letter-spacing:-.04em}
-.db-auth-subtitle{margin:0 0 22px;color:#666;font-size:14px;line-height:1.6}
-.db-auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:#f3f3f3;border-radius:12px;margin-bottom:20px}
-.db-auth-tab{border:0;border-radius:9px;background:transparent;color:#666;padding:10px 8px;font-size:13px;font-weight:700}
-.db-auth-tab.active{background:#111;color:#fff}
-.db-auth-field{margin-bottom:14px}
-.db-auth-field label{display:block;margin-bottom:7px;font-size:12px;font-weight:700;color:#333}
-.db-auth-field input{width:100%;height:46px;border:1px solid #d8d8d8;border-radius:10px;padding:0 13px;font-size:14px;outline:none;background:#fff;color:#111}
-.db-auth-field input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
-.db-auth-submit{width:100%;height:48px;margin-top:4px;border:0;border-radius:11px;background:#111;color:#fff;font-size:14px;font-weight:800}
-.db-auth-submit:disabled{opacity:.55;cursor:wait}.db-auth-provider-divider{display:flex;align-items:center;gap:10px;margin:18px 0 14px;color:#999;font-size:11px}.db-auth-provider-divider:before,.db-auth-provider-divider:after{content:"";height:1px;background:#e8e8e8;flex:1}.db-auth-providers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.db-auth-provider{height:44px;border:1px solid #d8d8d8;border-radius:10px;background:#fff;color:#111;display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;font-weight:750;cursor:pointer}.db-auth-provider:hover{border-color:#111;background:#fafafa}.db-auth-provider:active{transform:translateY(1px)}.db-auth-provider-icon{font-size:14px;line-height:1}.db-auth-provider-note{margin-top:9px;color:#999;font-size:10px;line-height:1.45;text-align:center}
-.db-auth-message{min-height:20px;margin-top:12px;font-size:13px;line-height:1.45;color:#666}
-.db-auth-message.error{color:#b42318}
-.db-auth-message.success{color:#137333}
-.db-auth-privacy{margin-top:20px;padding-top:17px;border-top:1px solid #eee;color:#777;font-size:11px;line-height:1.55}
-.db-auth-privacy strong{color:#222}
-.db-user-badge{display:none;align-items:center;gap:8px}
-.db-user-email{color:#fff;opacity:.78;font-size:12px}
-.db-logout-button{background:#fff;color:#111827}
-@media (max-width:720px){.db-auth-card{padding:24px;border-radius:18px}.db-auth-title{font-size:26px}.db-user-email{display:none}}
-
-
-        .db-integration-intro{border:1px solid var(--db-line,#333);padding:22px;margin:18px 0 16px;background:#0b0b0b}.db-integration-kicker{font-size:10px;letter-spacing:.16em;color:#8a8a8a;margin-bottom:9px}.db-integration-intro h3{margin:0 0 8px;font-size:20px}.db-integration-intro p{margin:0;color:#9b9b9b;line-height:1.6;max-width:760px}.db-private-integration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.db-private-integration-card{border:1px solid var(--db-line,#333);background:#080808;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:18px}.db-private-integration-card strong{display:block;font-size:15px;margin-bottom:5px}.db-private-integration-card span{display:block;color:#8d8d8d;font-size:12px}.db-integration-state{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin-bottom:8px}.db-integration-state.active{color:#b6ff4a}.db-integration-toggle{border:1px solid #555;background:#111;color:#fff;padding:8px 11px;cursor:pointer;font:inherit;font-size:11px}.db-integration-toggle:hover{border-color:var(--db-lime,#b6ff4a);color:var(--db-lime,#b6ff4a)}@media(max-width:700px){.db-private-integration-grid{grid-template-columns:1fr}}
+.db-integration-intro{border:1px solid var(--db-line,#333);padding:22px;margin:18px 0 16px;background:#0b0b0b}.db-integration-kicker{font-size:10px;letter-spacing:.16em;color:#8a8a8a;margin-bottom:9px}.db-integration-intro h3{margin:0 0 8px;font-size:20px}.db-integration-intro p{margin:0;color:#9b9b9b;line-height:1.6;max-width:760px}.db-private-integration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.db-private-integration-card{border:1px solid var(--db-line,#333);background:#080808;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:18px}.db-private-integration-card strong{display:block;font-size:15px;margin-bottom:5px}.db-private-integration-card span{display:block;color:#8d8d8d;font-size:12px}.db-integration-state{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin-bottom:8px}.db-integration-state.active{color:#b6ff4a}.db-integration-toggle{border:1px solid #555;background:#111;color:#fff;padding:8px 11px;cursor:pointer;font:inherit;font-size:11px}.db-integration-toggle:hover{border-color:var(--db-lime,#b6ff4a);color:var(--db-lime,#b6ff4a)}@media(max-width:700px){.db-private-integration-grid{grid-template-columns:1fr}}
 
 </style>
 
@@ -2748,46 +2718,9 @@ body.home-active .container {
 @media(max-width:560px){.db-site-shell{width:min(100% - 28px,1160px)}.db-terminal-hero{padding:58px 0 65px}.db-hero-copy h1{font-size:46px}.db-hero-actions{flex-direction:column;align-items:stretch}.db-hero-meta{flex-wrap:wrap}.db-section{padding:75px 0}.db-feature-grid{margin-top:45px}.db-connect-grid{grid-template-columns:1fr}.db-connect-card{border-right:0}.db-cta-terminal{padding:35px 20px}.db-cta-terminal h2{font-size:38px}}
 </style>
 
-<style>
-/* Dusra Brain: no login/signup UI */
-#dbAuthOverlay {
-    display: none !important;
-}
-</style>
-
 </head>
 
 <body class="home-active">
-<!-- DUSRA BRAIN — PRIVATE ACCOUNT LOGIN -->
-<div id="dbAuthOverlay" class="db-auth-overlay" role="dialog" aria-modal="true" aria-labelledby="dbAuthTitle">
-<div class="db-auth-card">
-<button id="dbAuthClose" class="db-auth-close" type="button" aria-label="Close login">×</button>
-<div class="db-auth-brand">DUSRA BRAIN</div>
-<h2 id="dbAuthTitle" class="db-auth-title">Your brain is private.</h2>
-<p class="db-auth-subtitle">Log in to access your memories, conversations, decisions, projects and personal AI context.</p>
-<div class="db-auth-tabs">
-<button id="dbLoginTab" class="db-auth-tab active" type="button">Login</button>
-<button id="dbSignupTab" class="db-auth-tab" type="button">Create account</button>
-</div>
-<form id="dbAuthForm" autocomplete="on">
-<div class="db-auth-field"><label for="dbAuthEmail">Email</label><input id="dbAuthEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
-<div class="db-auth-field"><label for="dbAuthPassword">Password</label><input id="dbAuthPassword" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required></div>
-<button id="dbAuthSubmit" class="db-auth-submit" type="submit">Login to Dusra Brain</button>
-<div id="dbAuthMessage" class="db-auth-message" aria-live="polite"></div>
-</form>
-<div class="db-auth-provider-divider"><span>or continue with</span></div>
-<div class="db-auth-providers" aria-label="Social login providers">
-<button type="button" class="db-auth-provider" data-db-provider="google"><span class="db-auth-provider-icon">G</span><span>Google</span></button>
-<button type="button" class="db-auth-provider" data-db-provider="github"><span class="db-auth-provider-icon">◉</span><span>GitHub</span></button>
-<button type="button" class="db-auth-provider" data-db-provider="vercel"><span class="db-auth-provider-icon">▲</span><span>Vercel</span></button>
-</div>
-<div class="db-auth-provider-note">Social login opens the provider securely and returns you to your private Dusra Brain.</div>
-<div class="db-auth-privacy"><strong>Private by account.</strong> Your memories are not a public page. Authentication must be enforced by the server before any personal data is returned or changed.</div>
-</div>
-</div>
-
-
-
 <!-- =========================================================
      DUSRA BRAIN — HOME PAGE
      This is an addition. Existing application markup remains
@@ -10174,158 +10107,6 @@ body.home-active .container {
 
 
     // ========================================================
-    // DUSRA BRAIN — INVISIBLE SESSION BOOTSTRAP
-    // No login/signup UI is required. The existing auth backend
-    // still requires a valid session, so the UI silently creates
-    // one browser-scoped account and keeps its credentials locally.
-    // ========================================================
-
-    const DB_GUEST_EMAIL_KEY = "dusra_brain_guest_email_v1";
-    const DB_GUEST_PASSWORD_KEY = "dusra_brain_guest_password_v1";
-
-    async function dbApiFetch(path, options) {
-        const config = Object.assign({}, options || {});
-        config.credentials = "include";
-        if (!config.cache) config.cache = "no-store";
-        return fetch(path, config);
-    }
-
-    function dbRandomGuestEmail() {
-        if (window.crypto && crypto.randomUUID) {
-            return "guest-" + crypto.randomUUID() + "@dusrabrain.local";
-        }
-        return "guest-" + Date.now() + "-" +
-            Math.random().toString(36).slice(2) +
-            "@dusrabrain.local";
-    }
-
-    function dbRandomGuestPassword() {
-        if (window.crypto && crypto.randomUUID) {
-            return "DB-" + crypto.randomUUID() + "-Aa9!";
-        }
-        return "DB-" + Date.now() + "-" +
-            Math.random().toString(36).slice(2) + "-Aa9!";
-    }
-
-    async function dbGetAuthenticatedSession() {
-        try {
-            const response = await dbApiFetch("/api/auth/session", {
-                method: "GET",
-                headers: {"Accept": "application/json"}
-            });
-
-            if (!response.ok) return null;
-
-            const data = await response.json();
-
-            if (data && data.authenticated && data.user) {
-                return data.user;
-            }
-        } catch (error) {
-            console.error("Session check failed:", error);
-        }
-
-        return null;
-    }
-
-    async function dbCreateInvisibleSession() {
-        let email = localStorage.getItem(DB_GUEST_EMAIL_KEY);
-        let password = localStorage.getItem(DB_GUEST_PASSWORD_KEY);
-
-        if (!email || !password) {
-            email = dbRandomGuestEmail();
-            password = dbRandomGuestPassword();
-        }
-
-        // First try the existing session. This avoids creating a new
-        // account on every page load.
-        const existingUser = await dbGetAuthenticatedSession();
-        if (existingUser) return existingUser;
-
-        // Reuse the browser's previous anonymous account if available.
-        if (localStorage.getItem(DB_GUEST_EMAIL_KEY) &&
-            localStorage.getItem(DB_GUEST_PASSWORD_KEY)) {
-            try {
-                const loginResponse = await dbApiFetch("/api/auth/login", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    },
-                    body: JSON.stringify({
-                        email: email,
-                        password: password
-                    })
-                });
-
-                if (loginResponse.ok) {
-                    const loginData = await loginResponse.json();
-                    if (loginData && loginData.user) {
-                        return loginData.user;
-                    }
-                }
-            } catch (error) {
-                console.warn("Anonymous session login retry failed:", error);
-            }
-        }
-
-        // No visible signup is shown to the user. The backend's existing
-        // signup endpoint is used only to establish the required session.
-        try {
-            const signupResponse = await dbApiFetch("/api/auth/signup", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json"
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: password
-                })
-            });
-
-            if (signupResponse.ok) {
-                const signupData = await signupResponse.json();
-
-                localStorage.setItem(DB_GUEST_EMAIL_KEY, email);
-                localStorage.setItem(DB_GUEST_PASSWORD_KEY, password);
-
-                if (signupData && signupData.user) {
-                    return signupData.user;
-                }
-            }
-        } catch (error) {
-            console.error("Anonymous session bootstrap failed:", error);
-        }
-
-        // Final verification after signup/login.
-        return await dbGetAuthenticatedSession();
-    }
-
-    // Private API calls are wrapped once so every existing UI feature
-    // sends the authentication cookie without changing the UI itself.
-    const dbNativeFetch = window.fetch.bind(window);
-    window.fetch = function(input, options) {
-        try {
-            const url = typeof input === "string"
-                ? input
-                : (input && input.url ? input.url : "");
-
-            if (url === "/api" || url.indexOf("/api?") === 0 ||
-                url.indexOf("/api/") === 0) {
-                const config = Object.assign({}, options || {});
-                config.credentials = "include";
-                if (!config.cache) config.cache = "no-store";
-                return dbNativeFetch(input, config);
-            }
-        } catch (error) {
-            console.warn("API fetch wrapper fallback:", error);
-        }
-
-        return dbNativeFetch(input, options);
-    };
-
-    // ========================================================
     // PRIVATE APPLICATION INITIALIZATION
 
     async function initializePrivateBrain() {
@@ -10371,41 +10152,24 @@ body.home-active .container {
     );
 
 
-    /* =========================================================
-       DUSRA BRAIN — PRIVATE SESSION HANDLING
-       No login/signup UI.
-       The existing backend auth is satisfied invisibly.
-    ========================================================= */
-
-    let dbAuthenticated = false;
-    let dbSessionUser = null;
-
-    function dbShowPrivateApp(user) {
-        dbAuthenticated = true;
-        dbSessionUser = user || null;
-
+    
+async function enterDusraBrain() {
         document.body.classList.remove("home-active");
 
         const home = document.getElementById("dusraHome");
         if (home) home.style.display = "none";
 
-        // Never show the authentication overlay in this UI.
-        const authOverlay = document.getElementById("dbAuthOverlay");
-        if (authOverlay) {
-            authOverlay.classList.remove("active");
-            authOverlay.style.display = "none";
-        }
-
-        if (typeof showView === "function" &&
-            typeof chatView !== "undefined") {
+        if (typeof showView === "function" && typeof chatView !== "undefined") {
             showView(chatView);
         }
 
         window.scrollTo(0, 0);
 
-        initializePrivateBrain().catch(function(error) {
+        try {
+            await initializePrivateBrain();
+        } catch (error) {
             console.error("Dusra Brain initialization failed:", error);
-        });
+        }
 
         if (typeof messageInput !== "undefined" && messageInput) {
             setTimeout(function() {
@@ -10414,51 +10178,30 @@ body.home-active .container {
         }
     }
 
-    async function enterDusraBrain() {
-        const user = await dbCreateInvisibleSession();
 
-        if (!user) {
-            console.error(
-                "Dusra Brain could not establish the required API session."
-            );
-            return;
-        }
-
-        dbShowPrivateApp(user);
-    }
-
-    // Keep the existing entry buttons, but no authentication screen
-    // is ever displayed.
-    [
-        "dusraEnterButton",
-        "dusraHeroEnter",
-        "dusraCtaEnter"
-    ].forEach(function(id) {
+    ["dusraEnterButton", "dusraHeroEnter", "dusraCtaEnter"].forEach(function(id) {
         const button = document.getElementById(id);
-
-        if (button) {
+        if (button && !button.dataset.dbDirectOpenBound) {
+            button.dataset.dbDirectOpenBound = "1";
             button.addEventListener("click", function(event) {
                 event.preventDefault();
                 enterDusraBrain();
             });
         }
     });
-
-    // Automatically restore/create the invisible session on page load.
-    // This is the only authentication step the user experiences.
-    (async function() {
-        const user = await dbCreateInvisibleSession();
-
-        if (user) {
-            dbShowPrivateApp(user);
-        } else {
-            console.error(
-                "Dusra Brain session bootstrap failed."
-            );
-        }
-    })();
-
 </script>
 
 </body>
-</html>
+</html    // PRIVATE APPLICATION INITIALIZATION
+
+    async function initializePrivateBrain() {
+        try {
+            await loadSessions();
+            await loadSessionHistory(activeSessionId);
+        } catch (error) {
+            console.error("Dusra Brain initialization failed:", error);
+        }
+    }
+
+
+>
