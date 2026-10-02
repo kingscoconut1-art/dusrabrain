@@ -164,6 +164,14 @@ def _ensure_auth_tables():
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
             """)
+            # Dusra Brain currently runs as a direct-access single-user web app.
+            # Keep the existing default_user identity used by the UI while
+            # retaining the account-authentication endpoints for future use.
+            cur.execute("""
+                INSERT INTO dusra_users (id, email, display_name)
+                VALUES ('default_user', 'default@dusrabrain.com', 'Dusra Brain')
+                ON CONFLICT (id) DO NOTHING
+            """)
         conn.commit()
 
 
@@ -524,15 +532,26 @@ def _make_session_cookie(user_id):
 def _get_authenticated_user(handler):
     value = _cookie_dict(handler).get(AUTH_COOKIE_NAME)
     payload = _verify_signed_value(value)
-    if not payload:
-        return None
+
+    if payload:
+        try:
+            user_id, exp = payload.rsplit("|", 1)
+            if int(exp) >= int(time.time()):
+                user = _get_user_by_id(user_id)
+                if user:
+                    return user
+        except Exception:
+            pass
+
+    # Direct-access mode:
+    # The current Dusra Brain UI does not present a login/create-account
+    # screen and sends the existing default_user identity. Resolve that
+    # identity server-side instead of trusting a browser-supplied user_id.
     try:
-        user_id, exp = payload.rsplit("|", 1)
-        if int(exp) < int(time.time()):
-            return None
+        _ensure_auth_tables()
+        return _get_user_by_id("default_user")
     except Exception:
         return None
-    return _get_user_by_id(user_id)
 
 
 def _require_authenticated_user(handler):
