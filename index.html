@@ -2640,6 +2640,7 @@ body.home-active .container {
                 </div>
                 <button id="whatsappConnectButton" style="margin-top:12px;">Connect WhatsApp</button>
                 <div id="whatsappIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
+                <div id="whatsappWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
             </div>
         </div>
 
@@ -9741,12 +9742,38 @@ body.home-active .container {
 
             if (connections.length) {
                 const connection = connections[0];
-                statusEl.textContent = connection.status === "connected" ? "Connected" : (connection.status || "Mapped");
+                statusEl.textContent = connection.status === "active" ? "Mapped" : (connection.status || "Mapped");
                 statusEl.style.background = "#dcfce7";
                 statusEl.style.color = "#166534";
                 if (detailsEl && textEl) {
                     detailsEl.style.display = "block";
                     textEl.textContent = (connection.external_identifier || connection.external_account_id || "WhatsApp account") + " · " + (connection.status || "mapped");
+                }
+
+                const readinessEl = document.getElementById("whatsappWebhookReadiness");
+                if (readinessEl) {
+                    try {
+                        const diagnosticResponse = await fetch("/api/integrations/whatsapp/diagnostics", {
+                            method: "GET",
+                            cache: "no-store",
+                            headers: { "Accept": "application/json" }
+                        });
+                        const diagnostics = await diagnosticResponse.json();
+                        if (!diagnosticResponse.ok) throw new Error(diagnostics.error || "Diagnostics unavailable.");
+                        if (!diagnostics.verify_token_configured || !diagnostics.app_secret_configured) {
+                            readinessEl.textContent = "⚠️ Internal mapping is ready. Meta webhook credentials are still pending.";
+                            readinessEl.style.color = "#92400e";
+                        } else if (!diagnostics.event_count) {
+                            readinessEl.textContent = "✓ Meta webhook credentials are configured. Waiting for the first WhatsApp event.";
+                            readinessEl.style.color = "#166534";
+                        } else {
+                            readinessEl.textContent = "✓ Webhook is receiving events. Events received: " + diagnostics.event_count;
+                            readinessEl.style.color = "#166534";
+                        }
+                    } catch (diagnosticError) {
+                        readinessEl.textContent = "Webhook diagnostics unavailable.";
+                        readinessEl.style.color = "#6b7280";
+                    }
                 }
             } else {
                 statusEl.textContent = "Not connected";
