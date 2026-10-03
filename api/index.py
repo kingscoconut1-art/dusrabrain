@@ -247,6 +247,61 @@ def _connect_integration_account(user_id, provider, external_account_id, externa
     }
 
 
+def _get_whatsapp_diagnostics(user_id):
+    """Return safe WhatsApp integration diagnostics without exposing secrets."""
+    _ensure_integration_gateway_tables()
+    verify_token_configured = bool(str(os.environ.get(WHATSAPP_VERIFY_TOKEN_ENV, "") or "").strip())
+    app_secret_configured = bool(str(os.environ.get(WHATSAPP_APP_SECRET_ENV, "") or "").strip())
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT external_account_id, external_identifier, status, created_at, updated_at
+                FROM dusra_integration_connections
+                WHERE user_id=%s AND provider=%s
+                ORDER BY external_account_id DESC
+                LIMIT 5
+            """, (user_id, WHATSAPP_PROVIDER))
+            connections = []
+            for row in cur.fetchall():
+                connections.append({
+                    "external_account_id": row[0],
+                    "external_identifier": row[1] or "",
+                    "status": row[2] or "active",
+                    "created_at": row[3].isoformat() if row[3] else None,
+                    "updated_at": row[4].isoformat() if row[4] else None,
+                })
+
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM dusra_integration_events e
+                JOIN dusra_integration_connections c
+                  ON c.provider=e.provider
+                WHERE e.provider=%s AND c.user_id=%s
+            """, (WHATSAPP_PROVIDER, user_id))
+            event_count = int((cur.fetchone() or [0])[0] or 0)
+
+            cur.execute("""
+                SELECT MAX(e.received_at)
+                FROM dusra_integration_events e
+                JOIN dusra_integration_connections c
+                  ON c.provider=e.provider
+                WHERE e.provider=%s AND c.user_id=%s
+            """, (WHATSAPP_PROVIDER, user_id))
+            last_event = cur.fetchone()
+            last_event_at = last_event[0].isoformat() if last_event and last_event[0] else None
+
+    return {
+        "provider": WHATSAPP_PROVIDER,
+        "webhook_url": "/api/webhooks/whatsapp",
+        "verify_token_configured": verify_token_configured,
+        "app_secret_configured": app_secret_configured,
+        "connections": connections,
+        "event_count": event_count,
+        "last_event_at": last_event_at,
+        "ready_for_meta_webhook": bool(verify_token_configured and app_secret_configured and connections),
+    }
+
+
 def _get_integration_connection(provider, external_account_id):
     _ensure_integration_gateway_tables()
     with get_connection() as conn:
@@ -21986,6 +22041,19 @@ class handler(
             return
 
         # ----------------------------------------------------
+        # PHASE 9A — SAFE WHATSAPP DIAGNOSTICS
+        # ----------------------------------------------------
+        if parsed.path == "/api/integrations/whatsapp/diagnostics":
+            try:
+                user = _require_authenticated_user(self)
+                if not user:
+                    return
+                send_json(self, _get_whatsapp_diagnostics(user["id"]))
+            except Exception as error:
+                send_json(self, {"ok": False, "error": str(error)}, 500)
+            return
+
+        # ----------------------------------------------------
         # ACCOUNT AUTHENTICATION
         # ----------------------------------------------------
         if parsed.path == "/api/auth/session":
@@ -22058,10 +22126,10 @@ class handler(
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            SELECT provider, external_account_id, external_identifier, status, NULL::timestamptz AS updated_at
+                            SELECT provider, external_account_id, external_identifier, status, updated_at
                             FROM dusra_integration_connections
                             WHERE user_id=%s AND provider=%s
-                            ORDER BY external_account_id DESC
+                            ORDER BY updated_at DESC
                         """, (user_id, WHATSAPP_PROVIDER))
                         rows = cur.fetchall()
                 send_json(self, {
