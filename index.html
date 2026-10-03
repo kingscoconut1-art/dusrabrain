@@ -2057,7 +2057,7 @@ body.home-active .container {
 }
 
 .db-home-hero {
-    padding: 105px 0 85px;
+    padding: 78px 0 60px;
     text-align: center;
 }
 
@@ -2182,7 +2182,7 @@ body.home-active .container {
 }
 
 .db-home-section {
-    padding: 64px 0;
+    padding: 48px 0;
 }
 
 .db-home-section-head {
@@ -2242,7 +2242,7 @@ body.home-active .container {
 }
 
 .db-home-statement {
-    padding: 68px 0;
+    padding: 52px 0;
     text-align: center;
     border-top: 1px solid rgba(255,255,255,.06);
     border-bottom: 1px solid rgba(255,255,255,.06);
@@ -4354,6 +4354,12 @@ body.home-active .container {
 
     async function createNewSession() {
 
+        // New Chat must always return to the chat view, even if the user
+        // started the action from another application view.
+        if (typeof showView === "function") {
+            showView(chatView);
+        }
+
         activeSessionId =
             makeSessionId();
 
@@ -4423,6 +4429,14 @@ body.home-active .container {
             "active"
         );
 
+        // Integrations is a first-class application view.
+        // It must always be cleared when navigating to any other view.
+        const integrationsView = document.getElementById("integrationsView");
+        if (integrationsView) {
+            integrationsView.classList.remove(
+                "active"
+            );
+        }
 
         view.classList.add(
             "active"
@@ -9757,25 +9771,21 @@ body.home-active .container {
     if (integrationsButton && !integrationsButton.dataset.bound) {
         integrationsButton.dataset.bound = "1";
         integrationsButton.addEventListener("click", function () {
-            if (typeof showIntegrationsView === "function") {
-                showIntegrationsView();
-                return;
-            }
-            if (typeof openIntegrations === "function") {
-                openIntegrations();
-                return;
-            }
             const integrationView = document.getElementById("integrationsView");
-            if (integrationView) {
-                document.querySelectorAll(".view").forEach(function (view) {
-                    view.classList.remove("active");
-                });
-                integrationView.classList.add("active");
-                if (typeof loadWhatsAppIntegrationStatus === "function") {
-                    loadWhatsAppIntegrationStatus();
-                }
-                window.scrollTo(0, 0);
+            if (!integrationView) return;
+
+            // Always leave every other application view before opening Integrations.
+            document.querySelectorAll(".view").forEach(function (view) {
+                view.classList.remove("active");
+            });
+
+            integrationView.classList.add("active");
+
+            if (typeof loadWhatsAppIntegrationStatus === "function") {
+                loadWhatsAppIntegrationStatus();
             }
+
+            window.scrollTo(0, 0);
         });
     }
 
