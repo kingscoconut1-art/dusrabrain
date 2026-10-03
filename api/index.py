@@ -402,25 +402,64 @@ def _extract_whatsapp_messages(payload):
     return events
 
 
-def _ingest_whatsapp_event(event, user_id):
-    text = str(event.get("text") or "").strip()
-    sender = str(event.get("sender") or "").strip()
-    if not text:
-        return {"ingested": False, "reason": "empty_message"}
+def _ingest_memory_message(
+    user_id,
+    text,
+    session_id="default",
+    title="New Chat",
+    save_brain=True,
+):
+    """Run one message through the durable conversation -> memory -> brain pipeline.
 
-    session_id = "whatsapp:" + (sender or "unknown")
-    title = "WhatsApp"
-    save_conversation(user_id, "user", text, session_id, title)
+    Conversation capture is mandatory. Memory extraction and structured brain
+    extraction are best-effort so an optional AI extraction failure never drops
+    the source message. This helper is intentionally provider-neutral so future
+    Telegram/Slack adapters can reuse the same ingestion behavior.
+    """
+    text = str(text or "").strip()
+    session_id = str(session_id or "default").strip() or "default"
+    title = str(title or "New Chat").strip() or "New Chat"
+    if not text:
+        return {
+            "ingested": False,
+            "reason": "empty_message",
+            "memory_saved": False,
+            "brain_saved": False,
+        }
+
+    save_conversation(
+        user_id,
+        "user",
+        text,
+        session_id,
+        title,
+    )
 
     memory_saved = False
+    memory_error = ""
     try:
-        analysis = analyze_memory(text, current_subject=title)
+        analysis = analyze_memory(
+            text,
+            current_subject=title,
+        )
         if analysis.get("remember"):
-            memory_value = str(analysis.get("memory", "") or "").strip()
+            memory_value = str(
+                analysis.get("memory", "") or ""
+            ).strip()
             if memory_value:
-                category = str(analysis.get("category", "general") or "general").strip()
-                importance = int(analysis.get("importance", 5) or 5)
-                subject = normalize_subject(analysis.get("subject", title))
+                category = str(
+                    analysis.get("category", "general") or "general"
+                ).strip() or "general"
+                try:
+                    importance = int(
+                        analysis.get("importance", 5) or 5
+                    )
+                except Exception:
+                    importance = 5
+                importance = max(1, min(10, importance))
+                subject = normalize_subject(
+                    analysis.get("subject", title)
+                )
                 save_memory(
                     user_id=user_id,
                     memory=memory_value,
@@ -430,16 +469,55 @@ def _ingest_whatsapp_event(event, user_id):
                     session_id=session_id,
                 )
                 memory_saved = True
-    except Exception:
-        # Webhook ingestion must not fail because optional memory extraction failed.
-        pass
+    except Exception as error:
+        memory_error = str(error)[:300]
+
+    brain_saved = False
+    brain_error = ""
+    if save_brain:
+        try:
+            save_brain_structure(
+                user_id=user_id,
+                user_message=text,
+                current_subject=title,
+            )
+            brain_saved = True
+        except Exception as error:
+            brain_error = str(error)[:300]
 
     return {
         "ingested": True,
         "memory_saved": memory_saved,
+        "brain_saved": brain_saved,
         "session_id": session_id,
-        "message_id": event.get("event_id"),
+        "memory_error": memory_error,
+        "brain_error": brain_error,
     }
+
+
+def _ingest_whatsapp_event(event, user_id):
+    text = str(event.get("text") or "").strip()
+    sender = str(event.get("sender") or "").strip()
+    contact_name = str(event.get("contact_name") or "").strip()
+    if not text:
+        return {"ingested": False, "reason": "empty_message"}
+
+    session_id = "whatsapp:" + (sender or "unknown")
+    title = "WhatsApp"
+    if contact_name:
+        title = "WhatsApp · " + contact_name[:120]
+
+    result = _ingest_memory_message(
+        user_id=user_id,
+        text=text,
+        session_id=session_id,
+        title=title,
+        save_brain=True,
+    )
+    result["message_id"] = event.get("event_id")
+    result["sender"] = sender
+    result["contact_name"] = contact_name
+    return result
 
 
 def _ensure_integration_tables():
