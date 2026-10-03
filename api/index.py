@@ -22058,10 +22058,10 @@ class handler(
                 with get_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute("""
-                            SELECT provider, external_account_id, external_identifier, status, updated_at
+                            SELECT provider, external_account_id, external_identifier, status, NULL::timestamptz AS updated_at
                             FROM dusra_integration_connections
                             WHERE user_id=%s AND provider=%s
-                            ORDER BY updated_at DESC
+                            ORDER BY external_account_id DESC
                         """, (user_id, WHATSAPP_PROVIDER))
                         rows = cur.fetchall()
                 send_json(self, {
