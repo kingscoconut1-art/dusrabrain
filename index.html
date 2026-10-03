@@ -87,10 +87,13 @@
         .message {
             margin-bottom: 16px;
             display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
         }
 
         .message.user {
-            justify-content: flex-end;
+            align-items: flex-end;
         }
 
         .bubble {
@@ -99,6 +102,11 @@
             border-radius: 12px;
             line-height: 1.5;
             white-space: pre-wrap;
+        }
+
+        .message.assistant .bubble {
+            width: 100%;
+            max-width: 100%;
         }
 
         .user .bubble {
@@ -112,7 +120,8 @@
         }
 
         .evidence-trace {
-            max-width: 80%;
+            width: 100%;
+            max-width: 100%;
             margin-top: 8px;
             margin-left: 0;
             border: 1px solid #dbe3ec;
@@ -202,13 +211,172 @@
             cursor: pointer;
         }
 
+        /* =====================================================
+           V9.3 — PLAN EVOLUTION TRACE
+           Read-only UI for version-backed plan evolution metadata.
+        ===================================================== */
+
+        .plan-evolution-trace {
+            width: 100%;
+            max-width: 100%;
+            margin-top: 8px;
+            border: 1px solid #dbe3ec;
+            border-radius: 12px;
+            background: #ffffff;
+            overflow: hidden;
+        }
+
+        .plan-evolution-trace-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 11px 12px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .plan-evolution-trace-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #334155;
+        }
+
+        .plan-evolution-trace-badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .plan-evolution-trace-badge {
+            font-size: 10px;
+            font-weight: 800;
+            padding: 4px 7px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #4338ca;
+        }
+
+        .plan-evolution-trace-badge.readonly {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .plan-evolution-trace-body {
+            padding: 12px;
+        }
+
+        .plan-evolution-trace-subject {
+            font-size: 15px;
+            font-weight: 800;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        .plan-evolution-trace-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .plan-evolution-trace-stat {
+            border: 1px solid #e5e7eb;
+            border-radius: 9px;
+            padding: 9px 10px;
+            background: #fafafa;
+        }
+
+        .plan-evolution-trace-stat-label {
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #64748b;
+            font-weight: 800;
+            margin-bottom: 3px;
+        }
+
+        .plan-evolution-trace-stat-value {
+            font-size: 13px;
+            font-weight: 800;
+            color: #1f2937;
+        }
+
+        .plan-evolution-trace-flow {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .plan-evolution-trace-state {
+            border: 1px solid #e5e7eb;
+            border-radius: 9px;
+            padding: 9px 10px;
+            background: #ffffff;
+            min-width: 0;
+        }
+
+        .plan-evolution-trace-state-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #64748b;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .plan-evolution-trace-state-value {
+            font-size: 12px;
+            color: #334155;
+            font-weight: 700;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .plan-evolution-trace-arrow {
+            color: #6366f1;
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .plan-evolution-trace-evidence {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eef2f7;
+            font-size: 11px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        .plan-evolution-trace-note {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+
         .evidence-trace-body.collapsed {
             display: none;
         }
 
         @media (max-width: 700px) {
-            .evidence-trace {
+            .evidence-trace,
+            .plan-evolution-trace {
                 max-width: 100%;
+            }
+
+            .plan-evolution-trace-flow {
+                grid-template-columns: 1fr;
+            }
+
+            .plan-evolution-trace-arrow {
+                text-align: center;
+                transform: rotate(90deg);
             }
         }
 
@@ -1894,6 +2062,36 @@
         .decision-outcome-body { margin-top:8px; color:#334155; line-height:1.5; white-space:pre-wrap; }
         @media(max-width:700px){ .decision-outcome-grid{grid-template-columns:1fr;} }
 
+
+
+/* =========================================================
+   DUSRA BRAIN — PRIVATE ACCOUNT AUTHENTICATION
+========================================================= */
+.db-auth-overlay{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.78);backdrop-filter:blur(10px)}
+.db-auth-overlay.active{display:flex}
+.db-auth-card{width:min(430px,100%);background:#fff;color:#111;border:1px solid #e5e5e5;border-radius:22px;padding:30px;box-shadow:0 30px 90px rgba(0,0,0,.35);position:relative}
+.db-auth-close{position:absolute;top:12px;right:14px;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:#f2f2f2;color:#222;font-size:22px;line-height:36px}
+.db-auth-brand{font-size:15px;font-weight:800;letter-spacing:-.02em;margin-bottom:24px}
+.db-auth-title{margin:0 0 8px;font-size:30px;line-height:1.1;letter-spacing:-.04em}
+.db-auth-subtitle{margin:0 0 22px;color:#666;font-size:14px;line-height:1.6}
+.db-auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:#f3f3f3;border-radius:12px;margin-bottom:20px}
+.db-auth-tab{border:0;border-radius:9px;background:transparent;color:#666;padding:10px 8px;font-size:13px;font-weight:700}
+.db-auth-tab.active{background:#111;color:#fff}
+.db-auth-field{margin-bottom:14px}
+.db-auth-field label{display:block;margin-bottom:7px;font-size:12px;font-weight:700;color:#333}
+.db-auth-field input{width:100%;height:46px;border:1px solid #d8d8d8;border-radius:10px;padding:0 13px;font-size:14px;outline:none;background:#fff;color:#111}
+.db-auth-field input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(0,0,0,.07)}
+.db-auth-submit{width:100%;height:48px;margin-top:4px;border:0;border-radius:11px;background:#111;color:#fff;font-size:14px;font-weight:800}
+.db-auth-submit:disabled{opacity:.55;cursor:wait}.db-auth-provider-divider{display:flex;align-items:center;gap:10px;margin:18px 0 14px;color:#999;font-size:11px}.db-auth-provider-divider:before,.db-auth-provider-divider:after{content:"";height:1px;background:#e8e8e8;flex:1}.db-auth-providers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.db-auth-provider{height:44px;border:1px solid #d8d8d8;border-radius:10px;background:#fff;color:#111;display:flex;align-items:center;justify-content:center;gap:7px;font-size:12px;font-weight:750;cursor:pointer}.db-auth-provider:hover{border-color:#111;background:#fafafa}.db-auth-provider:active{transform:translateY(1px)}.db-auth-provider-icon{font-size:14px;line-height:1}.db-auth-provider-note{margin-top:9px;color:#999;font-size:10px;line-height:1.45;text-align:center}
+.db-auth-message{min-height:20px;margin-top:12px;font-size:13px;line-height:1.45;color:#666}
+.db-auth-message.error{color:#b42318}
+.db-auth-message.success{color:#137333}
+.db-auth-privacy{margin-top:20px;padding-top:17px;border-top:1px solid #eee;color:#777;font-size:11px;line-height:1.55}
+.db-auth-privacy strong{color:#222}
+.db-user-badge{display:none;align-items:center;gap:8px}
+.db-user-email{color:#fff;opacity:.78;font-size:12px}
+.db-logout-button{background:#fff;color:#111827}
+@media (max-width:720px){.db-auth-card{padding:24px;border-radius:18px}.db-auth-title{font-size:26px}.db-user-email{display:none}}
 </style>
 
 <style>
@@ -1987,25 +2185,13 @@ body.home-active .container {
     display: none !important;
 }
 
-
-/* =========================================================
-   DUSRA BRAIN — HOME PAGE DESIGN ONLY
-   No application logic or private-brain settings changed.
-========================================================= */
-
-body.home-active .header,
-body.home-active .container {
-    display: none !important;
-}
-
 .db-home {
     min-height: 100vh;
     background:
         radial-gradient(circle at 50% 0%, rgba(99,102,241,.13), transparent 34rem),
         #050505;
     color: #f5f5f5;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system,
-        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .db-home * {
@@ -2031,9 +2217,17 @@ body.home-active .container {
 }
 
 .db-home-brand {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+.db-home-brand {
     font-size: 20px;
     font-weight: 800;
     letter-spacing: -.045em;
+}
+.db-home-brand {
+    height: 46px;
 }
 
 .db-home-links {
@@ -2057,62 +2251,62 @@ body.home-active .container {
 }
 
 .db-home-hero {
-    padding: 105px 0 85px;
+    padding: 125px 0 120px;
     text-align: center;
 }
 
 .db-home-eyebrow {
     display: inline-flex;
     align-items: center;
-    gap: 14px;
-    padding: 11px 22px;
-    border: 1px solid rgba(255,255,255,.14);
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid rgba(255,255,255,.11);
     border-radius: 999px;
-    color: #aaaab3;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: .18em;
+    color: #a9a9b2;
+    font-size: 11px;
+    letter-spacing: .12em;
     text-transform: uppercase;
 }
 
 .db-home-dot {
-    width: 10px;
-    height: 10px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #fff;
 }
 
-.db-home-hero h1 {
-    max-width: 900px;
-    margin: 48px auto 24px;
-    font-size: clamp(58px, 8vw, 112px);
-    line-height: .91;
+.db-home h1 {
+    margin: 25px auto 18px;
+    max-width: 920px;
+    font-size: clamp(52px, 8vw, 104px);
+    line-height: .92;
     letter-spacing: -.075em;
-    font-weight: 900;
+    font-weight: 800;
 }
 
 .db-home-hero p {
-    max-width: 760px;
+    max-width: 720px;
     margin: 0 auto;
     color: #9999a3;
-    font-size: clamp(18px, 2vw, 24px);
-    line-height: 1.55;
+    font-size: clamp(17px, 2vw, 21px);
+    line-height: 1.6;
 }
 
 .db-home-actions {
     display: flex;
     justify-content: center;
-    gap: 14px;
-    margin-top: 42px;
+    gap: 12px;
+    margin-top: 34px;
     flex-wrap: wrap;
 }
 
 .db-home-primary,
 .db-home-secondary {
-    padding: 16px 25px;
+    display: inline-block;
+    padding: 13px 20px;
     border-radius: 999px;
-    font-size: 16px;
-    font-weight: 800;
+    font-weight: 750;
+    font-size: 14px;
 }
 
 .db-home-primary {
@@ -2121,97 +2315,432 @@ body.home-active .container {
 }
 
 .db-home-secondary {
-    border: 1px solid rgba(255,255,255,.15);
-    color: #f5f5f5;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.045);
 }
 
 .db-home-architecture {
-    padding: 70px 0 125px;
+    margin: 0 auto 170px;
+    padding: 76px 58px 64px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 28px;
+    background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
 }
 
 .db-home-kicker {
-    color: #777782;
-    text-align: center;
+    color: #70707a;
+    font-size: 11px;
+    letter-spacing: .15em;
     text-transform: uppercase;
-    letter-spacing: .22em;
-    font-size: 13px;
-    font-weight: 700;
+}
+
+.db-home-architecture .db-home-kicker {
+    text-align: center;
 }
 
 .db-home-architecture h2 {
-    max-width: 900px;
-    margin: 22px auto 62px;
     text-align: center;
-    font-size: clamp(42px, 6vw, 78px);
-    line-height: .98;
-    letter-spacing: -.065em;
-}
-
-.db-home-layers,
-.db-home-grid,
-.db-home-agent {
-    display: grid;
-    gap: 18px;
+    margin: 14px auto 48px;
+    max-width: 900px;
+    font-size: clamp(38px, 5vw, 58px);
+    letter-spacing: -.04em;
 }
 
 .db-home-layers {
+    display: grid;
     grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-top: 18px;
 }
 
+.db-home-layer,
 .db-home-card,
-.db-home-panel,
-.db-home-agent-card {
+.db-home-agent-copy,
+.db-home-agent-diagram {
     border: 1px solid rgba(255,255,255,.10);
-    border-radius: 22px;
-    background: #09090b;
+    background: rgba(0,0,0,.32);
+    border-radius: 20px;
 }
 
-.db-home-card {
-    padding: 34px;
-    min-height: 220px;
+.db-home-layer {
+    min-height: 270px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
-.db-home-card h3 {
-    margin: 0 0 10px;
+.db-home-number {
+    color: #666670;
+    font-size: 11px;
+    letter-spacing: .12em;
 }
 
+.db-home-layer h3 {
+    margin: 54px 0 14px;
+    font-size: 25px;
+    letter-spacing: -.04em;
+}
+
+.db-home-layer p,
 .db-home-card p,
-.db-home-panel p,
-.db-home-agent-card p {
-    color: #8e8e98;
+.db-home-agent-copy p {
+    color: #8f8f99;
+    font-size: 14px;
     line-height: 1.65;
 }
 
+.db-home-flow {
+    margin: 46px auto 0;
+    padding-top: 34px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    text-align: center;
+    color: #8b8b95;
+    font-size: 11px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+}
+
+.db-home-flow span,
+.db-home-flow strong {
+    color: #d9d9df;
+    font-weight: 700;
+}
+
+.db-home-flow i {
+    color: #55555e;
+    font-style: normal;
+}
+
 .db-home-section {
-    padding: 150px 0;
-    scroll-margin-top: 40px;
+    padding: 135px 0;
+}
+
+.db-home-section-head {
+    max-width: 760px;
+    margin-bottom: 42px;
+}
+
+#dbDecisions .db-home-section-head {
+    max-width: 980px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+#dbDecisions .db-home-lead {
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.db-home-section h2 {
+    margin: 12px 0 16px;
+    font-size: clamp(36px, 5vw, 62px);
+    line-height: 1;
+    letter-spacing: -.06em;
+}
+
+.db-home-lead {
+    color: #92929c;
+    font-size: 18px;
+    line-height: 1.65;
+}
+
+.db-home-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.db-home-card {
+    min-height: 280px;
+    padding: 28px;
+}
+
+.db-home-card h3 {
+    margin: 65px 0 12px;
+    font-size: 25px;
+    letter-spacing: -.04em;
+}
+
+.db-home-chain {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin: 58px auto 0;
+    padding: 34px 26px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 26px;
+    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+    box-shadow: 0 24px 80px rgba(0,0,0,.25);
+}
+
+.db-home-chain-step {
+    flex: 1 1 0;
+    min-width: 140px;
+    min-height: 122px;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 18px;
+    background: rgba(5,5,7,.82);
+    text-align: left;
+}
+
+.db-home-chain-step:hover {
+    border-color: rgba(255,255,255,.20);
+    transform: translateY(-2px);
+}
+
+.db-home-chain-index {
+    margin-bottom: 14px;
+    color: #666670;
+    font-size: 10px;
+    letter-spacing: .15em;
+}
+
+.db-home-chain-step strong {
+    color: #f3f3f5;
+    font-size: 18px;
+    letter-spacing: -.03em;
+}
+
+.db-home-chain-step small {
+    margin-top: 6px;
+    color: #7e7e88;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.db-home-chain > i {
+    align-self: center;
+    flex: 0 0 auto;
+    color: #5e5e68;
+    font-size: 20px;
+    font-style: normal;
+}
+
+
+.db-home-how {
+    padding: 135px 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.db-home-how-intro {
+    max-width: 760px;
+    margin-bottom: 38px;
+}
+
+.db-home-how-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.db-home-how-step {
+    padding: 24px;
+    min-height: 220px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 20px;
+    background: rgba(255,255,255,.025);
+}
+
+.db-home-how-step-number {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 50%;
+    color: #b5b5bd;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.db-home-how-step h3 {
+    margin: 42px 0 10px;
+    font-size: 21px;
+    letter-spacing: -.035em;
+}
+
+.db-home-how-step p {
+    margin: 0;
+    color: #8f8f99;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.db-home-simple-line {
+    margin-top: 28px;
+    padding: 18px 22px;
+    border-left: 2px solid rgba(255,255,255,.45);
+    color: #b0b0b8;
+    background: rgba(255,255,255,.025);
+    border-radius: 0 14px 14px 0;
+    font-size: 15px;
+}
+
+.db-home-made-india {
+    margin-top: 18px;
+    text-align: center;
+    color: #8d8d97;
+    font-size: 13px;
+    letter-spacing: .02em;
+}
+
+.db-home-made-india strong {
+    color: #f2f2f2;
+    font-weight: 700;
+}
+
+
+.db-home-connect {
+    padding: 135px 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.db-home-connect-intro {
+    max-width: 760px;
+    margin-bottom: 38px;
+}
+
+.db-home-connect-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+.db-home-connect-card {
+    min-height: 245px;
+    padding: 28px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 22px;
+    background: rgba(255,255,255,.025);
+}
+
+.db-home-connect-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 14px;
+    font-size: 22px;
+    background: rgba(255,255,255,.035);
+}
+
+.db-home-connect-card h3 {
+    margin: 28px 0 10px;
+    font-size: 22px;
+    letter-spacing: -.035em;
+}
+
+.db-home-connect-card p {
+    margin: 0;
+    color: #8f8f99;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.db-home-connect-note {
+    margin-top: 24px;
+    padding: 18px 22px;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    color: #9b9ba4;
+    background: rgba(255,255,255,.02);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.db-home-connect-note strong {
+    color: #f1f1f1;
 }
 
 .db-home-statement {
-    padding: 165px 0;
+    padding: 145px 0 150px;
+    border-top: 1px solid rgba(255,255,255,.10);
+    border-bottom: 1px solid rgba(255,255,255,.10);
     text-align: center;
-    border-top: 1px solid rgba(255,255,255,.07);
-    border-bottom: 1px solid rgba(255,255,255,.07);
 }
 
 .db-home-statement p {
-    max-width: 1120px;
+    max-width: 1100px;
     margin: 0 auto;
-    font-size: clamp(42px, 6.2vw, 82px);
-    line-height: .98;
-    letter-spacing: -.065em;
-    font-weight: 850;
+    font-size: clamp(38px, 6vw, 82px);
+    line-height: 1.02;
+    letter-spacing: -.06em;
+    font-weight: 700;
 }
 
-.db-home-statement .db-home-muted {
-    color: #74747e;
+.db-home-muted {
+    color: #8b8b95;
+}
+
+.db-home-statement-sub {
+    margin-top: 28px;
+    color: #5f5f68;
+    font-size: 14px;
+    letter-spacing: .02em;
+}
+
+.db-home-agent {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.db-home-agent-copy,
+.db-home-agent-diagram {
+    padding: 32px;
+}
+
+.db-home-agent-copy h3 {
+    margin: 12px 0;
+    font-size: 32px;
+    letter-spacing: -.05em;
+}
+
+.db-home-diagram {
+    min-height: 330px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+}
+
+.db-home-node {
+    min-width: 190px;
+    padding: 13px 22px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 14px;
+    background: #09090b;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.db-home-arrow {
+    color: #5e5e67;
 }
 
 .db-home-cta {
-    padding: 155px 0 165px;
+    padding: 115px 0 120px;
     text-align: center;
-    background:
-        radial-gradient(circle at 50% 60%, rgba(255,255,255,.06), transparent 28rem);
+    background: radial-gradient(circle at 50% 60%, rgba(255,255,255,.06), transparent 28rem);
 }
 
 .db-home-cta h2 {
@@ -2239,134 +2768,27 @@ body.home-active .container {
     flex-wrap: wrap;
 }
 
-/* =========================================================
-   DUSRA BRAIN — YC PRESENTATION POLISH
-   Center the agent flow and tighten the section rhythm.
-========================================================= */
-.db-home-agent {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
-    align-items: center;
-    gap: 56px;
-    max-width: 1080px;
-    margin: 0 auto;
-}
-
-.db-home-agent-copy {
-    max-width: 560px;
-}
-
-.db-home-agent-diagram {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 320px;
-}
-
-.db-home-diagram {
-    width: min(100%, 360px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    text-align: center;
-}
-
-.db-home-node {
-    width: min(100%, 340px);
-    padding: 18px 26px;
-    border: 1px solid rgba(255,255,255,.14);
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
-    box-shadow: 0 14px 40px rgba(0,0,0,.22);
-    color: #f5f5f5;
-    font-size: 16px;
-    font-weight: 750;
-    letter-spacing: -.01em;
-}
-
-.db-home-node:first-child {
-    border-color: rgba(255,255,255,.30);
-    background: #fff;
-    color: #050505;
-}
-
-.db-home-node:last-child {
-    border-color: rgba(255,255,255,.24);
-}
-
-.db-home-arrow {
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #777782;
-    font-size: 18px;
-    line-height: 1;
-}
-
-.db-home-section#dbAgent {
-    padding-top: 145px;
-    padding-bottom: 150px;
-}
-
-.db-home-section#dbAgent .db-home-section-head {
-    margin-bottom: 58px;
-}
-
-.db-home-section#dbAgent .db-home-lead {
-    max-width: 720px;
-}
-
 @media (max-width: 800px) {
     .db-home-links {
         display: none;
     }
 
-    .db-home-wrap {
-        width: min(100% - 40px, 1180px);
-    }
-
-    .db-home-nav {
-        height: 72px;
-    }
-
-    .db-home-enter {
-        padding: 13px 22px;
-        font-size: 14px;
-    }
-
     .db-home-hero {
-        padding: 110px 0 80px;
-    }
-
-    .db-home-hero h1 {
-        font-size: clamp(54px, 15vw, 82px);
-        margin-top: 55px;
-    }
-
-    .db-home-hero p {
-        font-size: 18px;
-        line-height: 1.55;
-    }
-
-    .db-home-actions {
-        margin-top: 40px;
-    }
-
-    .db-home-primary,
-    .db-home-secondary {
-        width: min(100%, 410px);
-        padding: 18px 24px;
-        font-size: 17px;
+        padding-top: 85px;
+        padding-bottom: 90px;
     }
 
     .db-home-architecture {
-        padding: 55px 0 95px;
+        margin-bottom: 100px;
+        padding: 46px 22px 42px;
     }
 
-    .db-home-architecture h2 {
-        font-size: clamp(42px, 11vw, 62px);
+    .db-home-connect-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .db-home-how-grid {
+        grid-template-columns: 1fr 1fr;
     }
 
     .db-home-layers,
@@ -2375,97 +2797,56 @@ body.home-active .container {
         grid-template-columns: 1fr;
     }
 
-    .db-home-agent {
-        gap: 48px;
-    }
-
-    .db-home-agent-diagram {
-        min-height: 280px;
-    }
-
     .db-home-section {
-        padding: 72px 0;
+        padding: 65px 0;
     }
 
     .db-home-statement {
-        padding: 105px 20px;
+        padding: 90px 0;
     }
 
-    .db-home-statement p {
-        font-size: clamp(38px, 11vw, 58px);
-    }
-}
-
-
-/* =========================================================
-   V11 — ARCHITECTURE SPACING / YC PRESENTATION POLISH
-   Give the architecture title, three layers, and flow
-   deliberate visual breathing room without creating
-   oversized empty sections.
-========================================================= */
-.db-home-architecture {
-    padding-top: 82px;
-    padding-bottom: 138px;
-}
-
-.db-home-architecture h2 {
-    margin-bottom: 78px;
-}
-
-.db-home-layers {
-    gap: 34px;
-}
-
-.db-home-layer {
-    padding: 0 6px;
-}
-
-.db-home-layer .db-home-number {
-    margin-bottom: 18px;
-}
-
-.db-home-layer h3 {
-    margin: 0 0 16px;
-}
-
-.db-home-layer p {
-    margin: 0;
-    max-width: 360px;
-    line-height: 1.65;
-}
-
-.db-home-flow {
-    margin-top: 72px;
-    text-align: center;
-}
-
-@media (max-width: 800px) {
-    .db-home-architecture {
-        padding-top: 58px;
-        padding-bottom: 90px;
+    .db-home-chain {
+        flex-direction: column;
+        align-items: stretch;
+        margin-top: 40px;
     }
 
-    .db-home-architecture h2 {
-        margin-bottom: 52px;
-    }
-
-    .db-home-layers {
-        gap: 44px;
-    }
-
-    .db-home-layer .db-home-number {
-        margin-bottom: 12px;
-    }
-
-    .db-home-flow {
-        margin-top: 54px;
-        line-height: 1.5;
+    .db-home-chain > i {
+        align-self: center;
+        transform: rotate(90deg);
     }
 }
 </style>
 </head>
 
 <body class="home-active">
+<!-- DUSRA BRAIN — PRIVATE ACCOUNT LOGIN -->
+<div id="dbAuthOverlay" class="db-auth-overlay" role="dialog" aria-modal="true" aria-labelledby="dbAuthTitle">
+<div class="db-auth-card">
+<button id="dbAuthClose" class="db-auth-close" type="button" aria-label="Close login">×</button>
+<div class="db-auth-brand">DUSRA BRAIN</div>
+<h2 id="dbAuthTitle" class="db-auth-title">Your brain is private.</h2>
+<p class="db-auth-subtitle">Log in to access your memories, conversations, decisions, projects and personal AI context.</p>
+<div class="db-auth-tabs">
+<button id="dbLoginTab" class="db-auth-tab active" type="button">Login</button>
+<button id="dbSignupTab" class="db-auth-tab" type="button">Create account</button>
+</div>
+<form id="dbAuthForm" autocomplete="on">
+<div class="db-auth-field"><label for="dbAuthEmail">Email</label><input id="dbAuthEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required></div>
+<div class="db-auth-field"><label for="dbAuthPassword">Password</label><input id="dbAuthPassword" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required></div>
+<button id="dbAuthSubmit" class="db-auth-submit" type="submit">Login to Dusra Brain</button>
+<div id="dbAuthMessage" class="db-auth-message" aria-live="polite"></div>
+</form>
+<div class="db-auth-provider-divider"><span>or continue with</span></div>
+<div class="db-auth-providers" aria-label="Social login providers">
+<button type="button" class="db-auth-provider" data-db-provider="google"><span class="db-auth-provider-icon">G</span><span>Google</span></button>
+<button type="button" class="db-auth-provider" data-db-provider="github"><span class="db-auth-provider-icon">◉</span><span>GitHub</span></button>
+<button type="button" class="db-auth-provider" data-db-provider="vercel"><span class="db-auth-provider-icon">▲</span><span>Vercel</span></button>
+</div>
+<div class="db-auth-provider-note">Social login opens the provider securely and returns you to your private Dusra Brain.</div>
+<div class="db-auth-privacy"><strong>Private by account.</strong> Your memories are not a public page. Authentication must be enforced by the server before any personal data is returned or changed.</div>
+</div>
+</div>
 
 
 <!-- =========================================================
@@ -2485,6 +2866,7 @@ body.home-active .container {
                 <a href="#dbMemory">Memory</a>
                 <a href="#dbDecisions">Decisions</a>
                 <a href="#dbAgent">AI Agent</a>
+                <a href="#dbConnect">Connect</a>
             </div>
 
             <a href="#" id="dusraEnterButton" class="db-home-enter">
@@ -2497,14 +2879,14 @@ body.home-active .container {
         <div class="db-home-wrap">
             <div class="db-home-eyebrow">
                 <span class="db-home-dot"></span>
-                Personal AI Intelligence
+                PERSONAL AI INTELLIGENCE
             </div>
 
-            <h1>Your Personal<br>AI Brain.</h1>
+            <h1>Your AI should<br>remember how you think.</h1>
 
             <p>
-                Personal Memory + Decision Intelligence + AI Agent —
-                one intelligence layer built around you.
+                Dusra Brain gives AI persistent memory, decision history and personal context —
+                so every interaction can build on what came before.
             </p>
 
             <div class="db-home-actions">
@@ -2555,7 +2937,76 @@ body.home-active .container {
         </div>
 
         <div class="db-home-flow">
-            MEMORY + DECISIONS → UNDERSTANDING → AI AGENT
+            <span>MEMORY</span>
+            <i>+</i>
+            <span>DECISIONS</span>
+            <i>→</i>
+            <span>UNDERSTANDING</span>
+            <i>→</i>
+            <strong>AI AGENT</strong>
+        </div>
+    </section>
+
+
+    <section id="dbHowItWorks" class="db-home-how">
+        <div class="db-home-wrap">
+
+            <div class="db-home-how-intro">
+                <div class="db-home-kicker">How Dusra Brain Works</div>
+                <h2>Think of it as a brain that learns your context.</h2>
+                <p class="db-home-lead">
+                    You don't need to remember everything yourself. You tell
+                    Dusra Brain what matters, and over time it builds a useful
+                    picture of your world.
+                </p>
+            </div>
+
+            <div class="db-home-how-grid">
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">1</div>
+                    <h3>Tell it something</h3>
+                    <p>
+                        Save a fact, idea, experience, project, preference,
+                        decision or anything you want Dusra Brain to remember.
+                    </p>
+                </article>
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">2</div>
+                    <h3>It remembers</h3>
+                    <p>
+                        Important information becomes part of your personal
+                        memory instead of disappearing with one conversation.
+                    </p>
+                </article>
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">3</div>
+                    <h3>It connects the dots</h3>
+                    <p>
+                        Memories, decisions, changes and outcomes can be
+                        connected so your history has more context.
+                    </p>
+                </article>
+
+                <article class="db-home-how-step">
+                    <div class="db-home-how-step-number">4</div>
+                    <h3>Ask it later</h3>
+                    <p>
+                        When you return, the AI can work with your existing
+                        context instead of making you explain everything again.
+                    </p>
+                </article>
+
+            </div>
+
+            <div class="db-home-simple-line">
+                <strong>In simple words:</strong>
+                You tell it → it remembers → it understands the context →
+                your AI agent works with you.
+            </div>
+
         </div>
     </section>
 
@@ -2612,22 +3063,41 @@ body.home-active .container {
                 <div class="db-home-kicker">02 / Decision Intelligence</div>
                 <h2>Your decisions have a history.</h2>
                 <p class="db-home-lead">
-                    Dusra Brain connects decisions with their context and
-                    evolution, creating a record that can become more useful
-                    as your experience grows.
+                    A decision is not just an answer. It has a reason, a change, an outcome and a lesson.
+                    Dusra Brain keeps that history connected so experience becomes usable context.
                 </p>
             </div>
 
-            <div class="db-home-chain">
-                <span>Decision</span>
+            <div class="db-home-chain" aria-label="Decision intelligence flow">
+                <div class="db-home-chain-step">
+                    <span class="db-home-chain-index">01</span>
+                    <strong>Decision</strong>
+                    <small>What you chose</small>
+                </div>
                 <i>→</i>
-                <span>Reason</span>
+                <div class="db-home-chain-step">
+                    <span class="db-home-chain-index">02</span>
+                    <strong>Reason</strong>
+                    <small>Why you chose it</small>
+                </div>
                 <i>→</i>
-                <span>Change</span>
+                <div class="db-home-chain-step">
+                    <span class="db-home-chain-index">03</span>
+                    <strong>Change</strong>
+                    <small>What evolved</small>
+                </div>
                 <i>→</i>
-                <span>Outcome</span>
+                <div class="db-home-chain-step">
+                    <span class="db-home-chain-index">04</span>
+                    <strong>Outcome</strong>
+                    <small>What happened</small>
+                </div>
                 <i>→</i>
-                <span>Learning</span>
+                <div class="db-home-chain-step">
+                    <span class="db-home-chain-index">05</span>
+                    <strong>Learning</strong>
+                    <small>What you now know</small>
+                </div>
             </div>
 
         </div>
@@ -2636,9 +3106,12 @@ body.home-active .container {
     <div class="db-home-statement">
         <div class="db-home-wrap">
             <p>
-                Chat captures the conversation.<br>
-                <span class="db-home-muted">Dusra Brain builds the context.</span>
+                Chat is a conversation.<br>
+                <span class="db-home-muted">Dusra Brain is your context.</span>
             </p>
+            <div class="db-home-statement-sub">
+                The interface may change. Your context should not.
+            </div>
         </div>
     </div>
 
@@ -2686,6 +3159,63 @@ body.home-active .container {
         </div>
     </section>
 
+
+    <section id="dbConnect" class="db-home-connect">
+        <div class="db-home-wrap">
+
+            <div class="db-home-connect-intro">
+                <div class="db-home-kicker">Connect with your daily life</div>
+                <h2>Your everyday conversations can become part of your brain.</h2>
+                <p class="db-home-lead">
+                    Dusra Brain is designed to connect with the tools you already
+                    use every day — so useful information doesn't have to stay
+                    trapped inside separate apps.
+                </p>
+            </div>
+
+            <div class="db-home-connect-grid">
+
+                <article class="db-home-connect-card">
+                    <div class="db-home-connect-icon">💬</div>
+                    <h3>WhatsApp</h3>
+                    <p>
+                        Bring useful conversations, ideas, notes and information
+                        from your everyday WhatsApp life into your personal
+                        AI context.
+                    </p>
+                </article>
+
+                <article class="db-home-connect-card">
+                    <div class="db-home-connect-icon">✈️</div>
+                    <h3>Telegram</h3>
+                    <p>
+                        Connect conversations and information from Telegram
+                        so your important context can be available when you
+                        need it.
+                    </p>
+                </article>
+
+                <article class="db-home-connect-card">
+                    <div class="db-home-connect-icon">#</div>
+                    <h3>Slack</h3>
+                    <p>
+                        Bring relevant work conversations and knowledge from
+                        Slack into a connected personal intelligence layer.
+                    </p>
+                </article>
+
+            </div>
+
+            <div class="db-home-connect-note">
+                <strong>One brain. Many places.</strong>
+                Your daily tools are where information happens.
+                Dusra Brain is designed to bring the useful context together
+                so you can remember, understand and use it later.
+            </div>
+
+        </div>
+    </section>
+
     <section class="db-home-cta">
         <div class="db-home-wrap">
 
@@ -2709,6 +3239,7 @@ body.home-active .container {
         <div class="db-home-wrap db-home-footer-inner">
             <span>© 2026 Dusra Brain</span>
             <span>Personal Memory · Decision Intelligence · AI Agent</span>
+            <div class="db-home-made-india"><strong>Made in India 🇮🇳</strong> · Built for the world</div>
         </div>
     </footer>
 
@@ -2721,14 +3252,7 @@ body.home-active .container {
 
     <div class="header">
 
-        <div
-            class="brand"
-            id="dbPrivateHomeLogo"
-            role="button"
-            tabindex="0"
-            title="Go to Dusra Brain homepage"
-            aria-label="Go to Dusra Brain homepage"
-        >
+        <div class="brand" id="dusraAppBrand" role="button" tabindex="0" aria-label="Go to Dusra Brain homepage">
             🧠 Dusra Brain
         </div>
 
@@ -2762,74 +3286,15 @@ body.home-active .container {
                 🎯 Decisions
             </button>
 
-            <button
-                class="header-button"
-                id="integrationsButton"
-            >
-                🔌 Integrations
-            </button>
-
-            <button
-                class="header-button"
-                id="logoutButton"
-            >
-                Logout
-            </button>
+            <span class="db-user-badge" id="dbUserBadge">
+                <span class="db-user-email" id="dbUserEmail"></span>
+                <button class="header-button db-logout-button" id="dbLogoutButton" type="button">Logout</button>
+            </span>
 
         </div>
 
     </div>
 
-
-    <!-- =================================================
-         INTEGRATIONS VIEW
-    ================================================= -->
-
-    <div
-        id="integrationsView"
-        class="view"
-    >
-        <div class="dashboard-header">
-            <div>
-                <h2>🔌 Integrations</h2>
-                <p style="margin:6px 0 0;color:#6b7280;">Connect Dusra Brain with the tools you use.</p>
-            </div>
-            <button class="back-button" id="integrationsBackButton">← Back to Chat</button>
-        </div>
-
-        <div style="background:white;border-radius:14px;padding:22px;box-shadow:0 4px 20px rgba(0,0,0,0.06);margin-bottom:18px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-                <div>
-                    <div style="font-size:22px;font-weight:700;">💬 WhatsApp</div>
-                    <p style="margin:7px 0 0;color:#6b7280;line-height:1.5;">Receive WhatsApp messages in Dusra Brain through the Phase 9A webhook integration.</p>
-                </div>
-                <span id="whatsappIntegrationStatus" style="padding:7px 12px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:13px;">Checking status…</span>
-            </div>
-
-            <div id="whatsappConnectionDetails" style="margin-top:18px;display:none;">
-                <div style="background:#f9fafb;border-radius:10px;padding:14px;font-size:14px;line-height:1.6;">
-                    <strong>Connected account</strong><br>
-                    <span id="whatsappConnectionText"></span>
-                </div>
-            </div>
-
-            <div style="margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
-                <div style="font-weight:600;margin-bottom:10px;">Connect WhatsApp Business</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <input id="whatsappPhoneNumberId" placeholder="WhatsApp Phone Number ID" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
-                    <input id="whatsappDisplayPhone" placeholder="Display phone number (optional)" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
-                </div>
-                <button id="whatsappConnectButton" style="margin-top:12px;">Connect WhatsApp</button>
-                <div id="whatsappIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
-                <div id="whatsappWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
-            </div>
-        </div>
-
-        <div style="background:#f9fafb;border-radius:14px;padding:18px;border:1px solid #e5e7eb;">
-            <strong>How it works</strong>
-            <p style="margin:8px 0 0;color:#6b7280;line-height:1.6;">WhatsApp Business sends webhook events to Dusra Brain. The backend maps the WhatsApp phone number to your Dusra Brain identity and processes incoming messages through the existing memory and intelligence pipeline.</p>
-        </div>
-    </div>
 
     <div class="container">
 
@@ -3574,9 +4039,6 @@ body.home-active .container {
     const brainExplorerView =
         document.getElementById("brainExplorerView");
 
-    const integrationsView =
-        document.getElementById("integrationsView");
-
 
     // ========================================================
     // CHAT
@@ -3788,6 +4250,183 @@ body.home-active .container {
     }
 
 
+    function createPlanEvolutionTrace(apiData) {
+
+        if (!apiData || typeof apiData !== "object") {
+            return null;
+        }
+
+        const trace =
+            apiData.plan_state_tracking_trace &&
+            typeof apiData.plan_state_tracking_trace === "object"
+                ? apiData.plan_state_tracking_trace
+                : null;
+
+        if (!trace || !trace.detected) {
+            return null;
+        }
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "plan-evolution-trace";
+
+        const header = document.createElement("div");
+        header.className = "plan-evolution-trace-header";
+
+        const title = document.createElement("div");
+        title.className = "plan-evolution-trace-title";
+        title.textContent = "🧭 Plan Evolution Trace";
+        header.appendChild(title);
+
+        const badges = document.createElement("div");
+        badges.className = "plan-evolution-trace-badges";
+
+        const groundedBadge = document.createElement("span");
+        groundedBadge.className = "plan-evolution-trace-badge";
+        groundedBadge.textContent =
+            trace.evolution_supported ? "Evidence-backed" : "Evidence limited";
+        badges.appendChild(groundedBadge);
+
+        if (trace.read_only) {
+            const readOnlyBadge = document.createElement("span");
+            readOnlyBadge.className =
+                "plan-evolution-trace-badge readonly";
+            readOnlyBadge.textContent = "Read-only";
+            badges.appendChild(readOnlyBadge);
+        }
+
+        header.appendChild(badges);
+        wrapper.appendChild(header);
+
+        const body = document.createElement("div");
+        body.className = "plan-evolution-trace-body";
+
+        if (trace.subject) {
+            const subject = document.createElement("div");
+            subject.className = "plan-evolution-trace-subject";
+            subject.textContent = String(trace.subject);
+            body.appendChild(subject);
+        }
+
+        const stats = document.createElement("div");
+        stats.className = "plan-evolution-trace-stats";
+
+        function appendPlanTraceStat(label, value) {
+            const card = document.createElement("div");
+            card.className = "plan-evolution-trace-stat";
+
+            const labelNode = document.createElement("span");
+            labelNode.className = "plan-evolution-trace-stat-label";
+            labelNode.textContent = label;
+
+            const valueNode = document.createElement("span");
+            valueNode.className = "plan-evolution-trace-stat-value";
+            valueNode.textContent = String(value);
+
+            card.appendChild(labelNode);
+            card.appendChild(valueNode);
+            stats.appendChild(card);
+        }
+
+        appendPlanTraceStat(
+            "Recorded states",
+            Number(trace.state_count || 0)
+        );
+        appendPlanTraceStat(
+            "Recorded transitions",
+            Number(trace.transition_count || 0)
+        );
+
+        body.appendChild(stats);
+
+        const initialMemory =
+            trace.initial_memory_id !== null &&
+            trace.initial_memory_id !== undefined
+                ? "Memory #" + String(trace.initial_memory_id) +
+                  (trace.initial_version !== null &&
+                   trace.initial_version !== undefined
+                      ? " · v" + String(trace.initial_version)
+                      : "")
+                : "Not available";
+
+        const currentMemory =
+            trace.current_memory_id !== null &&
+            trace.current_memory_id !== undefined
+                ? "Memory #" + String(trace.current_memory_id) +
+                  (trace.current_version !== null &&
+                   trace.current_version !== undefined
+                      ? " · v" + String(trace.current_version)
+                      : "")
+                : "Not available";
+
+        const flow = document.createElement("div");
+        flow.className = "plan-evolution-trace-flow";
+
+        const initial = document.createElement("div");
+        initial.className = "plan-evolution-trace-state";
+
+        const initialLabel = document.createElement("div");
+        initialLabel.className = "plan-evolution-trace-state-label";
+        initialLabel.textContent = "Earlier recorded state";
+
+        const initialValue = document.createElement("div");
+        initialValue.className = "plan-evolution-trace-state-value";
+        initialValue.textContent = initialMemory;
+
+        initial.appendChild(initialLabel);
+        initial.appendChild(initialValue);
+
+        const arrow = document.createElement("div");
+        arrow.className = "plan-evolution-trace-arrow";
+        arrow.textContent = "→";
+        arrow.setAttribute("aria-hidden", "true");
+
+        const current = document.createElement("div");
+        current.className = "plan-evolution-trace-state";
+
+        const currentLabel = document.createElement("div");
+        currentLabel.className = "plan-evolution-trace-state-label";
+        currentLabel.textContent = "Current recorded state";
+
+        const currentValue = document.createElement("div");
+        currentValue.className = "plan-evolution-trace-state-value";
+        currentValue.textContent = currentMemory;
+
+        current.appendChild(currentLabel);
+        current.appendChild(currentValue);
+
+        flow.appendChild(initial);
+        flow.appendChild(arrow);
+        flow.appendChild(current);
+        body.appendChild(flow);
+
+        const evidenceIds = Array.isArray(trace.evidence_memory_ids)
+            ? trace.evidence_memory_ids.filter(function(id) {
+                return id !== null && id !== undefined;
+            })
+            : [];
+
+        if (evidenceIds.length) {
+            const evidence = document.createElement("div");
+            evidence.className = "plan-evolution-trace-evidence";
+            evidence.textContent =
+                "Version evidence: " +
+                evidenceIds.map(function(id) {
+                    return "Memory #" + String(id);
+                }).join(" · ");
+            body.appendChild(evidence);
+        }
+
+        const note = document.createElement("div");
+        note.className = "plan-evolution-trace-note";
+        note.textContent =
+            "Reconstructed from persisted memory versions. This trace is informational and does not recommend what to do next.";
+        body.appendChild(note);
+
+        wrapper.appendChild(body);
+        return wrapper;
+    }
+
+
     function createBrainRuntimeTrace(apiData) {
         if (!apiData || typeof apiData !== "object") {
             return null;
@@ -3983,6 +4622,13 @@ body.home-active .container {
                 message.appendChild(evidence);
             }
 
+            const planEvolutionTrace =
+                createPlanEvolutionTrace(apiData);
+
+            if (planEvolutionTrace) {
+                message.appendChild(planEvolutionTrace);
+            }
+
             const runtimeTrace = createBrainRuntimeTrace(apiData);
             if (runtimeTrace) {
                 message.appendChild(runtimeTrace);
@@ -4058,7 +4704,7 @@ body.home-active .container {
                 await fetch(
                     "/api",
                     {
-                        method: "POST",
+                        credentials: "include", method: "POST",
 
                         headers: {
                             "Content-Type":
@@ -4240,7 +4886,8 @@ body.home-active .container {
                     "/api?session=true&session_id=" +
                     encodeURIComponent(
                         sessionId
-                    )
+                    ),
+                    {credentials: "include", cache: "no-store"}
                 );
 
 
@@ -4294,7 +4941,8 @@ body.home-active .container {
 
             const response =
                 await fetch(
-                    "/api?sessions=true"
+                    "/api?sessions=true",
+                    {credentials: "include", cache: "no-store"}
                 );
 
 
@@ -4499,30 +5147,31 @@ body.home-active .container {
         view
     ) {
 
-        // Every application screen is a mutually exclusive route.
-        // Always hide every .view first so a screen can never render
-        // underneath another screen (especially Integrations).
-        document.querySelectorAll(".view").forEach(function(currentView) {
-            currentView.classList.remove("active");
-        });
+        chatView.classList.remove(
+            "active"
+        );
 
-        if (view) {
-            view.classList.add("active");
-        }
+        memoryDashboard.classList.remove(
+            "active"
+        );
 
-        // The private app must never sit behind the public architecture page.
-        document.body.classList.remove("home-active");
+        historyView.classList.remove(
+            "active"
+        );
 
-        const home = document.getElementById("dusraHome");
-        if (home) {
-            home.style.display = "none";
-        }
+        brainExplorerView.classList.remove(
+            "active"
+        );
 
-        window.scrollTo({
-            top: 0,
-            left: 0,
-            behavior: "auto"
-        });
+        decisionView.classList.remove(
+            "active"
+        );
+
+
+        view.classList.add(
+            "active"
+        );
+
     }
 
 
@@ -4817,7 +5466,7 @@ body.home-active .container {
 
         try {
             const response = await fetch("/api", {
-                method: "POST",
+                credentials: "include", method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json"
@@ -4897,7 +5546,7 @@ body.home-active .container {
         const select = document.getElementById("decisionOutcomeDecisionId");
         if (!select) return;
         try {
-            const response = await fetch("/api", {method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"get_decision_history",user_id:"default_user",limit:100})});
+            const response = await fetch("/api", {credentials: "include", method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"get_decision_history",user_id:"default_user",limit:100})});
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || "Unable to load saved decisions.");
             const history = Array.isArray(data.history) ? data.history : [];
@@ -4915,7 +5564,7 @@ body.home-active .container {
         if(!box || !select || !select.value){ if(box) box.innerHTML=""; return; }
         box.innerHTML='<div class="decision-muted">Loading outcome history…</div>';
         try {
-            const response=await fetch("/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"get_decision_outcomes",user_id:"default_user",decision_id:Number(select.value),limit:100})});
+            const response=await fetch("/api",{credentials: "include", method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"get_decision_outcomes",user_id:"default_user",decision_id:Number(select.value),limit:100})});
             const data=await response.json();
             if(!response.ok) throw new Error(data.error || "Unable to load outcome history.");
             const outcomes=Array.isArray(data.outcomes)?data.outcomes:[];
@@ -4936,7 +5585,7 @@ body.home-active .container {
         if(status)status.textContent="Saving outcome…";
         const button=document.getElementById("decisionOutcomeSubmitButton"); if(button)button.disabled=true;
         try{
-            const response=await fetch("/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"record_decision_outcome",user_id:"default_user",decision_id:Number(decisionId),outcome_status:outcomeStatus,outcome:outcome,expected_outcome:expected,learning:learning,confirmed:true})});
+            const response=await fetch("/api",{credentials: "include", method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"record_decision_outcome",user_id:"default_user",decision_id:Number(decisionId),outcome_status:outcomeStatus,outcome:outcome,expected_outcome:expected,learning:learning,confirmed:true})});
             const data=await response.json(); const trace=data.decision_outcome_trace||{};
             if(!response.ok || !trace.persisted) throw new Error(trace.reason||"Outcome could not be saved.");
             if(status)status.textContent=trace.duplicate?"✓ This outcome was already recorded.":"✓ Outcome saved. Your original decision was not changed.";
@@ -4955,7 +5604,7 @@ body.home-active .container {
         if (!decision || !confirmed) { status.textContent = "Enter a decision and explicitly confirm it."; return; }
         status.textContent = "Submitting explicit decision through 4H → 4I → 4J...";
         try {
-            var response = await fetch("/api", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:"Capture my explicit decision.", user_id:"default_user", session_id:activeSessionId, title:activeSessionTitle, decision_input:{decision:decision, selected_option:selected, rationale:rationale, confirmed:true, explicit_user_record:true}})});
+            var response = await fetch("/api", {credentials: "include", method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:"Capture my explicit decision.", user_id:"default_user", session_id:activeSessionId, title:activeSessionTitle, decision_input:{decision:decision, selected_option:selected, rationale:rationale, confirmed:true, explicit_user_record:true}})});
             var data = await response.json();
             lastDecisionApiResponse = data;
             renderDecisionCenter(data);
@@ -6933,7 +7582,7 @@ body.home-active .container {
                     await fetch(
                         '/api',
                         {
-                            method: 'POST',
+                            credentials: "include", method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Accept': 'application/json'
@@ -7956,7 +8605,7 @@ body.home-active .container {
                 await fetch(
                     "/api",
                     {
-                        method: "POST",
+                        credentials: "include", method: "POST",
                         headers: {
                             "Content-Type":
                                 "application/json"
@@ -8190,7 +8839,7 @@ body.home-active .container {
                         await fetch(
                             "/api",
                             {
-                                method:
+                                credentials: "include", method:
                                     "POST",
 
                                 headers: {
@@ -9310,7 +9959,7 @@ body.home-active .container {
 
         try {
             const response = await fetch("/api", {
-                method: "POST",
+                credentials: "include", method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json"
@@ -9731,15 +10380,12 @@ body.home-active .container {
 
     // ========================================================
 
-    loadSessions().then(
-        function() {
-
-            loadSessionHistory(
-                activeSessionId
-            );
-
-        }
-    );
+    // Private API initialization is intentionally deferred until
+    // /api/auth/session confirms a valid account session.
+    async function initializePrivateBrain() {
+        await loadSessions();
+        await loadSessionHistory(activeSessionId);
+    }
 
 
     // ========================================================
@@ -9777,16 +10423,139 @@ body.home-active .container {
 
 
     /* =========================================================
-       DUSRA BRAIN — HOME PAGE ENTRY
-       Reveals the EXISTING application; no backend/API changes.
+       DUSRA BRAIN — PRIVATE ACCOUNT AUTHENTICATION
+       Frontend gate + authenticated session bootstrap.
+       Backend remains authoritative for every private API route.
     ========================================================= */
 
-    function enterDusraBrain() {
+    const dbAuthOverlay = document.getElementById("dbAuthOverlay");
+    const dbAuthForm = document.getElementById("dbAuthForm");
+    const dbAuthEmail = document.getElementById("dbAuthEmail");
+    const dbAuthPassword = document.getElementById("dbAuthPassword");
+    const dbAuthSubmit = document.getElementById("dbAuthSubmit");
+    const dbAuthMessage = document.getElementById("dbAuthMessage");
+    const dbLoginTab = document.getElementById("dbLoginTab");
+    const dbSignupTab = document.getElementById("dbSignupTab");
+    const dbAuthClose = document.getElementById("dbAuthClose");
+    const dbLogoutButton = document.getElementById("dbLogoutButton");
+    const dbUserBadge = document.getElementById("dbUserBadge");
+    const dbUserEmail = document.getElementById("dbUserEmail");
+
+    let dbAuthMode = "login";
+    let dbAuthenticated = false;
+
+    function dbSetAuthMessage(text, type) {
+        if (!dbAuthMessage) return;
+        dbAuthMessage.textContent = text || "";
+        dbAuthMessage.className = "db-auth-message" + (type ? " " + type : "");
+    }
+
+    function dbSetAuthMode(mode) {
+        dbAuthMode = mode === "signup" ? "signup" : "login";
+        if (dbLoginTab) dbLoginTab.classList.toggle("active", dbAuthMode === "login");
+        if (dbSignupTab) dbSignupTab.classList.toggle("active", dbAuthMode === "signup");
+        if (dbAuthSubmit) {
+            dbAuthSubmit.textContent =
+                dbAuthMode === "login"
+                    ? "Login to Dusra Brain"
+                    : "Create my private brain";
+        }
+        if (dbAuthPassword) {
+            dbAuthPassword.autocomplete =
+                dbAuthMode === "login"
+                    ? "current-password"
+                    : "new-password";
+        }
+        dbSetAuthMessage("");
+    }
+
+    function dbOpenAuth(mode) {
+        dbSetAuthMode(mode || "login");
+        if (dbAuthOverlay) dbAuthOverlay.classList.add("active");
+        setTimeout(function() {
+            if (dbAuthEmail) dbAuthEmail.focus();
+        }, 30);
+    }
+
+    function dbCloseAuthModal() {
+        if (dbAuthOverlay) dbAuthOverlay.classList.remove("active");
+        dbSetAuthMessage("");
+    }
+
+    async function dbAuthRequest(path, payload) {
+        const response = await fetch(path, {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify(payload || {})
+        });
+
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (error) {}
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error("Authentication backend is not deployed yet.");
+            }
+            throw new Error(
+                data.error ||
+                data.message ||
+                "Authentication failed."
+            );
+        }
+
+        return data;
+    }
+
+    async function dbCheckAuthSession() {
+        try {
+            const response = await fetch("/api/auth/session", {
+                credentials: "include", method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                return { authenticated: false, user: null };
+            }
+
+            const data = await response.json();
+
+            return {
+                authenticated: Boolean(data && data.authenticated && data.user),
+                user: data && data.user ? data.user : null
+            };
+        } catch (error) {
+            return {
+                authenticated: false,
+                user: null
+            };
+        }
+    }
+
+    function dbShowPrivateApp(user) {
+        dbAuthenticated = true;
+
         document.body.classList.remove("home-active");
 
         const home = document.getElementById("dusraHome");
-        if (home) {
-            home.style.display = "none";
+        if (home) home.style.display = "none";
+
+        if (dbAuthOverlay) dbAuthOverlay.classList.remove("active");
+        if (dbUserBadge) dbUserBadge.style.display = "inline-flex";
+        if (dbUserEmail) {
+            dbUserEmail.textContent =
+                user && user.email
+                    ? user.email
+                    : "";
         }
 
         if (typeof showView === "function" && typeof chatView !== "undefined") {
@@ -9795,11 +10564,185 @@ body.home-active .container {
 
         window.scrollTo(0, 0);
 
+        initializePrivateBrain().catch(function(error) {
+            console.error("Dusra Brain initialization failed:", error);
+        });
+
         if (typeof messageInput !== "undefined" && messageInput) {
             setTimeout(function() {
                 messageInput.focus();
-            }, 50);
+            }, 100);
         }
+    }
+
+    async function enterDusraBrain() {
+        const session = await dbCheckAuthSession();
+
+        if (!session.authenticated) {
+            dbOpenAuth("login");
+            return;
+        }
+
+        dbShowPrivateApp(session.user);
+    }
+
+    async function dbLogout() {
+        try {
+            await fetch("/api/auth/logout", {
+                credentials: "include", method: "POST",
+                cache: "no-store",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }
+            });
+        } catch (error) {
+            console.error("Logout request failed:", error);
+        }
+
+        dbAuthenticated = false;
+
+        if (dbUserBadge) dbUserBadge.style.display = "none";
+        if (dbUserEmail) dbUserEmail.textContent = "";
+
+        document.body.classList.add("home-active");
+
+        const home = document.getElementById("dusraHome");
+        if (home) home.style.display = "block";
+
+        window.scrollTo(0, 0);
+    }
+
+    if (dbLoginTab) {
+        dbLoginTab.addEventListener("click", function() {
+            dbSetAuthMode("login");
+        });
+    }
+
+    if (dbSignupTab) {
+        dbSignupTab.addEventListener("click", function() {
+            dbSetAuthMode("signup");
+        });
+    }
+
+    if (dbAuthClose) {
+        dbAuthClose.addEventListener("click", dbCloseAuthModal);
+    }
+
+    if (dbAuthOverlay) {
+        dbAuthOverlay.addEventListener("click", function(event) {
+            if (event.target === dbAuthOverlay) {
+                dbCloseAuthModal();
+            }
+        });
+    }
+
+    if (dbLogoutButton) {
+        dbLogoutButton.addEventListener("click", dbLogout);
+    }
+
+    document.querySelectorAll("[data-db-provider]").forEach(function(button) {
+        button.addEventListener("click", function() {
+            const provider = button.getAttribute("data-db-provider");
+            if (!provider) return;
+
+            dbSetAuthMessage(
+                "Opening " +
+                provider.charAt(0).toUpperCase() +
+                provider.slice(1) +
+                "…"
+            );
+
+            window.location.href =
+                "/api/auth/oauth/" +
+                encodeURIComponent(provider);
+        });
+    });
+
+    if (dbAuthForm) {
+        dbAuthForm.addEventListener("submit", async function(event) {
+            event.preventDefault();
+
+            const email = dbAuthEmail
+                ? dbAuthEmail.value.trim()
+                : "";
+
+            const password = dbAuthPassword
+                ? dbAuthPassword.value
+                : "";
+
+            if (!email || !password) {
+                dbSetAuthMessage(
+                    "Enter your email and password.",
+                    "error"
+                );
+                return;
+            }
+
+            if (dbAuthMode === "signup" && password.length < 8) {
+                dbSetAuthMessage(
+                    "Password must be at least 8 characters.",
+                    "error"
+                );
+                return;
+            }
+
+            if (dbAuthSubmit) {
+                dbAuthSubmit.disabled = true;
+            }
+
+            dbSetAuthMessage(
+                dbAuthMode === "login"
+                    ? "Signing you in..."
+                    : "Creating your private brain..."
+            );
+
+            try {
+                const endpoint =
+                    dbAuthMode === "login"
+                        ? "/api/auth/login"
+                        : "/api/auth/signup";
+
+                const data = await dbAuthRequest(
+                    endpoint,
+                    {
+                        email: email,
+                        password: password
+                    }
+                );
+
+                const session = await dbCheckAuthSession();
+
+                if (!session.authenticated) {
+                    throw new Error(
+                        "Login succeeded but the browser session was not established. Please check the deployed API/auth environment."
+                    );
+                }
+
+                dbSetAuthMessage(
+                    dbAuthMode === "login"
+                        ? "Login successful."
+                        : "Account created.",
+                    "success"
+                );
+
+                dbShowPrivateApp(
+                    session.user ||
+                    (data && data.user ? data.user : { email: email })
+                );
+            } catch (error) {
+                dbSetAuthMessage(
+                    error && error.message
+                        ? error.message
+                        : "Unable to authenticate.",
+                    "error"
+                );
+            } finally {
+                if (dbAuthSubmit) {
+                    dbAuthSubmit.disabled = false;
+                }
+            }
+        });
     }
 
     [
@@ -9817,233 +10760,54 @@ body.home-active .container {
         }
     });
 
+    function dbShowHomePage() {
+        document.body.classList.add("home-active");
+        const home = document.getElementById("dusraHome");
+        if (home) home.style.display = "block";
+        if (dbAuthOverlay) dbAuthOverlay.classList.remove("active");
+        window.scrollTo(0, 0);
+    }
 
-
-    /* Dusra Brain logo/name -> ALWAYS return to the public homepage */
-    (function () {
-        const logo = document.getElementById("dbPrivateHomeLogo");
-        if (!logo || logo.dataset.homeBound === "1") return;
-
-        logo.dataset.homeBound = "1";
-        logo.style.cursor = "pointer";
-
-        function goToDusraHomepage(event) {
-            if (event) {
+    const dbAppBrand = document.getElementById("dusraAppBrand");
+    if (dbAppBrand) {
+        dbAppBrand.addEventListener("click", dbShowHomePage);
+        dbAppBrand.addEventListener("keydown", function(event) {
+            if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                event.stopPropagation();
+                dbShowHomePage();
             }
+        });
+    }
 
-            // Close every private application view first.
-            document.querySelectorAll(".view").forEach(function (view) {
-                view.classList.remove("active");
-            });
+    (function() {
+        const params = new URLSearchParams(window.location.search);
+        const authError = params.get("auth_error");
 
-            // Reveal the public Dusra Brain homepage.
-            const home = document.getElementById("dusraHome");
-            if (home) {
-                home.style.display = "";
-            }
-
-            document.body.classList.add("home-active");
-
-            // Always start the homepage from the top.
-            window.scrollTo({
-                top: 0,
-                left: 0,
-                behavior: "auto"
-            });
+        if (authError) {
+            dbOpenAuth("login");
+            dbSetAuthMessage(authError, "error");
+            window.history.replaceState(
+                {},
+                document.title,
+                window.location.pathname + window.location.hash
+            );
+            return;
         }
 
-        logo.addEventListener("click", goToDusraHomepage);
-        logo.addEventListener("keydown", function (event) {
-            if (event.key === "Enter" || event.key === " ") {
-                goToDusraHomepage(event);
+        // IMPORTANT: do not reveal the private app merely because the
+        // page loaded. The backend session must be valid first.
+        dbCheckAuthSession().then(function(session) {
+            if (session.authenticated) {
+                dbShowPrivateApp(session.user);
+            } else {
+                document.body.classList.add("home-active");
+                const home = document.getElementById("dusraHome");
+                if (home) home.style.display = "block";
             }
         });
     })();
 
-</script>
 
-
-<script>
-(function () {
-    const integrationsButton = document.getElementById("integrationsButton");
-    if (integrationsButton && !integrationsButton.dataset.bound) {
-        integrationsButton.dataset.bound = "1";
-        integrationsButton.addEventListener("click", function (event) {
-            event.preventDefault();
-
-            const integrationView = document.getElementById("integrationsView");
-            if (!integrationView) return;
-
-            // Use the same single-screen router as every other app section.
-            if (typeof showView === "function") {
-                showView(integrationView);
-            } else {
-                document.querySelectorAll(".view").forEach(function (view) {
-                    view.classList.remove("active");
-                });
-                integrationView.classList.add("active");
-                document.body.classList.remove("home-active");
-                const home = document.getElementById("dusraHome");
-                if (home) home.style.display = "none";
-                window.scrollTo(0, 0);
-            }
-
-            if (typeof loadWhatsAppIntegrationStatus === "function") {
-                loadWhatsAppIntegrationStatus();
-            }
-        });
-    }
-
-    const logoutButton = document.getElementById("logoutButton");
-    if (logoutButton && !logoutButton.dataset.bound) {
-        logoutButton.dataset.bound = "1";
-        logoutButton.addEventListener("click", async function () {
-            if (typeof dbLogout === "function") {
-                await dbLogout();
-                return;
-            }
-            if (typeof logout === "function") {
-                await logout();
-                return;
-            }
-            document.body.classList.add("home-active");
-            const home = document.getElementById("dusraHome");
-            if (home) home.style.display = "";
-            document.querySelectorAll(".view").forEach(function (view) {
-                view.classList.remove("active");
-            });
-            window.scrollTo(0, 0);
-        });
-    }
-})();
-</script>
-
-
-<script>
-(function () {
-    function setIntegrationMessage(message, isError) {
-        const el = document.getElementById("whatsappIntegrationMessage");
-        if (!el) return;
-        el.textContent = message || "";
-        el.style.color = isError ? "#b91c1c" : "#6b7280";
-    }
-
-    window.loadWhatsAppIntegrationStatus = async function () {
-        const statusEl = document.getElementById("whatsappIntegrationStatus");
-        const detailsEl = document.getElementById("whatsappConnectionDetails");
-        const textEl = document.getElementById("whatsappConnectionText");
-        if (!statusEl) return;
-
-        statusEl.textContent = "Checking status…";
-        try {
-            const response = await fetch("/api/integrations/whatsapp/status", {
-                method: "GET",
-                cache: "no-store",
-                headers: { "Accept": "application/json" }
-            });
-            const data = await response.json();
-            const connections = Array.isArray(data.connections) ? data.connections : [];
-
-            if (!response.ok) throw new Error(data.error || "Unable to load WhatsApp status.");
-
-            if (connections.length) {
-                const connection = connections[0];
-                statusEl.textContent = connection.status === "active" ? "Mapped" : (connection.status || "Mapped");
-                statusEl.style.background = "#dcfce7";
-                statusEl.style.color = "#166534";
-                if (detailsEl && textEl) {
-                    detailsEl.style.display = "block";
-                    textEl.textContent = (connection.external_identifier || connection.external_account_id || "WhatsApp account") + " · " + (connection.status || "mapped");
-                }
-
-                const readinessEl = document.getElementById("whatsappWebhookReadiness");
-                if (readinessEl) {
-                    try {
-                        const diagnosticResponse = await fetch("/api/integrations/whatsapp/diagnostics", {
-                            method: "GET",
-                            cache: "no-store",
-                            headers: { "Accept": "application/json" }
-                        });
-                        const diagnostics = await diagnosticResponse.json();
-                        if (!diagnosticResponse.ok) throw new Error(diagnostics.error || "Diagnostics unavailable.");
-                        if (!diagnostics.verify_token_configured || !diagnostics.app_secret_configured) {
-                            readinessEl.textContent = "⚠️ Internal mapping is ready. Meta webhook credentials are still pending.";
-                            readinessEl.style.color = "#92400e";
-                        } else if (!diagnostics.event_count) {
-                            readinessEl.textContent = "✓ Meta webhook credentials are configured. Waiting for the first WhatsApp event.";
-                            readinessEl.style.color = "#166534";
-                        } else {
-                            readinessEl.textContent = "✓ Webhook is receiving events. Events received: " + diagnostics.event_count;
-                            readinessEl.style.color = "#166534";
-                        }
-                    } catch (diagnosticError) {
-                        readinessEl.textContent = "Webhook diagnostics unavailable.";
-                        readinessEl.style.color = "#6b7280";
-                    }
-                }
-            } else {
-                statusEl.textContent = "Not connected";
-                statusEl.style.background = "#f3f4f6";
-                statusEl.style.color = "#374151";
-                if (detailsEl) detailsEl.style.display = "none";
-            }
-        } catch (error) {
-            statusEl.textContent = "Status unavailable";
-            statusEl.style.background = "#fee2e2";
-            statusEl.style.color = "#991b1b";
-            setIntegrationMessage(error.message || "Unable to load integration status.", true);
-        }
-    };
-
-    const backButton = document.getElementById("integrationsBackButton");
-    if (backButton) {
-        backButton.addEventListener("click", function () {
-            document.querySelectorAll(".view").forEach(function (view) {
-                view.classList.remove("active");
-            });
-            const chatView = document.getElementById("chatView");
-            if (chatView) chatView.classList.add("active");
-            window.scrollTo(0, 0);
-        });
-    }
-
-    const connectButton = document.getElementById("whatsappConnectButton");
-    if (connectButton) {
-        connectButton.addEventListener("click", async function () {
-            const phoneNumberId = (document.getElementById("whatsappPhoneNumberId") || {}).value || "";
-            const displayPhone = (document.getElementById("whatsappDisplayPhone") || {}).value || "";
-            if (!phoneNumberId.trim()) {
-                setIntegrationMessage("Please enter the WhatsApp Phone Number ID.", true);
-                return;
-            }
-
-            connectButton.disabled = true;
-            connectButton.textContent = "Connecting…";
-            setIntegrationMessage("", false);
-            try {
-                const response = await fetch("/api/integrations/whatsapp/connect", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                    body: JSON.stringify({
-                        phone_number_id: phoneNumberId.trim(),
-                        display_phone_number: displayPhone.trim()
-                    })
-                });
-                const data = await response.json();
-                if (!response.ok || data.ok === false) throw new Error(data.error || "Unable to connect WhatsApp.");
-                setIntegrationMessage(data.message || "WhatsApp connection mapping is ready.", false);
-                await window.loadWhatsAppIntegrationStatus();
-            } catch (error) {
-                setIntegrationMessage(error.message || "Unable to connect WhatsApp.", true);
-            } finally {
-                connectButton.disabled = false;
-                connectButton.textContent = "Connect WhatsApp";
-            }
-        });
-    }
-})();
 </script>
 
 </body>
