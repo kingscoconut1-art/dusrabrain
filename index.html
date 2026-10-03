@@ -2634,7 +2634,14 @@ body.home-active .container {
 
     <div class="header">
 
-        <div class="brand">
+        <div
+            class="brand"
+            id="dbPrivateHomeLogo"
+            role="button"
+            tabindex="0"
+            title="Go to Dusra Brain homepage"
+            aria-label="Go to Dusra Brain homepage"
+        >
             🧠 Dusra Brain
         </div>
 
@@ -9725,31 +9732,46 @@ body.home-active .container {
 
 
 
-    /* Dusra Brain logo/name -> return to home */
+    /* Dusra Brain logo/name -> ALWAYS return to the public homepage */
     (function () {
         const logo = document.getElementById("dbPrivateHomeLogo");
-        if (!logo) return;
+        if (!logo || logo.dataset.homeBound === "1") return;
 
+        logo.dataset.homeBound = "1";
         logo.style.cursor = "pointer";
-        logo.addEventListener("click", function (event) {
-            event.preventDefault();
 
+        function goToDusraHomepage(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            // Close every private application view first.
+            document.querySelectorAll(".view").forEach(function (view) {
+                view.classList.remove("active");
+            });
+
+            // Reveal the public Dusra Brain homepage.
             const home = document.getElementById("dusraHome");
             if (home) {
                 home.style.display = "";
             }
 
-            document.querySelectorAll(".view").forEach(function (view) {
-                view.classList.remove("active");
-            });
-
             document.body.classList.add("home-active");
 
+            // Always start the homepage from the top.
             window.scrollTo({
                 top: 0,
                 left: 0,
                 behavior: "auto"
             });
+        }
+
+        logo.addEventListener("click", goToDusraHomepage);
+        logo.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" || event.key === " ") {
+                goToDusraHomepage(event);
+            }
         });
     })();
 
