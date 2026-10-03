@@ -2182,12 +2182,83 @@ body.home-active .container {
 }
 
 .db-home-section {
-    padding: 90px 0;
+    padding: 64px 0;
+}
+
+.db-home-section-head {
+    max-width: 860px;
+    margin: 0 auto 34px;
+    text-align: center;
+}
+
+.db-home-section-head h2 {
+    margin: 12px 0 16px;
+    font-size: clamp(42px, 5.2vw, 72px);
+    line-height: .98;
+    letter-spacing: -.06em;
+    font-weight: 850;
+}
+
+.db-home-lead {
+    max-width: 720px;
+    margin: 0 auto;
+    color: #9999a3;
+    font-size: 18px;
+    line-height: 1.55;
+}
+
+.db-home-flow {
+    margin: 28px auto 0;
+    text-align: center;
+    color: #777782;
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+}
+
+.db-home-chain {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin: 18px auto 0;
+    flex-wrap: wrap;
+}
+
+.db-home-chain span {
+    padding: 11px 15px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 999px;
+    background: #09090b;
+    color: #e5e5e8;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.db-home-chain i {
+    color: #666670;
+    font-style: normal;
 }
 
 .db-home-statement {
-    padding: 110px 0;
+    padding: 68px 0;
     text-align: center;
+    border-top: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.db-home-statement p {
+    margin: 0;
+    font-size: clamp(26px, 3vw, 42px);
+    line-height: 1.18;
+    letter-spacing: -.035em;
+    font-weight: 800;
+}
+
+.db-home-muted {
+    color: #777782;
+    font-weight: 600;
 }
 
 .db-home-cta {
@@ -2280,11 +2351,28 @@ body.home-active .container {
     }
 
     .db-home-section {
-        padding: 65px 0;
+        padding: 52px 0;
+    }
+
+    .db-home-section-head {
+        margin-bottom: 26px;
+    }
+
+    .db-home-section-head h2 {
+        margin-top: 10px;
+        margin-bottom: 14px;
+    }
+
+    .db-home-lead {
+        font-size: 17px;
+    }
+
+    .db-home-chain {
+        gap: 9px;
     }
 
     .db-home-statement {
-        padding: 75px 0;
+        padding: 54px 0;
     }
 }
 
