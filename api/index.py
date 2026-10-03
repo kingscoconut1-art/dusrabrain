@@ -520,6 +520,89 @@ def _ingest_whatsapp_event(event, user_id):
     return result
 
 
+def _get_memory_pipeline_diagnostics(user_id):
+    """Return safe, aggregate memory-pipeline diagnostics without exposing content."""
+    counts = {
+        "conversations": 0,
+        "memories": 0,
+        "brain_entities": 0,
+        "brain_relationships": 0,
+    }
+    latest = {
+        "conversation_at": None,
+        "memory_at": None,
+        "brain_entity_at": None,
+    }
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM conversations WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            counts["conversations"] = int(row[0] or 0) if row else 0
+
+            cur.execute(
+                "SELECT COUNT(*) FROM memories WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            counts["memories"] = int(row[0] or 0) if row else 0
+
+            cur.execute(
+                "SELECT COUNT(*) FROM brain_entities WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            counts["brain_entities"] = int(row[0] or 0) if row else 0
+
+            cur.execute(
+                "SELECT COUNT(*) FROM brain_relationships WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            counts["brain_relationships"] = int(row[0] or 0) if row else 0
+
+            cur.execute(
+                "SELECT MAX(created_at) FROM conversations WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            latest["conversation_at"] = row[0].isoformat() if row and row[0] else None
+
+            cur.execute(
+                "SELECT MAX(created_at) FROM memories WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            latest["memory_at"] = row[0].isoformat() if row and row[0] else None
+
+            cur.execute(
+                "SELECT MAX(updated_at) FROM brain_entities WHERE user_id=%s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            latest["brain_entity_at"] = row[0].isoformat() if row and row[0] else None
+
+    conversation_ready = counts["conversations"] > 0
+    memory_ready = counts["memories"] > 0
+    brain_ready = counts["brain_entities"] > 0
+
+    return {
+        "ok": True,
+        "pipeline": {
+            "conversation_capture": conversation_ready,
+            "memory_capture": memory_ready,
+            "brain_capture": brain_ready,
+            "brain_relationships_available": counts["brain_relationships"] > 0,
+            "end_to_end_ready": conversation_ready and memory_ready and brain_ready,
+        },
+        "counts": counts,
+        "latest": latest,
+    }
+
+
 def _ensure_integration_tables():
     """Create per-user integration preference storage.
 
@@ -22121,6 +22204,16 @@ class handler(
         # ----------------------------------------------------
         # PHASE 9A — SAFE WHATSAPP DIAGNOSTICS
         # ----------------------------------------------------
+        if parsed.path == "/api/diagnostics/memory-pipeline":
+            try:
+                user = _require_authenticated_user(self)
+                if not user:
+                    return
+                send_json(self, _get_memory_pipeline_diagnostics(user["id"]))
+            except Exception as error:
+                send_json(self, {"ok": False, "error": str(error)}, 500)
+            return
+
         if parsed.path == "/api/integrations/whatsapp/diagnostics":
             try:
                 user = _require_authenticated_user(self)
