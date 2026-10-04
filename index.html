@@ -1910,6 +1910,155 @@
         max-width: 100%;
     }
 }
+
+        /* =========================================================
+           DUSRA BRAIN — PRICING
+           Launch pricing: Free / Pro ₹299 yearly / Ultra ₹999 yearly
+           Paid CTAs intentionally route to WhatsApp for manual activation.
+        ========================================================= */
+        .db-home-pricing {
+            padding: 92px 0 100px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .db-home-pricing-head {
+            max-width: 760px;
+            margin-bottom: 42px;
+        }
+
+        .db-home-pricing-head h2 {
+            margin: 12px 0 14px;
+            font-size: clamp(34px, 4vw, 58px);
+            line-height: 1.04;
+            letter-spacing: -0.045em;
+        }
+
+        .db-home-pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .db-home-price-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+            padding: 30px;
+            min-height: 390px;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .db-home-price-card.featured {
+            border-color: #111827;
+            box-shadow: 0 18px 50px rgba(0,0,0,.08);
+            transform: translateY(-6px);
+        }
+
+        .db-home-price-badge {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #111827;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            margin-bottom: 18px;
+        }
+
+        .db-home-price-card h3 {
+            margin: 0;
+            font-size: 26px;
+            letter-spacing: -.025em;
+        }
+
+        .db-home-price {
+            margin-top: 18px;
+            font-size: 42px;
+            line-height: 1;
+            font-weight: 750;
+            letter-spacing: -.045em;
+        }
+
+        .db-home-price small {
+            font-size: 14px;
+            font-weight: 500;
+            color: #6b7280;
+            letter-spacing: 0;
+        }
+
+        .db-home-price-copy {
+            margin: 16px 0 20px;
+            color: #6b7280;
+            line-height: 1.6;
+        }
+
+        .db-home-price-list {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            color: #374151;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .db-home-price-list li {
+            margin: 5px 0;
+        }
+
+        .db-home-price-list li::before {
+            content: "✓";
+            margin-right: 9px;
+            font-weight: 700;
+        }
+
+        .db-home-price-cta {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: auto;
+            padding: 13px 18px;
+            border-radius: 10px;
+            border: 1px solid #111827;
+            background: #111827;
+            color: #fff;
+            text-decoration: none;
+            font-weight: 650;
+            transition: transform .18s ease, opacity .18s ease;
+        }
+
+        .db-home-price-cta:hover {
+            transform: translateY(-1px);
+            opacity: .92;
+        }
+
+        .db-home-price-cta.secondary {
+            background: #fff;
+            color: #111827;
+        }
+
+        .db-home-pricing-note {
+            margin-top: 24px;
+            color: #6b7280;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 900px) {
+            .db-home-pricing-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .db-home-price-card.featured {
+                transform: none;
+            }
+        }
+
 </style>
 
 <style>
@@ -2957,6 +3106,7 @@ body.home-active .container {
                 <a href="#dbDecisions">Decisions</a>
                 <a href="#dbAgent">AI Agent</a>
                 <a href="#dbConnect">Connect</a>
+                <a href="#dbPricing">Pricing</a>
             </div>
 
             <a href="#" id="dusraEnterButton" class="db-home-enter">
@@ -3215,6 +3365,97 @@ body.home-active .container {
     </section>
 
 
+
+    <section id="dbPricing" class="db-home-pricing">
+        <div class="db-home-wrap">
+
+            <div class="db-home-pricing-head">
+                <div class="db-home-kicker">Simple pricing</div>
+                <h2>Build the Brain you actually use.</h2>
+                <p class="db-home-lead">
+                    Start free. Upgrade when you want your everyday conversations
+                    and personal context connected to Dusra Brain.
+                </p>
+            </div>
+
+            <div class="db-home-pricing-grid">
+
+                <article class="db-home-price-card">
+                    <h3>Free</h3>
+                    <div class="db-home-price">₹0 <small>forever</small></div>
+                    <p class="db-home-price-copy">
+                        Explore Dusra Brain and start building your personal context.
+                    </p>
+                    <ul class="db-home-price-list">
+                        <li>AI chat</li>
+                        <li>Basic memory</li>
+                        <li>Limited Brain Explorer</li>
+                        <li>No external integrations</li>
+                    </ul>
+                    <a href="#" class="db-home-price-cta secondary" data-plan="Free">
+                        Start Free →
+                    </a>
+                </article>
+
+                <article class="db-home-price-card featured">
+                    <div class="db-home-price-badge">Most Popular</div>
+                    <h3>Pro</h3>
+                    <div class="db-home-price">₹299 <small>/ year</small></div>
+                    <p class="db-home-price-copy">
+                        Connect your everyday life and make your Brain useful everywhere.
+                    </p>
+                    <ul class="db-home-price-list">
+                        <li>Everything in Free</li>
+                        <li>WhatsApp integration</li>
+                        <li>Telegram integration</li>
+                        <li>Slack integration</li>
+                        <li>Full Brain Explorer</li>
+                        <li>People &amp; relationship context</li>
+                    </ul>
+                    <a
+                        href="https://wa.me/917011760572?text=Hi%2C%20I%20want%20to%20subscribe%20to%20Dusra%20Brain%20Pro%20%E2%80%94%20%E2%82%B9299%2Fyear."
+                        class="db-home-price-cta"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Talk on WhatsApp →
+                    </a>
+                </article>
+
+                <article class="db-home-price-card">
+                    <h3>Ultra</h3>
+                    <div class="db-home-price">₹999 <small>/ year</small></div>
+                    <p class="db-home-price-copy">
+                        The full personal intelligence layer for power users.
+                    </p>
+                    <ul class="db-home-price-list">
+                        <li>Everything in Pro</li>
+                        <li>Advanced Personal Context</li>
+                        <li>Decision Intelligence</li>
+                        <li>AI Agent</li>
+                        <li>Automated actions</li>
+                        <li>Priority access to new features</li>
+                    </ul>
+                    <a
+                        href="https://wa.me/917011760572?text=Hi%2C%20I%20want%20to%20subscribe%20to%20Dusra%20Brain%20Ultra%20%E2%80%94%20%E2%82%B9999%2Fyear."
+                        class="db-home-price-cta"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Talk on WhatsApp →
+                    </a>
+                </article>
+
+            </div>
+
+            <div class="db-home-pricing-note">
+                <strong>Launch model:</strong> paid plans are activated through WhatsApp for now.
+                Online payment and automated subscription management can be added later.
+            </div>
+
+        </div>
+    </section>
+
     <section class="db-home-cta">
         <div class="db-home-wrap">
 
@@ -3227,8 +3468,14 @@ body.home-active .container {
                 connected through one AI brain.
             </p>
 
-            <a href="#" id="dusraCtaEnter" class="db-home-primary">
-                Enter Dusra Brain →
+            <a
+                href="https://wa.me/917011760572?text=Hi%2C%20I%20want%20to%20know%20more%20about%20Dusra%20Brain%20and%20its%20Pro%20%26%20Ultra%20plans."
+                id="dusraCtaWhatsApp"
+                class="db-home-primary"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Talk to us on WhatsApp →
             </a>
 
         </div>
@@ -3350,7 +3597,7 @@ body.home-active .container {
                         <input id="whatsappPhoneNumberId" placeholder="WhatsApp Phone Number ID" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
                         <input id="whatsappDisplayPhone" placeholder="Display phone number (optional)" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
                     </div>
-                    <button id="whatsappConnectButton" style="margin-top:12px;">Connect WhatsApp</button>
+                    <a href="https://wa.me/917011760572?text=Hi%2C%20I%20want%20to%20activate%20Dusra%20Brain%20Pro%20%28%E2%82%B9299%2Fyear%29%20and%20connect%20WhatsApp." target="_blank" rel="noopener noreferrer" style="display:block;margin-top:12px;text-align:center;padding:11px 14px;background:#111827;color:#fff;border-radius:8px;text-decoration:none;font-weight:650;">Upgrade on WhatsApp →</a>
                     <div id="whatsappIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
                     <div id="whatsappWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
                 </div>
@@ -3375,7 +3622,7 @@ body.home-active .container {
                 <div style="margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
                     <div style="font-weight:600;margin-bottom:10px;">Connect Telegram Bot</div>
                     <input id="telegramBotToken" type="password" autocomplete="off" placeholder="Telegram Bot Token" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
-                    <button id="telegramConnectButton" style="margin-top:12px;">Connect Telegram</button>
+                    <a href="https://wa.me/917011760572?text=Hi%2C%20I%20want%20to%20activate%20Dusra%20Brain%20Pro%20%28%E2%82%B9299%2Fyear%29%20and%20connect%20Telegram." target="_blank" rel="noopener noreferrer" style="display:block;margin-top:12px;text-align:center;padding:11px 14px;background:#111827;color:#fff;border-radius:8px;text-decoration:none;font-weight:650;">Upgrade on WhatsApp →</a>
                     <div id="telegramIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
                     <div id="telegramWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
                     <div style="margin-top:12px;color:#6b7280;font-size:12px;line-height:1.5;">
@@ -3406,7 +3653,7 @@ body.home-active .container {
                         <input id="slackTeamId" placeholder="Slack Team ID (e.g. T0123456789)" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
                         <input id="slackWorkspaceName" placeholder="Workspace name (optional)" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
                     </div>
-                    <button id="slackConnectButton" style="margin-top:12px;">Connect Slack</button>
+                    <a href="https://wa.me/917011760572?text=Hi%2C%20I%20want%20to%20activate%20Dusra%20Brain%20Pro%20%28%E2%82%B9299%2Fyear%29%20and%20connect%20Slack." target="_blank" rel="noopener noreferrer" style="display:block;margin-top:12px;text-align:center;padding:11px 14px;background:#111827;color:#fff;border-radius:8px;text-decoration:none;font-weight:650;">Upgrade on WhatsApp →</a>
                     <div id="slackIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
                     <div id="slackWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
                     <div style="margin-top:12px;color:#6b7280;font-size:12px;line-height:1.5;">
