@@ -2107,6 +2107,28 @@
             color: #111827 !important;
         }
 
+        .db-home-footer-left {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+        }
+
+        .db-home-footer-left .db-footer-gstin {
+            margin: 0 !important;
+            font-size: 12px;
+            line-height: 1.4;
+            color: inherit;
+            opacity: 0.75;
+        }
+
+        @media (max-width: 700px) {
+            .db-home-footer-inner {
+                align-items: flex-start !important;
+                gap: 16px;
+            }
+        }
+
 </style>
 
 <style>
@@ -3533,14 +3555,13 @@ body.home-active .container {
 
     <footer class="db-home-footer">
         <div class="db-home-wrap db-home-footer-inner">
-            <span>© 2026 Dusra Brain</span>
+            <div class="db-home-footer-left">
+                <div>© 2026 Dusra Brain</div>
+                <div class="db-footer-gstin">GSTIN: 03EBNPS6160K1Z6</div>
+            </div>
             <span>Personal Memory · Decision Intelligence · AI Agent</span>
         </div>
-    
-        <div class="db-footer-gstin" style="margin-top:10px; font-size:12px; line-height:1.5; color:inherit; opacity:0.75;">
-            GSTIN: 03EBNPS6160K1Z6
-        </div>
-</footer>
+    </footer>
 
 </div>
 
