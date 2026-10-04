@@ -1894,6 +1894,22 @@
         .decision-outcome-body { margin-top:8px; color:#334155; line-height:1.5; white-space:pre-wrap; }
         @media(max-width:700px){ .decision-outcome-grid{grid-template-columns:1fr;} }
 
+
+/* V12 — integration center responsive safety */
+@media (max-width: 1100px) {
+    #integrationsView > div[style*="repeat(3"] {
+        grid-template-columns: 1fr 1fr !important;
+    }
+}
+@media (max-width: 760px) {
+    #integrationsView > div[style*="repeat(3"] {
+        grid-template-columns: 1fr !important;
+    }
+    #integrationsView input,
+    #integrationsView button {
+        max-width: 100%;
+    }
+}
 </style>
 
 <style>
@@ -3305,42 +3321,108 @@ body.home-active .container {
         <div class="dashboard-header">
             <div>
                 <h2>🔌 Integrations</h2>
-                <p style="margin:6px 0 0;color:#6b7280;">Connect Dusra Brain with the tools you use.</p>
+                <p style="margin:6px 0 0;color:#6b7280;">Connect Dusra Brain with the tools you use every day.</p>
             </div>
             <button class="back-button" id="integrationsBackButton">← Back to Chat</button>
         </div>
 
-        <div style="background:white;border-radius:14px;padding:22px;box-shadow:0 4px 20px rgba(0,0,0,0.06);margin-bottom:18px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-                <div>
-                    <div style="font-size:22px;font-weight:700;">💬 WhatsApp</div>
-                    <p style="margin:7px 0 0;color:#6b7280;line-height:1.5;">Receive WhatsApp messages in Dusra Brain through the Phase 9A webhook integration.</p>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;">
+
+            <div style="background:white;border-radius:14px;padding:22px;box-shadow:0 4px 20px rgba(0,0,0,0.06);min-width:0;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                    <div>
+                        <div style="font-size:22px;font-weight:700;">💬 WhatsApp</div>
+                        <p style="margin:7px 0 0;color:#6b7280;line-height:1.5;">Receive WhatsApp messages and feed useful context into your memory and Brain Explorer.</p>
+                    </div>
+                    <span id="whatsappIntegrationStatus" style="padding:7px 12px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:13px;white-space:nowrap;">Checking…</span>
                 </div>
-                <span id="whatsappIntegrationStatus" style="padding:7px 12px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:13px;">Checking status…</span>
+
+                <div id="whatsappConnectionDetails" style="margin-top:18px;display:none;">
+                    <div style="background:#f9fafb;border-radius:10px;padding:14px;font-size:14px;line-height:1.6;">
+                        <strong>Connected account</strong><br>
+                        <span id="whatsappConnectionText"></span>
+                    </div>
+                </div>
+
+                <div style="margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
+                    <div style="font-weight:600;margin-bottom:10px;">Connect WhatsApp Business</div>
+                    <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+                        <input id="whatsappPhoneNumberId" placeholder="WhatsApp Phone Number ID" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
+                        <input id="whatsappDisplayPhone" placeholder="Display phone number (optional)" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
+                    </div>
+                    <button id="whatsappConnectButton" style="margin-top:12px;">Connect WhatsApp</button>
+                    <div id="whatsappIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
+                    <div id="whatsappWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
+                </div>
             </div>
 
-            <div id="whatsappConnectionDetails" style="margin-top:18px;display:none;">
-                <div style="background:#f9fafb;border-radius:10px;padding:14px;font-size:14px;line-height:1.6;">
-                    <strong>Connected account</strong><br>
-                    <span id="whatsappConnectionText"></span>
+            <div style="background:white;border-radius:14px;padding:22px;box-shadow:0 4px 20px rgba(0,0,0,0.06);min-width:0;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                    <div>
+                        <div style="font-size:22px;font-weight:700;">✈️ Telegram</div>
+                        <p style="margin:7px 0 0;color:#6b7280;line-height:1.5;">Connect a Telegram bot so incoming messages can become durable Dusra Brain context.</p>
+                    </div>
+                    <span id="telegramIntegrationStatus" style="padding:7px 12px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:13px;white-space:nowrap;">Checking…</span>
+                </div>
+
+                <div id="telegramConnectionDetails" style="margin-top:18px;display:none;">
+                    <div style="background:#f9fafb;border-radius:10px;padding:14px;font-size:14px;line-height:1.6;">
+                        <strong>Connected bot</strong><br>
+                        <span id="telegramConnectionText"></span>
+                    </div>
+                </div>
+
+                <div style="margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
+                    <div style="font-weight:600;margin-bottom:10px;">Connect Telegram Bot</div>
+                    <input id="telegramBotToken" type="password" autocomplete="off" placeholder="Telegram Bot Token" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
+                    <button id="telegramConnectButton" style="margin-top:12px;">Connect Telegram</button>
+                    <div id="telegramIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
+                    <div id="telegramWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
+                    <div style="margin-top:12px;color:#6b7280;font-size:12px;line-height:1.5;">
+                        The bot token is used only to verify the bot and configure its webhook. Dusra Brain does not display it back.
+                    </div>
                 </div>
             </div>
 
-            <div style="margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
-                <div style="font-weight:600;margin-bottom:10px;">Connect WhatsApp Business</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <input id="whatsappPhoneNumberId" placeholder="WhatsApp Phone Number ID" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
-                    <input id="whatsappDisplayPhone" placeholder="Display phone number (optional)" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
+            <div style="background:white;border-radius:14px;padding:22px;box-shadow:0 4px 20px rgba(0,0,0,0.06);min-width:0;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+                    <div>
+                        <div style="font-size:22px;font-weight:700;"># Slack</div>
+                        <p style="margin:7px 0 0;color:#6b7280;line-height:1.5;">Bring selected Slack conversations into the same memory and intelligence pipeline.</p>
+                    </div>
+                    <span id="slackIntegrationStatus" style="padding:7px 12px;border-radius:999px;background:#f3f4f6;color:#374151;font-size:13px;white-space:nowrap;">Checking…</span>
                 </div>
-                <button id="whatsappConnectButton" style="margin-top:12px;">Connect WhatsApp</button>
-                <div id="whatsappIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
-                <div id="whatsappWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
+
+                <div id="slackConnectionDetails" style="margin-top:18px;display:none;">
+                    <div style="background:#f9fafb;border-radius:10px;padding:14px;font-size:14px;line-height:1.6;">
+                        <strong>Connected workspace</strong><br>
+                        <span id="slackConnectionText"></span>
+                    </div>
+                </div>
+
+                <div style="margin-top:18px;padding-top:18px;border-top:1px solid #e5e7eb;">
+                    <div style="font-weight:600;margin-bottom:10px;">Connect Slack Workspace</div>
+                    <div style="display:grid;grid-template-columns:1fr;gap:10px;">
+                        <input id="slackTeamId" placeholder="Slack Team ID (e.g. T0123456789)" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
+                        <input id="slackWorkspaceName" placeholder="Workspace name (optional)" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #d1d5db;border-radius:8px;">
+                    </div>
+                    <button id="slackConnectButton" style="margin-top:12px;">Connect Slack</button>
+                    <div id="slackIntegrationMessage" style="margin-top:10px;font-size:13px;color:#6b7280;"></div>
+                    <div id="slackWebhookReadiness" style="margin-top:8px;font-size:13px;color:#6b7280;"></div>
+                    <div style="margin-top:12px;color:#6b7280;font-size:12px;line-height:1.5;">
+                        Slack uses its Events API webhook. Configure the signing secret in Vercel, then point Slack Event Subscriptions to the URL shown after mapping the workspace.
+                    </div>
+                </div>
             </div>
+
         </div>
 
-        <div style="background:#f9fafb;border-radius:14px;padding:18px;border:1px solid #e5e7eb;">
-            <strong>How it works</strong>
-            <p style="margin:8px 0 0;color:#6b7280;line-height:1.6;">WhatsApp Business sends webhook events to Dusra Brain. The backend maps the WhatsApp phone number to your Dusra Brain identity and processes incoming messages through the existing memory and intelligence pipeline.</p>
+        <div style="margin-top:18px;background:#f9fafb;border-radius:14px;padding:18px;border:1px solid #e5e7eb;">
+            <strong>How Dusra Brain uses integrations</strong>
+            <p style="margin:8px 0 0;color:#6b7280;line-height:1.6;">
+                Incoming messages are captured first, then passed through the existing memory and Brain Explorer pipeline.
+                Conversation capture is durable even if an optional AI extraction step fails. Duplicate webhook events are ignored.
+            </p>
         </div>
     </div>
 
@@ -10381,30 +10463,266 @@ body.home-active .container {
 <script>
 (function () {
     const integrationsButton = document.getElementById("integrationsButton");
+
+    function setMessage(id, message, isError) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = message || "";
+        el.style.color = isError ? "#b91c1c" : "#6b7280";
+    }
+
+    function setStatus(id, text, good) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = text;
+        el.style.background = good ? "#dcfce7" : "#f3f4f6";
+        el.style.color = good ? "#166534" : "#374151";
+    }
+
+    function showViewCompat(view) {
+        if (!view) return;
+        if (typeof showView === "function") {
+            showView(view);
+            return;
+        }
+        document.querySelectorAll(".view").forEach(function (item) {
+            item.classList.remove("active");
+        });
+        view.classList.add("active");
+        document.body.classList.remove("home-active");
+        const home = document.getElementById("dusraHome");
+        if (home) home.style.display = "none";
+        window.scrollTo(0, 0);
+    }
+
+    async function getJSON(url) {
+        const response = await fetch(url, {
+            method: "GET",
+            cache: "no-store",
+            headers: { "Accept": "application/json" }
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Request failed.");
+        return data;
+    }
+
+    async function loadWhatsApp() {
+        const statusEl = document.getElementById("whatsappIntegrationStatus");
+        const detailsEl = document.getElementById("whatsappConnectionDetails");
+        const textEl = document.getElementById("whatsappConnectionText");
+        if (!statusEl) return;
+
+        try {
+            const data = await getJSON("/api/integrations/whatsapp/status");
+            const connections = Array.isArray(data.connections) ? data.connections : [];
+            if (!connections.length) {
+                setStatus("whatsappIntegrationStatus", "Not connected", false);
+                if (detailsEl) detailsEl.style.display = "none";
+                return;
+            }
+            const connection = connections[0];
+            setStatus("whatsappIntegrationStatus", "Mapped", true);
+            if (detailsEl && textEl) {
+                detailsEl.style.display = "block";
+                textEl.textContent =
+                    (connection.external_identifier || connection.external_account_id || "WhatsApp account")
+                    + " · " + (connection.status || "mapped");
+            }
+
+            try {
+                const diagnostics = await getJSON("/api/integrations/whatsapp/diagnostics");
+                const readinessEl = document.getElementById("whatsappWebhookReadiness");
+                if (!readinessEl) return;
+                if (!diagnostics.verify_token_configured || !diagnostics.app_secret_configured) {
+                    readinessEl.textContent = "⚠️ Internal mapping is ready. Meta webhook credentials are still pending.";
+                    readinessEl.style.color = "#92400e";
+                } else if (!diagnostics.event_count) {
+                    readinessEl.textContent = "✓ Meta webhook credentials are configured. Waiting for the first WhatsApp event.";
+                    readinessEl.style.color = "#166534";
+                } else {
+                    readinessEl.textContent = "✓ Webhook is receiving events. Events received: " + diagnostics.event_count;
+                    readinessEl.style.color = "#166534";
+                }
+            } catch (_) {}
+        } catch (error) {
+            setStatus("whatsappIntegrationStatus", "Status unavailable", false);
+            setMessage("whatsappIntegrationMessage", error.message, true);
+        }
+    }
+
+    async function loadProvider(provider, statusId, detailsId, textId, readinessId, messageId) {
+        try {
+            const data = await getJSON("/api/integrations/" + provider + "/status");
+            const connections = Array.isArray(data.connections) ? data.connections : [];
+            if (!connections.length) {
+                setStatus(statusId, "Not connected", false);
+                const details = document.getElementById(detailsId);
+                if (details) details.style.display = "none";
+                return;
+            }
+
+            const connection = connections[0];
+            setStatus(statusId, "Connected", true);
+            const details = document.getElementById(detailsId);
+            const text = document.getElementById(textId);
+            if (details && text) {
+                details.style.display = "block";
+                text.textContent =
+                    (connection.external_identifier || connection.external_account_id || provider)
+                    + " · " + (connection.status || "active");
+            }
+
+            const diagnostics = await getJSON("/api/integrations/" + provider + "/diagnostics");
+            const readiness = document.getElementById(readinessId);
+            if (readiness) {
+                if (!diagnostics.secret_configured) {
+                    readiness.textContent = "⚠️ Mapping exists, but the server-side webhook secret is not configured.";
+                    readiness.style.color = "#92400e";
+                } else if (!diagnostics.event_count) {
+                    readiness.textContent =
+                        provider === "telegram"
+                        ? "✓ Telegram webhook is configured. Waiting for the first message."
+                        : "✓ Slack webhook signing is configured. Waiting for the first message event.";
+                    readiness.style.color = "#166534";
+                } else {
+                    readiness.textContent = "✓ Webhook is receiving events. Events received: " + diagnostics.event_count;
+                    readiness.style.color = "#166534";
+                }
+            }
+        } catch (error) {
+            setStatus(statusId, "Status unavailable", false);
+            setMessage(messageId, error.message, true);
+        }
+    }
+
+    window.loadAllIntegrations = async function () {
+        await Promise.allSettled([
+            loadWhatsApp(),
+            loadProvider("telegram", "telegramIntegrationStatus", "telegramConnectionDetails", "telegramConnectionText", "telegramWebhookReadiness", "telegramIntegrationMessage"),
+            loadProvider("slack", "slackIntegrationStatus", "slackConnectionDetails", "slackConnectionText", "slackWebhookReadiness", "slackIntegrationMessage")
+        ]);
+    };
+
     if (integrationsButton && !integrationsButton.dataset.bound) {
         integrationsButton.dataset.bound = "1";
         integrationsButton.addEventListener("click", function (event) {
             event.preventDefault();
-
             const integrationView = document.getElementById("integrationsView");
             if (!integrationView) return;
+            showViewCompat(integrationView);
+            window.loadAllIntegrations();
+        });
+    }
 
-            // Use the same single-screen router as every other app section.
-            if (typeof showView === "function") {
-                showView(integrationView);
-            } else {
-                document.querySelectorAll(".view").forEach(function (view) {
-                    view.classList.remove("active");
-                });
-                integrationView.classList.add("active");
-                document.body.classList.remove("home-active");
-                const home = document.getElementById("dusraHome");
-                if (home) home.style.display = "none";
-                window.scrollTo(0, 0);
+    const backButton = document.getElementById("integrationsBackButton");
+    if (backButton) {
+        backButton.addEventListener("click", function () {
+            document.querySelectorAll(".view").forEach(function (view) {
+                view.classList.remove("active");
+            });
+            const chatView = document.getElementById("chatView");
+            if (chatView) chatView.classList.add("active");
+            window.scrollTo(0, 0);
+        });
+    }
+
+    const whatsappButton = document.getElementById("whatsappConnectButton");
+    if (whatsappButton) {
+        whatsappButton.addEventListener("click", async function () {
+            const phoneNumberId = (document.getElementById("whatsappPhoneNumberId") || {}).value || "";
+            const displayPhone = (document.getElementById("whatsappDisplayPhone") || {}).value || "";
+            if (!phoneNumberId.trim()) {
+                setMessage("whatsappIntegrationMessage", "Please enter the WhatsApp Phone Number ID.", true);
+                return;
             }
+            whatsappButton.disabled = true;
+            whatsappButton.textContent = "Connecting…";
+            try {
+                const response = await fetch("/api/integrations/whatsapp/connect", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({
+                        phone_number_id: phoneNumberId.trim(),
+                        display_phone_number: displayPhone.trim()
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || data.ok === false) throw new Error(data.error || "Unable to connect WhatsApp.");
+                setMessage("whatsappIntegrationMessage", data.message || "WhatsApp mapping is ready.", false);
+                await loadWhatsApp();
+            } catch (error) {
+                setMessage("whatsappIntegrationMessage", error.message, true);
+            } finally {
+                whatsappButton.disabled = false;
+                whatsappButton.textContent = "Connect WhatsApp";
+            }
+        });
+    }
 
-            if (typeof loadWhatsAppIntegrationStatus === "function") {
-                loadWhatsAppIntegrationStatus();
+    const telegramButton = document.getElementById("telegramConnectButton");
+    if (telegramButton) {
+        telegramButton.addEventListener("click", async function () {
+            const token = (document.getElementById("telegramBotToken") || {}).value || "";
+            if (!token.trim()) {
+                setMessage("telegramIntegrationMessage", "Please enter the Telegram Bot Token.", true);
+                return;
+            }
+            telegramButton.disabled = true;
+            telegramButton.textContent = "Connecting…";
+            try {
+                const response = await fetch("/api/integrations/telegram/connect", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({ bot_token: token.trim() })
+                });
+                const data = await response.json();
+                if (!response.ok || data.ok === false) throw new Error(data.error || "Unable to connect Telegram.");
+                const input = document.getElementById("telegramBotToken");
+                if (input) input.value = "";
+                setMessage("telegramIntegrationMessage", data.message || "Telegram bot connected.", false);
+                await loadProvider("telegram", "telegramIntegrationStatus", "telegramConnectionDetails", "telegramConnectionText", "telegramWebhookReadiness", "telegramIntegrationMessage");
+            } catch (error) {
+                setMessage("telegramIntegrationMessage", error.message, true);
+            } finally {
+                telegramButton.disabled = false;
+                telegramButton.textContent = "Connect Telegram";
+            }
+        });
+    }
+
+    const slackButton = document.getElementById("slackConnectButton");
+    if (slackButton) {
+        slackButton.addEventListener("click", async function () {
+            const teamId = (document.getElementById("slackTeamId") || {}).value || "";
+            const workspaceName = (document.getElementById("slackWorkspaceName") || {}).value || "";
+            if (!teamId.trim()) {
+                setMessage("slackIntegrationMessage", "Please enter the Slack Team ID.", true);
+                return;
+            }
+            slackButton.disabled = true;
+            slackButton.textContent = "Connecting…";
+            try {
+                const response = await fetch("/api/integrations/slack/connect", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                    body: JSON.stringify({
+                        team_id: teamId.trim(),
+                        workspace_name: workspaceName.trim()
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || data.ok === false) throw new Error(data.error || "Unable to connect Slack.");
+                setMessage(
+                    "slackIntegrationMessage",
+                    (data.message || "Slack workspace mapping is ready.") + " Webhook: " + (data.webhook_url || "/api/webhooks/slack"),
+                    false
+                );
+                await loadProvider("slack", "slackIntegrationStatus", "slackConnectionDetails", "slackConnectionText", "slackWebhookReadiness", "slackIntegrationMessage");
+            } catch (error) {
+                setMessage("slackIntegrationMessage", error.message, true);
+            } finally {
+                slackButton.disabled = false;
+                slackButton.textContent = "Connect Slack";
             }
         });
     }
@@ -10428,132 +10746,6 @@ body.home-active .container {
                 view.classList.remove("active");
             });
             window.scrollTo(0, 0);
-        });
-    }
-})();
-</script>
-
-
-<script>
-(function () {
-    function setIntegrationMessage(message, isError) {
-        const el = document.getElementById("whatsappIntegrationMessage");
-        if (!el) return;
-        el.textContent = message || "";
-        el.style.color = isError ? "#b91c1c" : "#6b7280";
-    }
-
-    window.loadWhatsAppIntegrationStatus = async function () {
-        const statusEl = document.getElementById("whatsappIntegrationStatus");
-        const detailsEl = document.getElementById("whatsappConnectionDetails");
-        const textEl = document.getElementById("whatsappConnectionText");
-        if (!statusEl) return;
-
-        statusEl.textContent = "Checking status…";
-        try {
-            const response = await fetch("/api/integrations/whatsapp/status", {
-                method: "GET",
-                cache: "no-store",
-                headers: { "Accept": "application/json" }
-            });
-            const data = await response.json();
-            const connections = Array.isArray(data.connections) ? data.connections : [];
-
-            if (!response.ok) throw new Error(data.error || "Unable to load WhatsApp status.");
-
-            if (connections.length) {
-                const connection = connections[0];
-                statusEl.textContent = connection.status === "active" ? "Mapped" : (connection.status || "Mapped");
-                statusEl.style.background = "#dcfce7";
-                statusEl.style.color = "#166534";
-                if (detailsEl && textEl) {
-                    detailsEl.style.display = "block";
-                    textEl.textContent = (connection.external_identifier || connection.external_account_id || "WhatsApp account") + " · " + (connection.status || "mapped");
-                }
-
-                const readinessEl = document.getElementById("whatsappWebhookReadiness");
-                if (readinessEl) {
-                    try {
-                        const diagnosticResponse = await fetch("/api/integrations/whatsapp/diagnostics", {
-                            method: "GET",
-                            cache: "no-store",
-                            headers: { "Accept": "application/json" }
-                        });
-                        const diagnostics = await diagnosticResponse.json();
-                        if (!diagnosticResponse.ok) throw new Error(diagnostics.error || "Diagnostics unavailable.");
-                        if (!diagnostics.verify_token_configured || !diagnostics.app_secret_configured) {
-                            readinessEl.textContent = "⚠️ Internal mapping is ready. Meta webhook credentials are still pending.";
-                            readinessEl.style.color = "#92400e";
-                        } else if (!diagnostics.event_count) {
-                            readinessEl.textContent = "✓ Meta webhook credentials are configured. Waiting for the first WhatsApp event.";
-                            readinessEl.style.color = "#166534";
-                        } else {
-                            readinessEl.textContent = "✓ Webhook is receiving events. Events received: " + diagnostics.event_count;
-                            readinessEl.style.color = "#166534";
-                        }
-                    } catch (diagnosticError) {
-                        readinessEl.textContent = "Webhook diagnostics unavailable.";
-                        readinessEl.style.color = "#6b7280";
-                    }
-                }
-            } else {
-                statusEl.textContent = "Not connected";
-                statusEl.style.background = "#f3f4f6";
-                statusEl.style.color = "#374151";
-                if (detailsEl) detailsEl.style.display = "none";
-            }
-        } catch (error) {
-            statusEl.textContent = "Status unavailable";
-            statusEl.style.background = "#fee2e2";
-            statusEl.style.color = "#991b1b";
-            setIntegrationMessage(error.message || "Unable to load integration status.", true);
-        }
-    };
-
-    const backButton = document.getElementById("integrationsBackButton");
-    if (backButton) {
-        backButton.addEventListener("click", function () {
-            document.querySelectorAll(".view").forEach(function (view) {
-                view.classList.remove("active");
-            });
-            const chatView = document.getElementById("chatView");
-            if (chatView) chatView.classList.add("active");
-            window.scrollTo(0, 0);
-        });
-    }
-
-    const connectButton = document.getElementById("whatsappConnectButton");
-    if (connectButton) {
-        connectButton.addEventListener("click", async function () {
-            const phoneNumberId = (document.getElementById("whatsappPhoneNumberId") || {}).value || "";
-            const displayPhone = (document.getElementById("whatsappDisplayPhone") || {}).value || "";
-            if (!phoneNumberId.trim()) {
-                setIntegrationMessage("Please enter the WhatsApp Phone Number ID.", true);
-                return;
-            }
-
-            connectButton.disabled = true;
-            connectButton.textContent = "Connecting…";
-            setIntegrationMessage("", false);
-            try {
-                const response = await fetch("/api/integrations/whatsapp/connect", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                    body: JSON.stringify({
-                        phone_number_id: phoneNumberId.trim(),
-                        display_phone_number: displayPhone.trim()
-                    })
-                });
-                const data = await response.json();
-                if (!response.ok || data.ok === false) throw new Error(data.error || "Unable to connect WhatsApp.");
-                setIntegrationMessage(data.message || "WhatsApp connection mapping is ready.", false);
-                await window.loadWhatsAppIntegrationStatus();
-            } catch (error) {
-                setIntegrationMessage(error.message || "Unable to connect WhatsApp.", true);
-            } finally {
-                connectButton.disabled = false;
-                connectButton.textContent = "Connect WhatsApp";
-            }
         });
     }
 })();
