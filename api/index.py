@@ -183,6 +183,14 @@ WHATSAPP_PROVIDER = "whatsapp"
 WHATSAPP_VERIFY_TOKEN_ENV = "WHATSAPP_VERIFY_TOKEN"
 WHATSAPP_APP_SECRET_ENV = "WHATSAPP_APP_SECRET"
 
+TELEGRAM_PROVIDER = "telegram"
+TELEGRAM_BOT_TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
+TELEGRAM_WEBHOOK_SECRET_ENV = "TELEGRAM_WEBHOOK_SECRET"
+
+SLACK_PROVIDER = "slack"
+SLACK_SIGNING_SECRET_ENV = "SLACK_SIGNING_SECRET"
+SLACK_BOT_TOKEN_ENV = "SLACK_BOT_TOKEN"
+
 
 def _ensure_integration_gateway_tables():
     """Create provider connection/event storage for the integration gateway.
@@ -341,6 +349,266 @@ def _claim_integration_event(provider, event_id, event_type="message"):
             claimed = cur.fetchone() is not None
         conn.commit()
     return claimed
+
+
+
+def _integration_event_count(provider):
+    _ensure_integration_gateway_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM dusra_integration_events WHERE provider=%s",
+                (provider,),
+            )
+            row = cur.fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _integration_last_event_at(provider):
+    _ensure_integration_gateway_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT MAX(received_at) FROM dusra_integration_events WHERE provider=%s",
+                (provider,),
+            )
+            row = cur.fetchone()
+    value = row[0] if row else None
+    return value.isoformat() if value else None
+
+
+def _get_provider_diagnostics(provider, user_id):
+    """Safe aggregate diagnostics for Telegram/Slack integrations."""
+    provider = str(provider or "").strip().lower()
+    _ensure_integration_gateway_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT external_account_id, external_identifier, status, updated_at
+                FROM dusra_integration_connections
+                WHERE user_id=%s AND provider=%s
+                ORDER BY updated_at DESC
+                """,
+                (user_id, provider),
+            )
+            rows = cur.fetchall()
+
+    if provider == TELEGRAM_PROVIDER:
+        credential_configured = bool(
+            str(os.environ.get(TELEGRAM_BOT_TOKEN_ENV, "") or "").strip()
+        )
+        secret_configured = bool(
+            str(os.environ.get(TELEGRAM_WEBHOOK_SECRET_ENV, "") or "").strip()
+        )
+        ready = bool(credential_configured and secret_configured and rows)
+        webhook_url = "/api/webhooks/telegram"
+    elif provider == SLACK_PROVIDER:
+        secret_configured = bool(
+            str(os.environ.get(SLACK_SIGNING_SECRET_ENV, "") or "").strip()
+        )
+        ready = bool(secret_configured and rows)
+        webhook_url = "/api/webhooks/slack"
+        credential_configured = bool(
+            str(os.environ.get(SLACK_BOT_TOKEN_ENV, "") or "").strip()
+        )
+    else:
+        credential_configured = False
+        secret_configured = False
+        ready = False
+        webhook_url = ""
+
+    return {
+        "provider": provider,
+        "webhook_url": webhook_url,
+        "credential_configured": credential_configured,
+        "secret_configured": secret_configured,
+        "connections": [
+            {
+                "external_account_id": row[0],
+                "external_identifier": row[1] or "",
+                "status": row[2],
+                "updated_at": row[3].isoformat() if row[3] else None,
+            }
+            for row in rows
+        ],
+        "event_count": _integration_event_count(provider),
+        "last_event_at": _integration_last_event_at(provider),
+        "ready_for_webhook": ready,
+    }
+
+
+def _telegram_api(bot_token, method, payload=None):
+    bot_token = str(bot_token or "").strip()
+    if not bot_token:
+        raise ValueError("Telegram bot token is required.")
+    url = "https://api.telegram.org/bot" + bot_token + "/" + method
+    raw = json.dumps(payload or {}).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=raw,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Dusra-Brain",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")[:500]
+        raise ValueError("Telegram API error: " + details)
+    if not isinstance(data, dict) or not data.get("ok"):
+        raise ValueError(
+            "Telegram API request failed: "
+            + str((data or {}).get("description") or "unknown error")
+        )
+    return data
+
+
+def _telegram_webhook_url(handler, bot_id):
+    base = _public_base_url(handler)
+    return base + "/api/webhooks/telegram/" + quote(str(bot_id), safe="")
+
+
+def _verify_slack_signature(raw_body, timestamp_header, signature_header):
+    signing_secret = str(
+        os.environ.get(SLACK_SIGNING_SECRET_ENV, "") or ""
+    ).strip()
+    if not signing_secret:
+        return False
+    try:
+        timestamp = int(str(timestamp_header or "0"))
+    except Exception:
+        return False
+    # Reject stale requests. Slack signs the versioned timestamp + raw body.
+    if abs(int(time.time()) - timestamp) > 60 * 5:
+        return False
+    basestring = "v0:" + str(timestamp) + ":" + raw_body.decode("utf-8", errors="replace")
+    digest = hmac.new(
+        signing_secret.encode("utf-8"),
+        basestring.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    expected = "v0=" + digest
+    return bool(signature_header) and hmac.compare_digest(
+        expected,
+        str(signature_header),
+    )
+
+
+def _extract_telegram_message(payload):
+    if not isinstance(payload, dict):
+        return None
+    message = payload.get("message") or payload.get("edited_message")
+    if not isinstance(message, dict):
+        return None
+    text = str(message.get("text") or "").strip()
+    if not text:
+        return None
+    chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
+    sender = message.get("from") if isinstance(message.get("from"), dict) else {}
+    chat_id = str(chat.get("id") or "").strip()
+    sender_id = str(sender.get("id") or "").strip()
+    contact_name = (
+        str(sender.get("first_name") or "").strip()
+        + (" " + str(sender.get("last_name") or "").strip() if sender.get("last_name") else "")
+    ).strip()
+    if not contact_name:
+        contact_name = str(sender.get("username") or "").strip()
+    update_id = str(payload.get("update_id") or "").strip()
+    event_id = update_id or (
+        str(message.get("message_id") or "") + ":" + chat_id
+    )
+    return {
+        "event_id": event_id,
+        "chat_id": chat_id,
+        "sender": sender_id,
+        "contact_name": contact_name,
+        "text": text,
+        "timestamp": message.get("date"),
+    }
+
+
+def _ingest_telegram_event(event, user_id):
+    text = str(event.get("text") or "").strip()
+    sender = str(event.get("sender") or "").strip()
+    contact_name = str(event.get("contact_name") or "").strip()
+    chat_id = str(event.get("chat_id") or "").strip()
+    if not text:
+        return {"ingested": False, "reason": "empty_message"}
+    session_id = "telegram:" + (chat_id or sender or "unknown")
+    title = "Telegram"
+    if contact_name:
+        title = "Telegram · " + contact_name[:120]
+    result = _ingest_memory_message(
+        user_id=user_id,
+        text=text,
+        session_id=session_id,
+        title=title,
+        save_brain=True,
+    )
+    result["message_id"] = event.get("event_id")
+    result["sender"] = sender
+    result["contact_name"] = contact_name
+    return result
+
+
+def _extract_slack_message(payload):
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("type") != "event_callback":
+        return None
+    event = payload.get("event")
+    if not isinstance(event, dict):
+        return None
+    event_type = str(event.get("type") or "").strip()
+    if event_type != "message":
+        return None
+    if event.get("subtype") or event.get("bot_id"):
+        return None
+    text = str(event.get("text") or "").strip()
+    if not text:
+        return None
+    team_id = str(payload.get("team_id") or "").strip()
+    channel_id = str(event.get("channel") or "").strip()
+    sender = str(event.get("user") or "").strip()
+    event_id = str(payload.get("event_id") or "").strip()
+    if not event_id:
+        event_id = str(event.get("event_ts") or event.get("ts") or "").strip()
+    return {
+        "event_id": event_id,
+        "team_id": team_id,
+        "channel_id": channel_id,
+        "sender": sender,
+        "text": text,
+        "timestamp": event.get("event_ts") or event.get("ts"),
+    }
+
+
+def _ingest_slack_event(event, user_id):
+    text = str(event.get("text") or "").strip()
+    sender = str(event.get("sender") or "").strip()
+    team_id = str(event.get("team_id") or "").strip()
+    channel_id = str(event.get("channel_id") or "").strip()
+    if not text:
+        return {"ingested": False, "reason": "empty_message"}
+    session_id = "slack:" + (team_id or "unknown") + ":" + (channel_id or "unknown")
+    title = "Slack"
+    result = _ingest_memory_message(
+        user_id=user_id,
+        text=text,
+        session_id=session_id,
+        title=title,
+        save_brain=True,
+    )
+    result["message_id"] = event.get("event_id")
+    result["sender"] = sender
+    result["team_id"] = team_id
+    result["channel_id"] = channel_id
+    return result
 
 
 def _verify_whatsapp_signature(raw_body, signature_header):
@@ -22185,6 +22453,37 @@ class handler(
         )
 
         # ----------------------------------------------------
+        # PHASE 9B — TELEGRAM WEBHOOK (NO AUTH)
+        # ----------------------------------------------------
+        if parsed.path.startswith("/api/webhooks/telegram/"):
+            # Telegram uses the secret_token header configured when setWebhook is called.
+            configured_secret = str(
+                os.environ.get(TELEGRAM_WEBHOOK_SECRET_ENV, "") or ""
+            ).strip()
+            if not configured_secret:
+                send_json(self, {"ok": False, "error": "Telegram webhook secret is not configured."}, 503)
+                return
+            supplied_secret = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            if not supplied_secret or not hmac.compare_digest(supplied_secret, configured_secret):
+                send_json(self, {"ok": False, "error": "Invalid Telegram webhook secret."}, 401)
+                return
+            send_json(self, {"ok": True, "provider": "telegram"})
+            return
+
+        # ----------------------------------------------------
+        # PHASE 9C — SLACK EVENTS URL VERIFICATION (NO AUTH)
+        # ----------------------------------------------------
+        if parsed.path == "/api/webhooks/slack":
+            signing_secret = str(
+                os.environ.get(SLACK_SIGNING_SECRET_ENV, "") or ""
+            ).strip()
+            if not signing_secret:
+                send_json(self, {"ok": False, "error": "Slack signing secret is not configured."}, 503)
+                return
+            send_json(self, {"ok": True, "provider": "slack"})
+            return
+
+        # ----------------------------------------------------
         # PHASE 9A — WHATSAPP CLOUD API WEBHOOK VERIFICATION
         # ----------------------------------------------------
         if parsed.path == "/api/webhooks/whatsapp":
@@ -22220,6 +22519,26 @@ class handler(
                 if not user:
                     return
                 send_json(self, _get_whatsapp_diagnostics(user["id"]))
+            except Exception as error:
+                send_json(self, {"ok": False, "error": str(error)}, 500)
+            return
+
+        if parsed.path == "/api/integrations/telegram/diagnostics":
+            try:
+                user = _require_authenticated_user(self)
+                if not user:
+                    return
+                send_json(self, _get_provider_diagnostics(TELEGRAM_PROVIDER, user["id"]))
+            except Exception as error:
+                send_json(self, {"ok": False, "error": str(error)}, 500)
+            return
+
+        if parsed.path == "/api/integrations/slack/diagnostics":
+            try:
+                user = _require_authenticated_user(self)
+                if not user:
+                    return
+                send_json(self, _get_provider_diagnostics(SLACK_PROVIDER, user["id"]))
             except Exception as error:
                 send_json(self, {"ok": False, "error": str(error)}, 500)
             return
@@ -22320,6 +22639,22 @@ class handler(
                 send_json(self, {"error": str(error)}, 500)
             return
 
+
+
+
+        if parsed.path == "/api/integrations/telegram/status":
+            try:
+                send_json(self, _get_provider_diagnostics(TELEGRAM_PROVIDER, user_id))
+            except Exception as error:
+                send_json(self, {"error": str(error)}, 500)
+            return
+
+        if parsed.path == "/api/integrations/slack/status":
+            try:
+                send_json(self, _get_provider_diagnostics(SLACK_PROVIDER, user_id))
+            except Exception as error:
+                send_json(self, {"error": str(error)}, 500)
+            return
 
         # ----------------------------------------------------
         # PHASE 6 — INITIAL MEMORY VERSION BASELINE
@@ -23567,6 +23902,73 @@ class handler(
                 return
 
             # ----------------------------------------------------
+            # PHASE 9B — TELEGRAM WEBHOOK INGESTION
+            # ----------------------------------------------------
+            if parsed.path.startswith("/api/webhooks/telegram/"):
+                configured_secret = str(
+                    os.environ.get(TELEGRAM_WEBHOOK_SECRET_ENV, "") or ""
+                ).strip()
+                supplied_secret = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                if not configured_secret or not supplied_secret or not hmac.compare_digest(
+                    supplied_secret, configured_secret
+                ):
+                    send_json(self, {"ok": False, "error": "Invalid Telegram webhook secret."}, 401)
+                    return
+                try:
+                    bot_id = parsed.path.rsplit("/", 1)[-1].strip()
+                    event = _extract_telegram_message(body)
+                    if not event:
+                        send_json(self, {"ok": True, "provider": "telegram", "ingested": False, "reason": "no_text_message"})
+                        return
+                    connection = _get_integration_connection(TELEGRAM_PROVIDER, bot_id)
+                    if not connection:
+                        send_json(self, {"ok": False, "provider": "telegram", "reason": "unmapped_bot"}, 404)
+                        return
+                    event_id = event.get("event_id") or ("telegram:" + bot_id + ":" + event.get("chat_id", ""))
+                    if not _claim_integration_event(TELEGRAM_PROVIDER, event_id, "message"):
+                        send_json(self, {"ok": True, "provider": "telegram", "duplicate": True})
+                        return
+                    result = _ingest_telegram_event(event, connection["user_id"])
+                    send_json(self, {"ok": True, "provider": "telegram", "result": result})
+                except Exception as error:
+                    send_json(self, {"ok": False, "provider": "telegram", "error": str(error)}, 500)
+                return
+
+            # ----------------------------------------------------
+            # PHASE 9C — SLACK EVENTS API INGESTION
+            # ----------------------------------------------------
+            if parsed.path == "/api/webhooks/slack":
+                timestamp_header = self.headers.get("X-Slack-Request-Timestamp", "")
+                signature_header = self.headers.get("X-Slack-Signature", "")
+                if not _verify_slack_signature(raw_body, timestamp_header, signature_header):
+                    send_json(self, {"ok": False, "error": "Invalid Slack request signature."}, 401)
+                    return
+                try:
+                    payload = body if isinstance(body, dict) else {}
+                    if payload.get("type") == "url_verification":
+                        challenge = str(payload.get("challenge") or "")
+                        send_json(self, {"challenge": challenge})
+                        return
+                    event = _extract_slack_message(payload)
+                    if not event:
+                        send_json(self, {"ok": True, "provider": "slack", "ingested": False, "reason": "ignored_event"})
+                        return
+                    team_id = event.get("team_id")
+                    connection = _get_integration_connection(SLACK_PROVIDER, team_id)
+                    if not connection:
+                        send_json(self, {"ok": False, "provider": "slack", "reason": "unmapped_team"}, 404)
+                        return
+                    event_id = event.get("event_id") or ("slack:" + team_id + ":" + str(event.get("timestamp") or ""))
+                    if not _claim_integration_event(SLACK_PROVIDER, event_id, "message"):
+                        send_json(self, {"ok": True, "provider": "slack", "duplicate": True})
+                        return
+                    result = _ingest_slack_event(event, connection["user_id"])
+                    send_json(self, {"ok": True, "provider": "slack", "result": result})
+                except Exception as error:
+                    send_json(self, {"ok": False, "provider": "slack", "error": str(error)}, 500)
+                return
+
+            # ----------------------------------------------------
             # PHASE 9A — WHATSAPP CLOUD API WEBHOOK INGESTION
             # ----------------------------------------------------
             if parsed.path == "/api/webhooks/whatsapp":
@@ -23633,6 +24035,79 @@ class handler(
                         enabled=(action == "enable"),
                     )
                     send_json(self, {"ok": True, "integrations": integrations})
+                except ValueError as error:
+                    send_json(self, {"ok": False, "error": str(error)}, 400)
+                except Exception as error:
+                    send_json(self, {"ok": False, "error": str(error)}, 500)
+                return
+
+            # ----------------------------------------------------
+            # PHASE 9B — TELEGRAM CONNECTION / WEBHOOK SETUP
+            # ----------------------------------------------------
+            if parsed.path == "/api/integrations/telegram/connect":
+                try:
+                    bot_token = str(body.get("bot_token", "") or "").strip()
+                    if not bot_token:
+                        raise ValueError("Telegram bot token is required.")
+                    webhook_secret = str(
+                        os.environ.get(TELEGRAM_WEBHOOK_SECRET_ENV, "") or ""
+                    ).strip()
+                    if not webhook_secret:
+                        raise ValueError("Set TELEGRAM_WEBHOOK_SECRET in Vercel before connecting Telegram.")
+                    me = _telegram_api(bot_token, "getMe").get("result") or {}
+                    bot_id = str(me.get("id") or "").strip()
+                    username = str(me.get("username") or "").strip()
+                    if not bot_id:
+                        raise ValueError("Telegram did not return a valid bot ID.")
+                    webhook_url = _telegram_webhook_url(self, bot_id)
+                    _telegram_api(bot_token, "setWebhook", {
+                        "url": webhook_url,
+                        "secret_token": webhook_secret,
+                        "allowed_updates": ["message", "edited_message"],
+                    })
+                    connection = _connect_integration_account(
+                        user_id=user_id,
+                        provider=TELEGRAM_PROVIDER,
+                        external_account_id=bot_id,
+                        external_identifier=("@" + username) if username else bot_id,
+                    )
+                    _set_integration_enabled(user_id, TELEGRAM_PROVIDER, True)
+                    send_json(self, {
+                        "ok": True,
+                        "connection": connection,
+                        "webhook_url": webhook_url,
+                        "message": "Telegram bot connected and webhook configured.",
+                    })
+                except ValueError as error:
+                    send_json(self, {"ok": False, "error": str(error)}, 400)
+                except Exception as error:
+                    send_json(self, {"ok": False, "error": str(error)}, 500)
+                return
+
+            # ----------------------------------------------------
+            # PHASE 9C — SLACK CONNECTION MAPPING
+            # ----------------------------------------------------
+            if parsed.path == "/api/integrations/slack/connect":
+                try:
+                    team_id = str(body.get("team_id", "") or "").strip()
+                    workspace_name = str(body.get("workspace_name", "") or "").strip()
+                    if not team_id:
+                        raise ValueError("Slack Team ID is required.")
+                    if not str(os.environ.get(SLACK_SIGNING_SECRET_ENV, "") or "").strip():
+                        raise ValueError("Set SLACK_SIGNING_SECRET in Vercel before connecting Slack.")
+                    connection = _connect_integration_account(
+                        user_id=user_id,
+                        provider=SLACK_PROVIDER,
+                        external_account_id=team_id,
+                        external_identifier=workspace_name or team_id,
+                    )
+                    _set_integration_enabled(user_id, SLACK_PROVIDER, True)
+                    send_json(self, {
+                        "ok": True,
+                        "connection": connection,
+                        "webhook_url": _public_base_url(self) + "/api/webhooks/slack",
+                        "message": "Slack workspace mapping is ready. Configure Slack Event Subscriptions to send message events to the webhook URL.",
+                    })
                 except ValueError as error:
                     send_json(self, {"ok": False, "error": str(error)}, 400)
                 except Exception as error:
