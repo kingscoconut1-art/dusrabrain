@@ -2084,6 +2084,29 @@
             color: #ffffff !important;
         }
 
+
+        /* Pricing CTA final visibility fix */
+        .db-home-price-card .db-home-price-cta {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: #ffffff !important;
+        }
+
+        .db-home-price-card .db-home-price-cta.db-home-price-cta-free,
+        .db-home-price-card .db-home-price-cta[href*="free"] {
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #111827 !important;
+            -webkit-text-fill-color: #111827 !important;
+        }
+
+        .db-home-price-card .db-home-price-cta.db-home-price-cta-free:hover,
+        .db-home-price-card .db-home-price-cta[href*="free"]:hover {
+            background: #ffffff !important;
+            color: #111827 !important;
+        }
+
 </style>
 
 <style>
@@ -3417,7 +3440,7 @@ body.home-active .container {
                         <li>Limited Brain Explorer</li>
                         <li>No external integrations</li>
                     </ul>
-                    <a href="#" class="db-home-price-cta secondary" data-plan="Free">
+                    <a href="#" class="db-home-price-cta db-home-price-cta-free secondary" data-plan="Free">
                         Start Free →
                     </a>
                 </article>
